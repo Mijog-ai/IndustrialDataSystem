@@ -1,0 +1,8 @@
+{
+  "authority": "https://login.microsoftonline.com/common",
+  "scopes": [
+    "Files.ReadWrite.All",
+    "Sites.ReadWrite.All",
+    "User.Read"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "default_template": "blank_template.xlsx",
+  "templates": [
+    {
+      "name": "Test Data Template",
+      "filename": "test_data_template.xlsx",
+      "description": "Standard structure for recording test bench measurements."
+    },
+    {
+      "name": "Measurement Log Template",
+      "filename": "measurement_log_template.xlsx",
+      "description": "Used for daily measurement logging."
+    },
+    {
+      "name": "Quality Check Template",
+      "filename": "quality_check_template.xlsx",
+      "description": "Checklist for quality inspection routines."
+    },
+    {
+      "name": "Blank Template",
+      "filename": "blank_template.xlsx",
+      "description": "Empty spreadsheet for ad-hoc data entry."
+    }
+  ]
+}
