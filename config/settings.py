@@ -24,6 +24,7 @@ class AppConfig:
     admin_client_id: str
     admin_tenant_id: str
     admin_redirect_uri: str
+    onedrive_storage_mode: str
     onedrive_root_folder: str
     metadata_file_name: str
     user_activity_file_name: str
@@ -60,6 +61,7 @@ def load_app_config() -> AppConfig:
             "ADMIN_REDIRECT_URI",
             admin_auth_defaults.get("redirect_uri", "http://localhost:8080"),
         ),
+        onedrive_storage_mode=os.getenv("ONEDRIVE_STORAGE_MODE", "local"),
         onedrive_root_folder=os.getenv("ONEDRIVE_ROOT_FOLDER", "IndustrialDataSystem"),
         metadata_file_name=os.getenv("METADATA_FILE_NAME", "upload_metadata.xlsx"),
         user_activity_file_name=os.getenv("USER_ACTIVITY_FILE_NAME", "user_activity_log.xlsx"),

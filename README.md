@@ -50,7 +50,7 @@ Install the required packages:
 pip install -r requirements.txt
 ```
 
-> **Note:** The project ships with a local OneDrive mock. To connect to a real tenant, populate the environment variables described in `config/settings.py` and implement the Microsoft Graph upload/download requests inside the cloud modules.
+> **Note:** The project ships with a local OneDrive mock by default. Set `ONEDRIVE_STORAGE_MODE=cloud` (and provide valid Microsoft Graph admin credentials) to push uploads directly into your tenant. The connector now handles folder provisioning, file uploads, and downloads through the Graph API while keeping a synchronized local cache for metadata.
 
 ## Usage
 
@@ -69,6 +69,7 @@ Environment variables:
 - `ADMIN_CLIENT_ID`
 - `ADMIN_TENANT_ID`
 - `ADMIN_REDIRECT_URI`
+- `ONEDRIVE_STORAGE_MODE` ("local" or "cloud")
 - `ONEDRIVE_ROOT_FOLDER`
 - `METADATA_FILE_NAME`
 - `USER_ACTIVITY_FILE_NAME`

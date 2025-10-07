@@ -43,6 +43,7 @@ class UploadPanel(ttk.Frame):
                 "File_Size_KB": record["size_kb"],
                 "Creation_Method": "Direct_Upload",
                 "OneDrive_Path": record["onedrive_path"],
+                "OneDrive_URL": record.get("onedrive_url", ""),
                 "Status": "Success",
             }
             self.metadata_handler.append_entry(metadata)
