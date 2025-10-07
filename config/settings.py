@@ -44,10 +44,22 @@ def _env_flag(value: str | None, default: bool) -> bool:
 def load_app_config() -> AppConfig:
     """Load application configuration from environment variables with defaults."""
 
+    try:
+        admin_auth_defaults = load_json_config("admin_auth_config.json")
+    except FileNotFoundError:
+        admin_auth_defaults = {}
+
     return AppConfig(
-        admin_client_id=os.getenv("ADMIN_CLIENT_ID", ""),
-        admin_tenant_id=os.getenv("ADMIN_TENANT_ID", ""),
-        admin_redirect_uri=os.getenv("ADMIN_REDIRECT_URI", "http://localhost:8080"),
+        admin_client_id=os.getenv(
+            "ADMIN_CLIENT_ID", admin_auth_defaults.get("client_id", "")
+        ),
+        admin_tenant_id=os.getenv(
+            "ADMIN_TENANT_ID", admin_auth_defaults.get("tenant_id", "")
+        ),
+        admin_redirect_uri=os.getenv(
+            "ADMIN_REDIRECT_URI",
+            admin_auth_defaults.get("redirect_uri", "http://localhost:8080"),
+        ),
         onedrive_root_folder=os.getenv("ONEDRIVE_ROOT_FOLDER", "IndustrialDataSystem"),
         metadata_file_name=os.getenv("METADATA_FILE_NAME", "upload_metadata.xlsx"),
         user_activity_file_name=os.getenv("USER_ACTIVITY_FILE_NAME", "user_activity_log.xlsx"),
