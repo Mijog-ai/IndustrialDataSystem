@@ -1,10 +1,7 @@
 bcrypt==4.1.2
-cryptography==41.0.7
 msal==1.26.0
-openpyxl==3.1.2
 pandas==2.1.4
-Pillow==10.1.0
+PyQt5==5.15.10
 python-dotenv==1.0.0
 requests==2.31.0
-
-# Tkinter ships with the standard library on most platforms.
+pyinstaller==5.13.2
