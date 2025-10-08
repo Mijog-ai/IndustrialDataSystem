@@ -497,37 +497,12 @@ class IndustrialDataApp(QMainWindow):
             self._alert("No account found for the provided username.", QMessageBox.Warning)
             return
 
-        try:
-            auth_response = supabase.auth.sign_in_with_password(
-                {"email": email, "password": password}
-            )
-        except Exception as exc:
-            self._alert(f"Unable to sign in: {exc}", QMessageBox.Critical)
+        auth_response = self._sign_in_with_email(email, password)
+        if not auth_response:
             return
 
-        if not getattr(auth_response, "session", None):
-            self._alert("No active Supabase session returned.", QMessageBox.Critical)
+        if not self._process_auth_response(username, auth_response):
             return
-
-        self.session_state.set_tokens(
-            auth_response.session.access_token,
-            auth_response.session.refresh_token,
-        )
-
-        user = self.session_state.user
-        if not user:
-            self._alert("Unable to determine the current user.", QMessageBox.Critical)
-            return
-
-        metadata = (user.get("metadata") or {})
-        stored_username = str(
-            metadata.get("username") or metadata.get("username_normalized") or username
-        ).strip()
-        self.current_username = stored_username or username
-
-        self.dashboard_page.set_user_identity(self.current_username, user.get("email", ""))
-        self.show_dashboard()
-        self.refresh_files()
 
     def handle_signup(self, email: str, username: str, password: str) -> None:
         email = email.strip().lower()
@@ -576,15 +551,26 @@ class IndustrialDataApp(QMainWindow):
             self._alert(f"Unable to create the account: {exc}", QMessageBox.Critical)
             return
 
-        if not getattr(response, "user", None):
+        user = getattr(response, "user", None)
+        if not user:
             self._alert("Signup did not complete successfully.", QMessageBox.Critical)
             return
 
+        self._confirm_user_email(user)
+
+        auth_response = self._sign_in_with_email(email, password)
+        if not auth_response:
+            self.show_login(username)
+            return
+
+        if not self._process_auth_response(username, auth_response):
+            self.show_login(username)
+            return
+
         self._alert(
-            "Signup successful! Check your email to verify the account and then log in using your username.",
+            "Signup successful! You're now signed in.",
             QMessageBox.Information,
         )
-        self.show_login(username)
 
     def handle_password_reset(self, email: str) -> None:
         if not email:
@@ -728,6 +714,53 @@ class IndustrialDataApp(QMainWindow):
             raise RuntimeError(f"Unable to query Supabase users: {exc}") from exc
 
         return None
+
+    def _sign_in_with_email(self, email: str, password: str) -> Optional[Any]:
+        try:
+            return supabase.auth.sign_in_with_password(
+                {"email": email, "password": password}
+            )
+        except Exception as exc:
+            self._alert(f"Unable to sign in: {exc}", QMessageBox.Critical)
+            return None
+
+    def _process_auth_response(self, username: str, auth_response: Any) -> bool:
+        session = getattr(auth_response, "session", None)
+        if not session:
+            self._alert("No active Supabase session returned.", QMessageBox.Critical)
+            return False
+
+        self.session_state.set_tokens(
+            session.access_token,
+            session.refresh_token,
+        )
+
+        user = self.session_state.user
+        if not user:
+            self._alert("Unable to determine the current user.", QMessageBox.Critical)
+            return False
+
+        metadata = (user.get("metadata") or {})
+        stored_username = str(
+            metadata.get("username") or metadata.get("username_normalized") or username
+        ).strip()
+        self.current_username = stored_username or username
+
+        self.dashboard_page.set_user_identity(self.current_username, user.get("email", ""))
+        self.show_dashboard()
+        self.refresh_files()
+        return True
+
+    def _confirm_user_email(self, user: Any) -> None:
+        admin_api = getattr(getattr(supabase, "auth", None), "admin", None)
+        user_id = getattr(user, "id", None)
+        if admin_api is None or not user_id:
+            return
+
+        try:
+            admin_api.update_user_by_id(user_id, {"email_confirm": True})
+        except Exception:
+            pass
 
     @staticmethod
     def _is_valid_email(email: str) -> bool:
