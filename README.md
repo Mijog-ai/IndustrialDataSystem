@@ -1,13 +1,13 @@
 # Industrial Data System Desktop Application
 
-A PyQt5 desktop application featuring admin-approved authentication, CSV previewing, and optional uploads to Cloudinary. OneDrive uploads have been disabled.
+A PyQt5 desktop application featuring admin-approved authentication, CSV previewing, and uploads to Cloudinary.
 
 ## Features
 
 - Login and registration workflow with admin approval.
 - Admin panel for reviewing, approving, or rejecting pending accounts.
 - CSV viewer with upload button and drag-and-drop support.
-- Cloudinary integration for storing uploads in user-specific folders. (OneDrive upload is currently disabled.)
+- Cloudinary integration for storing uploads in user-specific folders.
 - Password hashing using bcrypt and environment-based configuration for secrets.
 
 ## Project Structure
@@ -18,8 +18,6 @@ project/
 ├── database.py
 ├── main.py
 ├── cloudinary_upload.py
-├── onedrive_auth.py      # retained for compatibility but disabled
-├── onedrive_upload.py    # retained for compatibility but disabled
 ├── requirements.txt
 ├── README.md
 └── .env               # provide your own values before running
@@ -74,7 +72,7 @@ project/
    - **Upload CSV** button in the top-left corner opens a file dialog.
    - **Drag-and-drop box** in the bottom-right corner accepts `.csv` files.
    - The center table displays the CSV contents.
-   - Select **Option 2: Cloudinary** when prompted to upload to your configured Cloudinary account. Option 1 (OneDrive) is disabled.
+   - After previewing the CSV, confirm the Cloudinary upload prompt to store the file in your configured account.
 
 ## Cloudinary Setup
 
@@ -88,7 +86,7 @@ project/
    CLOUDINARY_API_SECRET=your_secret
    ```
 
-4. Run the application and choose **Option 2: Cloudinary** after selecting or dropping a file.
+4. Run the application and confirm the Cloudinary upload prompt after selecting or dropping a file.
 
 ## Admin workflow
 
