@@ -38,15 +38,15 @@ project/
    pip install -r requirements.txt
    ```
 
-3. Copy `.env` and populate the values:
+3. Copy `.env.example` and populate the values:
 
    ```bash
-   cp .env .env.local
-   # Edit .env.local and fill in CLIENT_ID, TENANT_ID, CLIENT_SECRET, etc.
+   cp .env.example .env
+   # Edit .env and fill in CLIENT_ID, TENANT_ID, CLIENT_SECRET, etc.
    ```
 
    Set the `CLIENT_ID`, `TENANT_ID`, and `CLIENT_SECRET` from your Azure application.
-   Optionally set `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `ADMIN_EMAIL` to bootstrap an approved admin on startup.
+   Optionally set `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `ADMIN_EMAIL` to bootstrap an approved admin on startup. Configure the OneDrive admin destination with `ONEDRIVE_USER_EMAIL` and override the upload root via `ONEDRIVE_UPLOAD_ROOT` when desired.
 
 4. Export `IDS_DB_PATH` if you want to override the default SQLite database location (defaults to `app.db`).
 
@@ -74,7 +74,7 @@ project/
    - **Upload CSV** button in the top-left corner opens a file dialog.
    - **Drag-and-drop box** in the bottom-right corner accepts `.csv` files.
    - The center table displays the CSV contents.
-   - Uploads are automatically sent to OneDrive at `Apps/<ONEDRIVE_APP_FOLDER>/Users/<username>/`.
+   - Uploads are automatically sent to the admin's OneDrive at `<ONEDRIVE_UPLOAD_ROOT>/<username>/<filename>`.
 
 ## Admin workflow
 
