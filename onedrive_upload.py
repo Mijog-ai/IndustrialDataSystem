@@ -9,25 +9,46 @@ import requests
 
 from onedrive_auth import get_access_token
 
-APP_FOLDER = os.getenv("ONEDRIVE_APP_FOLDER", "IndustrialDataSystem")
 
+def upload_to_onedrive(file_path: Union[str, Path], username: str, access_token: str) -> None:
+    """Upload ``file_path`` to the admin's OneDrive under the user folder."""
 
-def _build_upload_url(filename: str, username: str) -> str:
+    user_email = os.getenv("ONEDRIVE_USER_EMAIL")
+    upload_root = os.getenv("ONEDRIVE_UPLOAD_ROOT", "Uploads")
+
+    if not user_email:
+        raise ValueError("Missing ONEDRIVE_USER_EMAIL in .env")
+
+    path = Path(file_path)
+    file_name = path.name
     safe_username = username.replace("/", "_")
-    return (
-        "https://graph.microsoft.com/v1.0/me/drive/root:/"
-        f"Apps/{APP_FOLDER}/Users/{safe_username}/{filename}:/content"
+    upload_path = f"{upload_root}/{safe_username}/{file_name}"
+
+    upload_url = (
+        "https://graph.microsoft.com/v1.0/users/"
+        f"{user_email}/drive/root:/{upload_path}:/content"
     )
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/octet-stream",
+    }
+
+    with path.open("rb") as handle:
+        response = requests.put(upload_url, headers=headers, data=handle)
+
+    if response.status_code in (200, 201):
+        print(f"✅ Uploaded '{file_name}' for user '{username}'")
+        return
+
+    print(f"❌ Upload failed: {response.status_code} {response.text}")
+    raise RuntimeError(f"Upload failed: {response.status_code} {response.text}")
 
 
 def upload_file_to_onedrive(local_path: Union[str, Path], username: str) -> None:
     path = Path(local_path)
     if not path.exists():
         raise FileNotFoundError(path)
+
     token = get_access_token()
-    upload_url = _build_upload_url(path.name, username)
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "text/csv"}
-    with path.open("rb") as handle:
-        response = requests.put(upload_url, headers=headers, data=handle)
-    if response.status_code not in (200, 201):
-        raise RuntimeError(f"Upload failed: {response.status_code} {response.text}")
+    upload_to_onedrive(path, username, token)
