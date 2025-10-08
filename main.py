@@ -7,18 +7,27 @@ from pathlib import Path
 import pandas as pd
 from pandas.errors import ParserError
 from PyQt5 import QtCore, QtGui, QtWidgets
+from dotenv import load_dotenv
 
 from auth import (
     LoginError,
     RegistrationError,
+    PasswordResetError,
+    SessionError,
     approve_user,
     authenticate_user,
+    create_session_token,
     list_pending_users,
+    request_password_reset,
+    reset_password,
+    validate_session_token,
     register_user,
     reject_user,
     User,
 )
 from cloudinary_upload import upload_to_cloudinary
+
+load_dotenv()
 
 
 class DropArea(QtWidgets.QLabel):
@@ -79,9 +88,13 @@ class CsvViewer(QtWidgets.QTableWidget):
 class MainWindow(QtWidgets.QMainWindow):
     """Main application window for approved end users."""
 
-    def __init__(self, user: User) -> None:
+    logoutRequested = QtCore.pyqtSignal()
+
+    def __init__(self, user: User, session_token: str) -> None:
         super().__init__()
         self.user = user
+        self.session_token = session_token
+        self._logout_in_progress = False
         self.setWindowTitle(f"Industrial Data System - {user.username}")
         self.resize(900, 600)
 
@@ -93,12 +106,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.upload_button = QtWidgets.QPushButton("Upload CSV")
         self.upload_button.clicked.connect(self.open_file_dialog)
 
+        self.logout_button = QtWidgets.QPushButton("Logout")
+        self.logout_button.clicked.connect(self._trigger_logout)
+
         self.viewer = CsvViewer()
 
         self.drop_area = DropArea()
         self.drop_area.fileDropped.connect(self.process_file)
 
         layout.addWidget(self.upload_button, 0, 0, alignment=QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        layout.addWidget(self.logout_button, 0, 1, alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignTop)
         layout.addWidget(self.viewer, 1, 0, 1, 2)
         layout.addWidget(self.drop_area, 2, 1, alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignBottom)
 
@@ -109,6 +126,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(central)
 
     def open_file_dialog(self) -> None:
+        if not self._ensure_session_active():
+            return
         file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Select CSV", str(Path.home()), "CSV Files (*.csv)"
         )
@@ -116,6 +135,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.process_file(file_path)
 
     def process_file(self, path: str) -> None:
+        if not self._ensure_session_active():
+            return
         try:
             dataframe = self._read_csv_with_fallback(path)
         except Exception as exc:  # pragma: no cover - GUI feedback path
@@ -149,6 +170,27 @@ class MainWindow(QtWidgets.QMainWindow):
             f"{Path(path).name} uploaded to Cloudinary successfully.\nURL: {url}",
         )
 
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # type: ignore[override]
+        if not self._logout_in_progress:
+            self.logoutRequested.emit()
+        super().closeEvent(event)
+
+    def _trigger_logout(self) -> None:
+        if self._logout_in_progress:
+            return
+        self._logout_in_progress = True
+        self.logoutRequested.emit()
+        self.close()
+
+    def _ensure_session_active(self) -> bool:
+        try:
+            validate_session_token(self.session_token)
+        except SessionError as exc:
+            QtWidgets.QMessageBox.warning(self, "Session Expired", str(exc))
+            self._trigger_logout()
+            return False
+        return True
+
     def _read_csv_with_fallback(self, path: str) -> pd.DataFrame:
         """Load CSV allowing delimiter detection when default parsing fails."""
 
@@ -164,6 +206,7 @@ class MainWindow(QtWidgets.QMainWindow):
 class LoginWidget(QtWidgets.QWidget):
     loginRequested = QtCore.pyqtSignal(str, str)
     showRegister = QtCore.pyqtSignal()
+    showForgot = QtCore.pyqtSignal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -187,6 +230,10 @@ class LoginWidget(QtWidgets.QWidget):
         register_link.setFlat(True)
         register_link.clicked.connect(self.showRegister.emit)
 
+        forgot_link = QtWidgets.QPushButton("Forgot Password?")
+        forgot_link.setFlat(True)
+        forgot_link.clicked.connect(self.showForgot.emit)
+
         layout.addWidget(title)
         layout.addSpacing(12)
         layout.addWidget(self.username_input)
@@ -194,6 +241,7 @@ class LoginWidget(QtWidgets.QWidget):
         layout.addWidget(login_button)
         layout.addSpacing(6)
         layout.addWidget(register_link)
+        layout.addWidget(forgot_link)
         layout.addStretch(1)
 
     def _emit_login(self) -> None:
@@ -245,10 +293,123 @@ class RegisterWidget(QtWidgets.QWidget):
         )
 
 
+class ForgotPasswordWidget(QtWidgets.QWidget):
+    resetRequested = QtCore.pyqtSignal(str)
+    showLogin = QtCore.pyqtSignal()
+    showReset = QtCore.pyqtSignal()
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QtWidgets.QVBoxLayout(self)
+
+        title = QtWidgets.QLabel("Forgot Password")
+        title.setAlignment(QtCore.Qt.AlignCenter)
+        title.setStyleSheet("font-size: 20px; font-weight: bold;")
+
+        description = QtWidgets.QLabel(
+            "Enter the email address associated with your account to receive a reset token."
+        )
+        description.setWordWrap(True)
+
+        self.email_input = QtWidgets.QLineEdit()
+        self.email_input.setPlaceholderText("Email")
+
+        send_button = QtWidgets.QPushButton("Send Reset Link")
+        send_button.clicked.connect(self._emit_reset_request)
+
+        login_link = QtWidgets.QPushButton("Back to Login")
+        login_link.setFlat(True)
+        login_link.clicked.connect(self.showLogin.emit)
+
+        have_token_link = QtWidgets.QPushButton("Already have a token? Reset Password")
+        have_token_link.setFlat(True)
+        have_token_link.clicked.connect(self.showReset.emit)
+
+        layout.addWidget(title)
+        layout.addSpacing(12)
+        layout.addWidget(description)
+        layout.addWidget(self.email_input)
+        layout.addWidget(send_button)
+        layout.addSpacing(6)
+        layout.addWidget(have_token_link)
+        layout.addWidget(login_link)
+        layout.addStretch(1)
+
+    def _emit_reset_request(self) -> None:
+        email = self.email_input.text().strip()
+        if not email:
+            QtWidgets.QMessageBox.warning(self, "Email Required", "Enter your email first.")
+            return
+        self.resetRequested.emit(email)
+
+
+class ResetPasswordWidget(QtWidgets.QWidget):
+    resetSubmitted = QtCore.pyqtSignal(str, str)
+    showLogin = QtCore.pyqtSignal()
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QtWidgets.QVBoxLayout(self)
+
+        title = QtWidgets.QLabel("Reset Password")
+        title.setAlignment(QtCore.Qt.AlignCenter)
+        title.setStyleSheet("font-size: 20px; font-weight: bold;")
+
+        description = QtWidgets.QLabel(
+            "Paste the reset token from your email and set a new password."
+        )
+        description.setWordWrap(True)
+
+        self.token_input = QtWidgets.QLineEdit()
+        self.token_input.setPlaceholderText("Reset Token")
+
+        self.password_input = QtWidgets.QLineEdit()
+        self.password_input.setPlaceholderText("New Password")
+        self.password_input.setEchoMode(QtWidgets.QLineEdit.Password)
+
+        self.confirm_input = QtWidgets.QLineEdit()
+        self.confirm_input.setPlaceholderText("Confirm Password")
+        self.confirm_input.setEchoMode(QtWidgets.QLineEdit.Password)
+
+        reset_button = QtWidgets.QPushButton("Update Password")
+        reset_button.clicked.connect(self._emit_reset)
+
+        login_link = QtWidgets.QPushButton("Back to Login")
+        login_link.setFlat(True)
+        login_link.clicked.connect(self.showLogin.emit)
+
+        layout.addWidget(title)
+        layout.addSpacing(12)
+        layout.addWidget(description)
+        layout.addWidget(self.token_input)
+        layout.addWidget(self.password_input)
+        layout.addWidget(self.confirm_input)
+        layout.addWidget(reset_button)
+        layout.addSpacing(6)
+        layout.addWidget(login_link)
+        layout.addStretch(1)
+
+    def _emit_reset(self) -> None:
+        token = self.token_input.text().strip()
+        password = self.password_input.text()
+        confirm = self.confirm_input.text()
+        if not token or not password:
+            QtWidgets.QMessageBox.warning(
+                self, "Details Required", "Provide both the reset token and new password."
+            )
+            return
+        if password != confirm:
+            QtWidgets.QMessageBox.warning(self, "Password Mismatch", "Passwords do not match.")
+            return
+        self.resetSubmitted.emit(token, password)
+
 class AdminPanel(QtWidgets.QMainWindow):
+    logoutRequested = QtCore.pyqtSignal()
+
     def __init__(self, admin: User) -> None:
         super().__init__()
         self.admin = admin
+        self._logout_in_progress = False
         self.setWindowTitle("Admin Panel - Pending Users")
         self.resize(500, 400)
 
@@ -261,15 +422,18 @@ class AdminPanel(QtWidgets.QMainWindow):
         self.approve_button = QtWidgets.QPushButton("Approve")
         self.reject_button = QtWidgets.QPushButton("Reject")
         self.refresh_button = QtWidgets.QPushButton("Refresh")
+        self.logout_button = QtWidgets.QPushButton("Logout")
 
         self.approve_button.clicked.connect(self.approve_selected)
         self.reject_button.clicked.connect(self.reject_selected)
         self.refresh_button.clicked.connect(self.refresh_pending)
+        self.logout_button.clicked.connect(self._trigger_logout)
 
         button_layout.addWidget(self.approve_button)
         button_layout.addWidget(self.reject_button)
         button_layout.addStretch(1)
         button_layout.addWidget(self.refresh_button)
+        button_layout.addWidget(self.logout_button)
 
         layout.addWidget(QtWidgets.QLabel(f"Logged in as admin: {admin.username}"))
         layout.addWidget(self.pending_list)
@@ -309,6 +473,18 @@ class AdminPanel(QtWidgets.QMainWindow):
         QtWidgets.QMessageBox.information(self, "User Rejected", f"{username} has been rejected.")
         self.refresh_pending()
 
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # type: ignore[override]
+        if not self._logout_in_progress:
+            self.logoutRequested.emit()
+        super().closeEvent(event)
+
+    def _trigger_logout(self) -> None:
+        if self._logout_in_progress:
+            return
+        self._logout_in_progress = True
+        self.logoutRequested.emit()
+        self.close()
+
 
 class AuthWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
@@ -322,27 +498,46 @@ class AuthWindow(QtWidgets.QMainWindow):
         self.stack = QtWidgets.QStackedWidget()
         self.login_widget = LoginWidget()
         self.register_widget = RegisterWidget()
+        self.forgot_widget = ForgotPasswordWidget()
+        self.reset_widget = ResetPasswordWidget()
 
         self.login_widget.loginRequested.connect(self.handle_login)
         self.login_widget.showRegister.connect(self.show_register)
+        self.login_widget.showForgot.connect(self.show_forgot)
 
         self.register_widget.registerRequested.connect(self.handle_registration)
         self.register_widget.showLogin.connect(self.show_login)
 
+        self.forgot_widget.resetRequested.connect(self.handle_password_reset_request)
+        self.forgot_widget.showLogin.connect(self.show_login)
+        self.forgot_widget.showReset.connect(self.show_reset)
+
+        self.reset_widget.resetSubmitted.connect(self.handle_password_reset_submission)
+        self.reset_widget.showLogin.connect(self.show_login)
+
         self.stack.addWidget(self.login_widget)
         self.stack.addWidget(self.register_widget)
+        self.stack.addWidget(self.forgot_widget)
+        self.stack.addWidget(self.reset_widget)
 
         layout.addWidget(self.stack)
         self.setCentralWidget(central)
 
         self.main_window: MainWindow | None = None
         self.admin_panel: AdminPanel | None = None
+        self.current_session_token: str | None = None
 
     def show_register(self) -> None:
         self.stack.setCurrentWidget(self.register_widget)
 
     def show_login(self) -> None:
         self.stack.setCurrentWidget(self.login_widget)
+
+    def show_forgot(self) -> None:
+        self.stack.setCurrentWidget(self.forgot_widget)
+
+    def show_reset(self) -> None:
+        self.stack.setCurrentWidget(self.reset_widget)
 
     def handle_login(self, username: str, password: str) -> None:
         username = username.strip()
@@ -362,11 +557,12 @@ class AuthWindow(QtWidgets.QMainWindow):
 
         if user.role == "admin":
             self.admin_panel = AdminPanel(user)
+            self.admin_panel.logoutRequested.connect(self.handle_admin_logout)
             self.admin_panel.show()
             QtWidgets.QMessageBox.information(
                 self, "Admin Login", "Admin panel opened in a new window."
             )
-            self.close()
+            self.hide()
             return
 
         if user.status != "approved":
@@ -377,9 +573,17 @@ class AuthWindow(QtWidgets.QMainWindow):
             )
             return
 
-        self.main_window = MainWindow(user)
+        try:
+            session_token = create_session_token(user)
+        except SessionError as exc:
+            QtWidgets.QMessageBox.critical(self, "Session Error", str(exc))
+            return
+
+        self.current_session_token = session_token
+        self.main_window = MainWindow(user, session_token)
+        self.main_window.logoutRequested.connect(self.handle_logout)
         self.main_window.show()
-        self.close()
+        self.hide()
 
     def handle_registration(self, username: str, email: str, password: str) -> None:
         username = username.strip()
@@ -403,6 +607,69 @@ class AuthWindow(QtWidgets.QMainWindow):
             "Registration Submitted",
             "Registration received. Please wait for admin approval before logging in.",
         )
+        self.show_login()
+
+    def handle_logout(self) -> None:
+        self.current_session_token = None
+        if self.main_window:
+            try:
+                self.main_window.logoutRequested.disconnect(self.handle_logout)
+            except TypeError:
+                pass
+            self.main_window = None
+        self.show()
+        self.show_login()
+
+    def handle_admin_logout(self) -> None:
+        if self.admin_panel:
+            try:
+                self.admin_panel.logoutRequested.disconnect(self.handle_admin_logout)
+            except TypeError:
+                pass
+            self.admin_panel = None
+        self.show()
+        self.show_login()
+
+    def handle_password_reset_request(self, email: str) -> None:
+        try:
+            dev_token = request_password_reset(email)
+        except PasswordResetError as exc:
+            QtWidgets.QMessageBox.warning(self, "Password Reset Failed", str(exc))
+            return
+
+        if dev_token:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Reset Token Created",
+                (
+                    "Email delivery is not configured. Use this token to reset your password:\n"
+                    f"{dev_token}"
+                ),
+            )
+        else:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Reset Email Sent",
+                "If the email is registered, a password reset message has been sent.",
+            )
+
+        self.show_reset()
+
+    def handle_password_reset_submission(self, token: str, password: str) -> None:
+        try:
+            reset_password(token, password)
+        except PasswordResetError as exc:
+            QtWidgets.QMessageBox.warning(self, "Reset Failed", str(exc))
+            return
+
+        QtWidgets.QMessageBox.information(
+            self,
+            "Password Updated",
+            "Password reset successful. You can now log in with your new password.",
+        )
+        self.reset_widget.token_input.clear()
+        self.reset_widget.password_input.clear()
+        self.reset_widget.confirm_input.clear()
         self.show_login()
 
 
