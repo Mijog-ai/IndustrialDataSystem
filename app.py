@@ -10,12 +10,16 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication,
     QFileDialog,
+    QButtonGroup,
+    QGroupBox,
     QHeaderView,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QRadioButton,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -44,6 +48,24 @@ cloudinary.config(
     api_secret=os.getenv("CLOUDINARY_API_SECRET"),
     secure=True,
 )
+
+
+def normalize_role(role: Optional[str]) -> str:
+    """Normalize a role label to a comparable identifier."""
+
+    if not role:
+        return ""
+    normalized = str(role).strip().lower()
+    return normalized.replace("-", "_").replace(" ", "_")
+
+
+def format_role_label(role: Optional[str]) -> str:
+    """Create a human-friendly label for a role value."""
+
+    normalized = normalize_role(role)
+    if not normalized:
+        return ""
+    return normalized.replace("_", " ").title()
 
 
 class SessionState:
@@ -109,7 +131,7 @@ class SessionState:
 class LoginPage(QWidget):
     """Login interface for the application."""
 
-    login_requested = pyqtSignal(str, str)
+    login_requested = pyqtSignal(str, str, str)
     forgot_password_requested = pyqtSignal()
 
     def __init__(self) -> None:
@@ -132,6 +154,28 @@ class LoginPage(QWidget):
         self.password_input.setEchoMode(QLineEdit.Password)
         layout.addWidget(self.password_input)
 
+        role_box = QGroupBox("Sign in as")
+        role_layout = QHBoxLayout()
+        role_layout.setContentsMargins(12, 8, 12, 8)
+        role_layout.setSpacing(16)
+
+        self.role_group = QButtonGroup(self)
+
+        admin_radio = QRadioButton("Administrator")
+        admin_radio.setProperty("role", "admin")
+        self.role_group.addButton(admin_radio)
+        role_layout.addWidget(admin_radio)
+
+        joiner_radio = QRadioButton("New Joiner")
+        joiner_radio.setProperty("role", "new_joiner")
+        joiner_radio.setChecked(True)
+        self.role_group.addButton(joiner_radio)
+        role_layout.addWidget(joiner_radio)
+
+        role_layout.addStretch()
+        role_box.setLayout(role_layout)
+        layout.addWidget(role_box)
+
         login_button = QPushButton("Sign In")
         login_button.clicked.connect(self._emit_login_request)
         layout.addWidget(login_button)
@@ -143,7 +187,9 @@ class LoginPage(QWidget):
     def _emit_login_request(self) -> None:
         email = self.email_input.text().strip().lower()
         password = self.password_input.text()
-        self.login_requested.emit(email, password)
+        checked = self.role_group.checkedButton()
+        role = checked.property("role") if checked else "new_joiner"
+        self.login_requested.emit(email, password, role)
 
 
 class ForgotPasswordPage(QWidget):
@@ -217,8 +263,9 @@ class DashboardPage(QWidget):
         logout_button.clicked.connect(self.logout_requested)
         layout.addWidget(logout_button)
 
-    def set_user_email(self, email: str) -> None:
-        self.welcome_label.setText(f"Welcome, {email}")
+    def set_user_email(self, email: str, role: Optional[str] = None) -> None:
+        role_suffix = f" · {role}" if role else ""
+        self.welcome_label.setText(f"Welcome, {email}{role_suffix}")
 
     def update_files(self, files: List[Dict[str, Any]]) -> None:
         self.table.setRowCount(len(files))
@@ -248,6 +295,7 @@ class IndustrialDataApp(QMainWindow):
         self.resize(900, 600)
 
         self.session_state = SessionState(supabase)
+        self.active_role_display: Optional[str] = None
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -273,6 +321,7 @@ class IndustrialDataApp(QMainWindow):
         self.show_login()
 
     def show_login(self) -> None:
+        self.active_role_display = None
         self.stack.setCurrentWidget(self.login_page)
 
     def show_forgot_password(self) -> None:
@@ -281,7 +330,7 @@ class IndustrialDataApp(QMainWindow):
     def show_dashboard(self) -> None:
         self.stack.setCurrentWidget(self.dashboard_page)
 
-    def handle_login(self, email: str, password: str) -> None:
+    def handle_login(self, email: str, password: str, role: str) -> None:
         if not email or not password:
             self._alert("Email and password are required.", QMessageBox.Warning)
             return
@@ -308,7 +357,34 @@ class IndustrialDataApp(QMainWindow):
             self._alert("Unable to determine the current user.", QMessageBox.Critical)
             return
 
-        self.dashboard_page.set_user_email(user.get("email", ""))
+        selected_role = normalize_role(role) or "new_joiner"
+        metadata_role = normalize_role((user.get("metadata") or {}).get("role"))
+
+        if metadata_role and metadata_role != selected_role:
+            attempted_label = format_role_label(selected_role)
+            actual_label = format_role_label(metadata_role)
+            try:
+                supabase.auth.sign_out()
+            except Exception:
+                pass
+            self.session_state.clear()
+            self._alert(
+                (
+                    "You attempted to sign in as "
+                    f"{attempted_label or 'the selected role'}, "
+                    "but this account is registered as "
+                    f"{actual_label or 'a different role'}."
+                ),
+                QMessageBox.Critical,
+            )
+            return
+
+        display_role = metadata_role or selected_role
+        self.active_role_display = format_role_label(display_role)
+
+        self.dashboard_page.set_user_email(
+            user.get("email", ""), self.active_role_display
+        )
         self.show_dashboard()
         self.refresh_files()
 
@@ -335,6 +411,7 @@ class IndustrialDataApp(QMainWindow):
         except Exception:
             pass
         self.session_state.clear()
+        self.active_role_display = None
         self._alert("You have been signed out.", QMessageBox.Information)
         self.show_login()
 
@@ -344,6 +421,15 @@ class IndustrialDataApp(QMainWindow):
             self._alert("Session expired. Please sign in again.", QMessageBox.Warning)
             self.show_login()
             return
+
+        if not self.active_role_display:
+            metadata_label = format_role_label((user.get("metadata") or {}).get("role"))
+            if metadata_label:
+                self.active_role_display = metadata_label
+
+        self.dashboard_page.set_user_email(
+            user.get("email", ""), self.active_role_display
+        )
 
         try:
             response = (
