@@ -1,8 +1,0 @@
-This directory contains Alembic migration scripts for the Industrial Data System
-application. To generate a new revision run::
-
-    alembic revision --autogenerate -m "descriptive message"
-
-Apply the latest migrations with::
-
-    alembic upgrade head
