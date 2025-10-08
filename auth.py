@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from dataclasses import dataclass
 from typing import List
 
@@ -12,6 +13,7 @@ from database import (
     ensure_admin_user,
     get_pending_users,
     get_user_by_username,
+    has_admin_user,
     update_user_status,
 )
 
@@ -103,7 +105,23 @@ def bootstrap_default_admin() -> None:
     if admin_username and admin_password:
         hashed = hash_password(admin_password)
         ensure_admin_user(admin_username, hashed, email=admin_email)
+        return
 
+    if has_admin_user():
+        return
+
+    default_username = os.getenv("IDS_DEFAULT_ADMIN_USERNAME", "admin")
+    default_password = os.getenv("IDS_DEFAULT_ADMIN_PASSWORD", "admin123")
+    hashed = hash_password(default_password)
+    ensure_admin_user(default_username, hashed, email=admin_email)
+    warnings.warn(
+        "No admin credentials were configured. A default admin account "
+        f"('{default_username}' / '{default_password}') was created. "
+        "Update the credentials by setting ADMIN_USERNAME and "
+        "ADMIN_PASSWORD environment variables.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 # Automatically bootstrap an admin if environment variables are provided.
 bootstrap_default_admin()

@@ -52,19 +52,39 @@ project/
 
 ## Usage
 
-1. Run the application:
+1. (Optional) export explicit admin credentials. When omitted, a default admin
+   account (`admin` / `admin123`) is created automatically on first launch to
+   allow registrations to be approved.
+
+   ```bash
+   export ADMIN_USERNAME="your-admin"
+   export ADMIN_PASSWORD="change-me"
+   export ADMIN_EMAIL="admin@example.com"  # optional override
+   ```
+
+2. Run the application:
 
    ```bash
    python main.py
    ```
 
-2. Register a new user. The registration will be stored as `pending` until an admin approves it.
-3. Log in as an admin (use the bootstrapped credentials or manually insert a user into the database) and open the admin panel to approve or reject users.
-4. Once approved, a user can log in to access the main interface:
+3. Register a new user. The registration will be stored as `pending` until an admin approves it.
+4. Log in as an admin and use the admin panel to approve or reject users.
+5. Once approved, a user can log in to access the main interface:
    - **Upload CSV** button in the top-left corner opens a file dialog.
    - **Drag-and-drop box** in the bottom-right corner accepts `.csv` files.
    - The center table displays the CSV contents.
    - Uploads are automatically sent to OneDrive at `Apps/<ONEDRIVE_APP_FOLDER>/Users/<username>/`.
+
+## Admin workflow
+
+- The admin panel opens immediately after a successful admin login. Every
+  registration that has not yet been reviewed appears in the list with status
+  `pending`.
+- Select a user and click **Approve** to grant access or **Reject** to deny the
+  request. Use **Refresh** to retrieve the latest registrations from the
+  database.
+- End users can log in only after their account has been approved by an admin.
 
 ## Packaging
 
