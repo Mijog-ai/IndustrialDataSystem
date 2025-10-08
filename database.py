@@ -77,6 +77,13 @@ def update_user_status(username: str, status: str, *, db_path: Path = DEFAULT_DB
         conn.execute("UPDATE users SET status = ? WHERE username = ?", (status, username.lower()))
 
 
+def has_admin_user(*, db_path: Path = DEFAULT_DB_PATH) -> bool:
+    """Return True if at least one admin account exists."""
+    with get_connection(db_path) as conn:
+        cursor = conn.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1")
+        return cursor.fetchone() is not None
+
+
 def set_user_role(username: str, role: str, *, db_path: Path = DEFAULT_DB_PATH) -> None:
     """Change a user's role."""
     with get_connection(db_path) as conn:
