@@ -1,23 +1,30 @@
-"""Flask application for Industrial Data System using Supabase and Cloudinary."""
+"""PyQt5 desktop application for the Industrial Data System."""
 from __future__ import annotations
 
 import os
-from functools import wraps
+import sys
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-from flask import (
-    Flask,
-    flash,
-    redirect,
-    render_template,
-    request,
-    session,
-    url_for,
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
-from supabase import Client, create_client
 import cloudinary
 import cloudinary.uploader
+from supabase import Client, create_client
 
 load_dotenv()
 
@@ -38,66 +45,306 @@ cloudinary.config(
     secure=True,
 )
 
-app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "change-me")
+
+class SessionState:
+    """Manage Supabase authentication state for the desktop application."""
+
+    def __init__(self, client: Client) -> None:
+        self._client = client
+        self.access_token: Optional[str] = None
+        self.refresh_token: Optional[str] = None
+        self.user: Optional[Dict[str, Any]] = None
+
+    def set_tokens(self, access_token: str, refresh_token: str) -> None:
+        self.access_token = access_token
+        self.refresh_token = refresh_token
+        self.refresh_user()
+
+    def refresh_user(self) -> Optional[Dict[str, Any]]:
+        if not self.access_token or not self.refresh_token:
+            self.user = None
+            return None
+
+        try:
+            session_response = self._client.auth.set_session(
+                self.access_token, self.refresh_token
+            )
+            response = self._client.auth.get_user(self.access_token)
+        except Exception:
+            self.clear()
+            return None
+
+        user = response.user if response else None
+        if not user:
+            self.clear()
+            return None
+
+        current_session = None
+        if session_response and getattr(session_response, "session", None):
+            current_session = session_response.session
+        else:
+            current_session = getattr(self._client.auth, "session", None)
+
+        if current_session is not None:
+            self.access_token = getattr(
+                current_session, "access_token", self.access_token
+            )
+            self.refresh_token = getattr(
+                current_session, "refresh_token", self.refresh_token
+            )
+
+        self.user = {
+            "id": getattr(user, "id", None),
+            "email": getattr(user, "email", ""),
+            "metadata": getattr(user, "user_metadata", {}) or {},
+        }
+        return self.user
+
+    def clear(self) -> None:
+        self.access_token = None
+        self.refresh_token = None
+        self.user = None
 
 
-def login_required(view):
-    """Decorator ensuring a user is authenticated before accessing a view."""
+class LoginPage(QWidget):
+    """Login interface for the application."""
 
-    @wraps(view)
-    def wrapped(*args: Any, **kwargs: Any):
-        if not current_user():
-            flash("Please sign in to continue.", "warning")
-            return redirect(url_for("login"))
-        return view(*args, **kwargs)
+    login_requested = pyqtSignal(str, str)
+    forgot_password_requested = pyqtSignal()
 
-    return wrapped
+    def __init__(self) -> None:
+        super().__init__()
 
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignTop)
 
-def current_user() -> Optional[Dict[str, Any]]:
-    """Return the currently authenticated user, refreshing the session if needed."""
+        title = QLabel("Industrial Data System")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 24px; font-weight: bold;")
+        layout.addWidget(title)
 
-    token = session.get("access_token")
-    refresh_token = session.get("refresh_token")
-    if not token or not refresh_token:
-        return None
+        self.email_input = QLineEdit()
+        self.email_input.setPlaceholderText("Email")
+        layout.addWidget(self.email_input)
 
-    try:
-        session_response = supabase.auth.set_session(token, refresh_token)
-        response = supabase.auth.get_user(token)
-    except Exception:
-        session.clear()
-        return None
+        self.password_input = QLineEdit()
+        self.password_input.setPlaceholderText("Password")
+        self.password_input.setEchoMode(QLineEdit.Password)
+        layout.addWidget(self.password_input)
 
-    user = response.user if response else None
-    if not user:
-        session.clear()
-        return None
+        login_button = QPushButton("Sign In")
+        login_button.clicked.connect(self._emit_login_request)
+        layout.addWidget(login_button)
 
-    current_session = None
-    if session_response and getattr(session_response, "session", None):
-        current_session = session_response.session
-    else:
-        current_session = getattr(supabase.auth, "session", None)
+        forgot_button = QPushButton("Forgot Password?")
+        forgot_button.clicked.connect(self.forgot_password_requested)
+        layout.addWidget(forgot_button)
 
-    if current_session is not None:
-        session["access_token"] = getattr(current_session, "access_token", token)
-        session["refresh_token"] = getattr(current_session, "refresh_token", refresh_token)
-
-    return {
-        "id": getattr(user, "id", None),
-        "email": getattr(user, "email", ""),
-        "metadata": getattr(user, "user_metadata", {}) or {},
-    }
+    def _emit_login_request(self) -> None:
+        email = self.email_input.text().strip().lower()
+        password = self.password_input.text()
+        self.login_requested.emit(email, password)
 
 
-@app.route("/")
-@login_required
-def dashboard():
-    user = current_user()
-    files: List[Dict[str, Any]] = []
-    if user and user.get("id"):
+class ForgotPasswordPage(QWidget):
+    """Interface allowing the user to initiate a password reset."""
+
+    reset_requested = pyqtSignal(str)
+    back_requested = pyqtSignal()
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignTop)
+
+        title = QLabel("Reset Password")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 24px; font-weight: bold;")
+        layout.addWidget(title)
+
+        self.email_input = QLineEdit()
+        self.email_input.setPlaceholderText("Email")
+        layout.addWidget(self.email_input)
+
+        reset_button = QPushButton("Send Reset Instructions")
+        reset_button.clicked.connect(self._emit_reset_request)
+        layout.addWidget(reset_button)
+
+        back_button = QPushButton("Back to Sign In")
+        back_button.clicked.connect(self.back_requested)
+        layout.addWidget(back_button)
+
+    def _emit_reset_request(self) -> None:
+        email = self.email_input.text().strip().lower()
+        self.reset_requested.emit(email)
+
+
+class DashboardPage(QWidget):
+    """Dashboard interface displaying uploaded files."""
+
+    logout_requested = pyqtSignal()
+    upload_requested = pyqtSignal(str)
+    refresh_requested = pyqtSignal()
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignTop)
+
+        self.welcome_label = QLabel("Welcome")
+        self.welcome_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+        layout.addWidget(self.welcome_label)
+
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(["Filename", "URL", "Uploaded"])
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        layout.addWidget(self.table)
+
+        upload_button = QPushButton("Upload File")
+        upload_button.clicked.connect(self._select_file)
+        layout.addWidget(upload_button)
+
+        refresh_button = QPushButton("Refresh Files")
+        refresh_button.clicked.connect(self.refresh_requested.emit)
+        layout.addWidget(refresh_button)
+
+        logout_button = QPushButton("Sign Out")
+        logout_button.clicked.connect(self.logout_requested)
+        layout.addWidget(logout_button)
+
+    def set_user_email(self, email: str) -> None:
+        self.welcome_label.setText(f"Welcome, {email}")
+
+    def update_files(self, files: List[Dict[str, Any]]) -> None:
+        self.table.setRowCount(len(files))
+        for row, file_record in enumerate(files):
+            filename_item = QTableWidgetItem(file_record.get("filename", ""))
+            url_item = QTableWidgetItem(file_record.get("url", ""))
+            created_item = QTableWidgetItem(file_record.get("created_at", ""))
+
+            for item in (filename_item, url_item, created_item):
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+            self.table.setItem(row, 0, filename_item)
+            self.table.setItem(row, 1, url_item)
+            self.table.setItem(row, 2, created_item)
+
+    def _select_file(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select File to Upload")
+        if file_path:
+            self.upload_requested.emit(file_path)
+
+class IndustrialDataApp(QMainWindow):
+    """Main window hosting the Industrial Data System interface."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("Industrial Data System")
+        self.resize(900, 600)
+
+        self.session_state = SessionState(supabase)
+
+        self.stack = QStackedWidget()
+        self.setCentralWidget(self.stack)
+
+        self.login_page = LoginPage()
+        self.forgot_page = ForgotPasswordPage()
+        self.dashboard_page = DashboardPage()
+
+        self.stack.addWidget(self.login_page)
+        self.stack.addWidget(self.forgot_page)
+        self.stack.addWidget(self.dashboard_page)
+
+        self.login_page.login_requested.connect(self.handle_login)
+        self.login_page.forgot_password_requested.connect(self.show_forgot_password)
+
+        self.forgot_page.reset_requested.connect(self.handle_password_reset)
+        self.forgot_page.back_requested.connect(self.show_login)
+
+        self.dashboard_page.logout_requested.connect(self.handle_logout)
+        self.dashboard_page.upload_requested.connect(self.handle_upload)
+        self.dashboard_page.refresh_requested.connect(self.refresh_files)
+
+        self.show_login()
+
+    def show_login(self) -> None:
+        self.stack.setCurrentWidget(self.login_page)
+
+    def show_forgot_password(self) -> None:
+        self.stack.setCurrentWidget(self.forgot_page)
+
+    def show_dashboard(self) -> None:
+        self.stack.setCurrentWidget(self.dashboard_page)
+
+    def handle_login(self, email: str, password: str) -> None:
+        if not email or not password:
+            self._alert("Email and password are required.", QMessageBox.Warning)
+            return
+
+        try:
+            auth_response = supabase.auth.sign_in_with_password(
+                {"email": email, "password": password}
+            )
+        except Exception as exc:
+            self._alert(f"Unable to sign in: {exc}", QMessageBox.Critical)
+            return
+
+        if not getattr(auth_response, "session", None):
+            self._alert("No active Supabase session returned.", QMessageBox.Critical)
+            return
+
+        self.session_state.set_tokens(
+            auth_response.session.access_token,
+            auth_response.session.refresh_token,
+        )
+
+        user = self.session_state.user
+        if not user:
+            self._alert("Unable to determine the current user.", QMessageBox.Critical)
+            return
+
+        self.dashboard_page.set_user_email(user.get("email", ""))
+        self.show_dashboard()
+        self.refresh_files()
+
+    def handle_password_reset(self, email: str) -> None:
+        if not email:
+            self._alert("Email is required to reset the password.", QMessageBox.Warning)
+            return
+
+        try:
+            supabase.auth.reset_password_email(email)
+        except Exception as exc:
+            self._alert(f"Failed to initiate password reset: {exc}", QMessageBox.Critical)
+            return
+
+        self._alert(
+            "Password reset instructions have been sent if the email exists.",
+            QMessageBox.Information,
+        )
+        self.show_login()
+
+    def handle_logout(self) -> None:
+        try:
+            supabase.auth.sign_out()
+        except Exception:
+            pass
+        self.session_state.clear()
+        self._alert("You have been signed out.", QMessageBox.Information)
+        self.show_login()
+
+    def refresh_files(self) -> None:
+        user = self.session_state.refresh_user()
+        if not user:
+            self._alert("Session expired. Please sign in again.", QMessageBox.Warning)
+            self.show_login()
+            return
+
         try:
             response = (
                 supabase.table("files")
@@ -108,115 +355,60 @@ def dashboard():
             )
             files = response.data or []
         except Exception as exc:
-            flash(f"Failed to load files from Supabase: {exc}", "danger")
+            self._alert(f"Failed to load files from Supabase: {exc}", QMessageBox.Critical)
+            files = []
 
-    return render_template("dashboard.html", user=user, files=files)
+        self.dashboard_page.update_files(files)
 
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "")
-
-        if not email or not password:
-            flash("Email and password are required.", "danger")
-            return render_template("login.html")
+    def handle_upload(self, file_path: str) -> None:
+        user = self.session_state.user
+        if not user:
+            self._alert("Session expired. Please sign in again.", QMessageBox.Warning)
+            self.show_login()
+            return
 
         try:
-            auth_response = supabase.auth.sign_in_with_password(
-                {"email": email, "password": password}
+            upload_result = cloudinary.uploader.upload(file_path)
+        except Exception as exc:
+            self._alert(f"Cloudinary upload failed: {exc}", QMessageBox.Critical)
+            return
+
+        file_url = upload_result.get("secure_url")
+        if not file_url:
+            self._alert("Cloudinary did not return a file URL.", QMessageBox.Critical)
+            return
+
+        metadata = {
+            "user_id": user.get("id"),
+            "filename": os.path.basename(file_path),
+            "url": file_url,
+        }
+
+        try:
+            supabase.table("files").insert(metadata).execute()
+        except Exception as exc:
+            self._alert(
+                f"Failed to store file metadata in Supabase: {exc}", QMessageBox.Critical
             )
-        except Exception as exc:
-            flash(f"Unable to sign in: {exc}", "danger")
-            return render_template("login.html")
+            return
 
-        if not getattr(auth_response, "session", None):
-            flash("No active Supabase session returned.", "danger")
-            return render_template("login.html")
+        self._alert("File uploaded successfully.", QMessageBox.Information)
+        self.refresh_files()
 
-        session["access_token"] = auth_response.session.access_token
-        session["refresh_token"] = auth_response.session.refresh_token
-        session["user_email"] = email
-
-        flash("Signed in successfully.", "success")
-        return redirect(url_for("dashboard"))
-
-    return render_template("login.html")
+    def _alert(self, message: str, icon: QMessageBox.Icon) -> None:
+        dialog = QMessageBox(self)
+        dialog.setIcon(icon)
+        dialog.setText(message)
+        dialog.setWindowTitle("Industrial Data System")
+        dialog.exec_()
 
 
-@app.route("/logout", methods=["POST"])
-@login_required
-def logout():
-    try:
-        supabase.auth.sign_out()
-    except Exception:
-        # Ignore sign-out errors to ensure local session is cleared.
-        pass
-    session.clear()
-    flash("You have been signed out.", "info")
-    return redirect(url_for("login"))
-
-
-@app.route("/forgot-password", methods=["GET", "POST"])
-def forgot_password():
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        if not email:
-            flash("Email is required to reset the password.", "danger")
-            return render_template("forgot_password.html")
-
-        try:
-            supabase.auth.reset_password_email(email)
-        except Exception as exc:
-            flash(f"Failed to initiate password reset: {exc}", "danger")
-            return render_template("forgot_password.html")
-
-        flash("Password reset instructions have been sent if the email exists.", "success")
-        return redirect(url_for("login"))
-
-    return render_template("forgot_password.html")
-
-
-@app.route("/upload", methods=["POST"])
-@login_required
-def upload_file():
-    user = current_user()
-    if not user:
-        flash("Session expired. Please sign in again.", "warning")
-        return redirect(url_for("login"))
-
-    file = request.files.get("file")
-    if not file:
-        flash("Please select a file to upload.", "danger")
-        return redirect(url_for("dashboard"))
-
-    try:
-        upload_result = cloudinary.uploader.upload(file)
-    except Exception as exc:
-        flash(f"Cloudinary upload failed: {exc}", "danger")
-        return redirect(url_for("dashboard"))
-
-    file_url = upload_result.get("secure_url")
-    if not file_url:
-        flash("Cloudinary did not return a file URL.", "danger")
-        return redirect(url_for("dashboard"))
-
-    metadata = {
-        "user_id": user.get("id"),
-        "filename": file.filename,
-        "url": file_url,
-    }
-
-    try:
-        supabase.table("files").insert(metadata).execute()
-    except Exception as exc:
-        flash(f"Failed to store file metadata in Supabase: {exc}", "danger")
-        return redirect(url_for("dashboard"))
-
-    flash("File uploaded successfully.", "success")
-    return redirect(url_for("dashboard"))
+def main() -> None:
+    app = QApplication(sys.argv)
+    window = IndustrialDataApp()
+    window.show()
+    sys.exit(app.exec_())
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+    main()

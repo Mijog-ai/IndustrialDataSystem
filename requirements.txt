@@ -1,4 +1,4 @@
-flask==3.0.3
+PyQt5==5.15.10
 supabase==2.4.0
 cloudinary==1.36.0
 python-dotenv==1.0.1
