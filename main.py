@@ -1,4 +1,4 @@
-"""PyQt5 application providing authentication, CSV preview, and OneDrive uploads."""
+"""PyQt5 application providing authentication, CSV preview, and cloud uploads."""
 from __future__ import annotations
 
 import sys
@@ -18,7 +18,7 @@ from auth import (
     reject_user,
     User,
 )
-from onedrive_upload import upload_file_to_onedrive
+from cloudinary_upload import upload_to_cloudinary
 
 
 class DropArea(QtWidgets.QLabel):
@@ -124,16 +124,44 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.viewer.load_dataframe(dataframe)
 
-        try:
-            upload_file_to_onedrive(path, self.user.username)
-        except Exception as exc:  # pragma: no cover - GUI feedback path
-            QtWidgets.QMessageBox.critical(self, "Upload Failed", str(exc))
+        option, confirmed = QtWidgets.QInputDialog.getItem(
+            self,
+            "Select Upload Option",
+            "Select Upload Option:",
+            ["1. OneDrive (Disabled)", "2. Cloudinary"],
+            0,
+            False,
+        )
+
+        if not confirmed:
             return
 
-        QtWidgets.QMessageBox.information(
+        if option.startswith("1"):
+            QtWidgets.QMessageBox.warning(
+                self,
+                "OneDrive Disabled",
+                "OneDrive upload is currently disabled. Please choose Cloudinary instead.",
+            )
+            return
+
+        if option.startswith("2"):
+            try:
+                url = upload_to_cloudinary(path, self.user.username)
+            except Exception as exc:  # pragma: no cover - GUI feedback path
+                QtWidgets.QMessageBox.critical(self, "Upload Failed", str(exc))
+                return
+
+            QtWidgets.QMessageBox.information(
+                self,
+                "Upload Complete",
+                f"{Path(path).name} uploaded to Cloudinary successfully.\nURL: {url}",
+            )
+            return
+
+        QtWidgets.QMessageBox.warning(
             self,
-            "Upload Complete",
-            f"{Path(path).name} uploaded to OneDrive successfully.",
+            "Invalid Option",
+            "Unknown upload option selected.",
         )
 
     def _read_csv_with_fallback(self, path: str) -> pd.DataFrame:
