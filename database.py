@@ -1,114 +1,221 @@
-"""Database utilities for the Industrial Data System application."""
+"""Database utilities using SQLAlchemy for Industrial Data System."""
 from __future__ import annotations
 
 import os
-import sqlite3
 from contextlib import contextmanager
-from pathlib import Path
+from datetime import datetime, timedelta, timezone
 from typing import Generator, Iterable, Optional
 
-DEFAULT_DB_PATH = Path(os.getenv("IDS_DB_PATH", "app.db"))
+from dotenv import load_dotenv
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, create_engine, select
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, joinedload, mapped_column, relationship, sessionmaker
+
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
+ENGINE_ECHO = os.getenv("IDS_SQL_ECHO", "false").lower() == "true"
+
+engine = create_engine(DATABASE_URL, echo=ENGINE_ECHO, future=True)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 
-def _ensure_directory(path: Path) -> None:
-    if not path.parent.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
+class Base(DeclarativeBase):
+    """Base class for SQLAlchemy models."""
+
+
+class UserModel(Base):
+    """SQLAlchemy model representing an authenticated user."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(150), unique=True, nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(50), nullable=False, default="user")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+
+    reset_tokens: Mapped[list[PasswordResetTokenModel]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class PasswordResetTokenModel(Base):
+    """Model storing hashed password reset tokens."""
+
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    user: Mapped[UserModel] = relationship(back_populates="reset_tokens")
+
+
+def initialize_database() -> None:
+    """Create all tables if they do not exist."""
+
+    Base.metadata.create_all(engine)
 
 
 @contextmanager
-def get_connection(db_path: Path = DEFAULT_DB_PATH) -> Generator[sqlite3.Connection, None, None]:
-    """Context manager returning a SQLite connection with row factory enabled."""
-    _ensure_directory(db_path)
-    connection = sqlite3.connect(db_path)
-    connection.row_factory = sqlite3.Row
+def get_session() -> Generator[Session, None, None]:
+    """Provide a transactional scope around a series of operations."""
+
+    session: Session = SessionLocal()
     try:
-        yield connection
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     finally:
-        connection.commit()
-        connection.close()
+        session.close()
 
 
-def initialize_database(db_path: Path = DEFAULT_DB_PATH) -> None:
-    """Create the users table if it does not already exist."""
-    with get_connection(db_path) as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                role TEXT NOT NULL DEFAULT 'user',
-                status TEXT NOT NULL DEFAULT 'pending'
+def add_user(
+    username: str,
+    email: str,
+    password_hash: str,
+    role: str = "user",
+) -> None:
+    """Insert a new user record."""
+
+    with get_session() as session:
+        session.add(
+            UserModel(
+                username=username.lower(),
+                email=email.lower(),
+                password_hash=password_hash,
+                role=role,
             )
-            """
         )
 
 
-def add_user(username: str, email: str, password_hash: str, role: str = "user", *, db_path: Path = DEFAULT_DB_PATH) -> None:
-    """Insert a new user into the database."""
-    with get_connection(db_path) as conn:
-        conn.execute(
-            """
-            INSERT INTO users (username, email, password_hash, role, status)
-            VALUES (?, ?, ?, ?, 'pending')
-            """,
-            (username.lower(), email, password_hash, role),
-        )
+def get_user_by_username(username: str) -> Optional[UserModel]:
+    """Retrieve a user by username."""
+
+    with get_session() as session:
+        stmt = select(UserModel).where(UserModel.username == username.lower())
+        return session.scalar(stmt)
 
 
-def get_user_by_username(username: str, *, db_path: Path = DEFAULT_DB_PATH) -> Optional[sqlite3.Row]:
-    """Return a user row by username if it exists."""
-    with get_connection(db_path) as conn:
-        cursor = conn.execute("SELECT * FROM users WHERE username = ?", (username.lower(),))
-        return cursor.fetchone()
+def get_user_by_email(email: str) -> Optional[UserModel]:
+    """Retrieve a user by email."""
+
+    with get_session() as session:
+        stmt = select(UserModel).where(UserModel.email == email.lower())
+        return session.scalar(stmt)
 
 
-def get_pending_users(*, db_path: Path = DEFAULT_DB_PATH) -> Iterable[sqlite3.Row]:
-    """Return an iterable of pending user registrations."""
-    with get_connection(db_path) as conn:
-        cursor = conn.execute("SELECT * FROM users WHERE status = 'pending' ORDER BY username ASC")
-        return cursor.fetchall()
+def get_pending_users() -> Iterable[UserModel]:
+    """Return all users whose accounts are pending approval."""
+
+    with get_session() as session:
+        stmt = select(UserModel).where(UserModel.status == "pending").order_by(UserModel.username.asc())
+        return list(session.scalars(stmt))
 
 
-def update_user_status(username: str, status: str, *, db_path: Path = DEFAULT_DB_PATH) -> None:
-    """Update the status of a user (pending/approved/rejected)."""
-    with get_connection(db_path) as conn:
-        conn.execute("UPDATE users SET status = ? WHERE username = ?", (status, username.lower()))
+def update_user_status(username: str, status: str) -> None:
+    """Update a user's status."""
+
+    with get_session() as session:
+        stmt = select(UserModel).where(UserModel.username == username.lower())
+        user = session.scalar(stmt)
+        if user:
+            user.status = status
 
 
-def has_admin_user(*, db_path: Path = DEFAULT_DB_PATH) -> bool:
-    """Return True if at least one admin account exists."""
-    with get_connection(db_path) as conn:
-        cursor = conn.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1")
-        return cursor.fetchone() is not None
+def has_admin_user() -> bool:
+    """Determine if an admin user already exists."""
+
+    with get_session() as session:
+        stmt = select(UserModel.id).where(UserModel.role == "admin").limit(1)
+        return session.scalar(stmt) is not None
 
 
-def set_user_role(username: str, role: str, *, db_path: Path = DEFAULT_DB_PATH) -> None:
-    """Change a user's role."""
-    with get_connection(db_path) as conn:
-        conn.execute("UPDATE users SET role = ? WHERE username = ?", (role, username.lower()))
+def ensure_admin_user(username: str, password_hash: str, email: str = "admin@example.com") -> None:
+    """Ensure an admin user exists or promote an existing user."""
 
-
-def ensure_admin_user(username: str, password_hash: str, email: str = "admin@example.com", *, db_path: Path = DEFAULT_DB_PATH) -> None:
-    """Ensure that an admin user exists with the provided credentials.
-
-    If the username already exists, its role is promoted to admin but the password is left unchanged.
-    """
-    with get_connection(db_path) as conn:
-        cursor = conn.execute("SELECT id FROM users WHERE username = ?", (username.lower(),))
-        existing = cursor.fetchone()
-        if existing:
-            conn.execute("UPDATE users SET role = 'admin', status = 'approved' WHERE username = ?", (username.lower(),))
+    with get_session() as session:
+        stmt = select(UserModel).where(UserModel.username == username.lower())
+        user = session.scalar(stmt)
+        if user:
+            user.role = "admin"
+            user.status = "approved"
         else:
-            conn.execute(
-                """
-                INSERT INTO users (username, email, password_hash, role, status)
-                VALUES (?, ?, ?, 'admin', 'approved')
-                """,
-                (username.lower(), email, password_hash),
+            session.add(
+                UserModel(
+                    username=username.lower(),
+                    email=email.lower(),
+                    password_hash=password_hash,
+                    role="admin",
+                    status="approved",
+                )
             )
 
 
-# Initialize database when the module is imported.
+def set_user_role(username: str, role: str) -> None:
+    """Set the role for a given user."""
+
+    with get_session() as session:
+        stmt = select(UserModel).where(UserModel.username == username.lower())
+        user = session.scalar(stmt)
+        if user:
+            user.role = role
+
+
+def create_reset_token(user: UserModel, token_hash: str, ttl_minutes: int) -> PasswordResetTokenModel:
+    """Persist a password reset token for the user."""
+
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
+    with get_session() as session:
+        user_in_session = session.merge(user)
+        reset_token = PasswordResetTokenModel(
+            user=user_in_session, token_hash=token_hash, expires_at=expires_at
+        )
+        session.add(reset_token)
+        session.flush()
+        session.refresh(reset_token)
+        session.expunge(reset_token)
+        return reset_token
+
+
+def get_reset_token_by_hash(token_hash: str) -> Optional[PasswordResetTokenModel]:
+    """Return a password reset token by its hash."""
+
+    with get_session() as session:
+        stmt = (
+            select(PasswordResetTokenModel)
+            .options(joinedload(PasswordResetTokenModel.user))
+            .where(PasswordResetTokenModel.token_hash == token_hash)
+        )
+        token = session.scalar(stmt)
+        if token:
+            session.expunge(token)
+        return token
+
+
+def mark_token_used(token_id: int) -> None:
+    """Mark a password reset token as used."""
+
+    with get_session() as session:
+        stmt = select(PasswordResetTokenModel).where(PasswordResetTokenModel.id == token_id)
+        token = session.scalar(stmt)
+        if token:
+            token.used = True
+
+
+def update_user_password(user: UserModel, password_hash: str) -> None:
+    """Update the stored password hash for a user."""
+
+    with get_session() as session:
+        user_in_session = session.merge(user)
+        user_in_session.password_hash = password_hash
+
+
+# Initialize tables when module is imported.
 initialize_database()
