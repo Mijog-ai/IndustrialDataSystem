@@ -1,6 +1,7 @@
 """PyQt5 desktop application for the Industrial Data System."""
 from __future__ import annotations
 
+import csv
 import os
 import sys
 from typing import Any, Dict, List, Optional
@@ -251,6 +252,16 @@ class DashboardPage(QWidget):
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         layout.addWidget(self.table)
 
+        self.csv_preview_label = QLabel("CSV Preview")
+        self.csv_preview_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        self.csv_preview_label.hide()
+        layout.addWidget(self.csv_preview_label)
+
+        self.csv_table = QTableWidget(0, 0)
+        self.csv_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.csv_table.hide()
+        layout.addWidget(self.csv_table)
+
         upload_button = QPushButton("Upload File")
         upload_button.clicked.connect(self._select_file)
         layout.addWidget(upload_button)
@@ -285,6 +296,33 @@ class DashboardPage(QWidget):
         file_path, _ = QFileDialog.getOpenFileName(self, "Select File to Upload")
         if file_path:
             self.upload_requested.emit(file_path)
+
+    def display_csv_preview(self, headers: List[str], rows: List[List[str]]) -> None:
+        if not headers:
+            self.clear_csv_preview()
+            return
+
+        column_count = len(headers)
+        self.csv_table.setColumnCount(column_count)
+        self.csv_table.setHorizontalHeaderLabels(headers)
+
+        self.csv_table.setRowCount(len(rows))
+        for row_index, row_values in enumerate(rows):
+            for column_index in range(column_count):
+                value = row_values[column_index] if column_index < len(row_values) else ""
+                item = QTableWidgetItem(value)
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                self.csv_table.setItem(row_index, column_index, item)
+
+        self.csv_preview_label.show()
+        self.csv_table.show()
+
+    def clear_csv_preview(self) -> None:
+        self.csv_table.clear()
+        self.csv_table.setRowCount(0)
+        self.csv_table.setColumnCount(0)
+        self.csv_table.hide()
+        self.csv_preview_label.hide()
 
 class IndustrialDataApp(QMainWindow):
     """Main window hosting the Industrial Data System interface."""
@@ -453,6 +491,18 @@ class IndustrialDataApp(QMainWindow):
             self.show_login()
             return
 
+        if not file_path.lower().endswith(".csv"):
+            self._alert("Only CSV files can be uploaded.", QMessageBox.Warning)
+            self.dashboard_page.clear_csv_preview()
+            return
+
+        preview_result = self._prepare_csv_preview(file_path)
+        if preview_result is None:
+            return
+
+        headers, rows = preview_result
+        self.dashboard_page.display_csv_preview(headers, rows)
+
         try:
             upload_result = cloudinary.uploader.upload(file_path)
         except Exception as exc:
@@ -480,6 +530,27 @@ class IndustrialDataApp(QMainWindow):
 
         self._alert("File uploaded successfully.", QMessageBox.Information)
         self.refresh_files()
+
+    def _prepare_csv_preview(
+        self, file_path: str
+    ) -> Optional[tuple[List[str], List[List[str]]]]:
+        try:
+            with open(file_path, newline="", encoding="utf-8") as file:
+                reader = csv.reader(file)
+                rows = list(reader)
+        except Exception as exc:
+            self._alert(f"Unable to read CSV file: {exc}", QMessageBox.Critical)
+            self.dashboard_page.clear_csv_preview()
+            return None
+
+        if not rows:
+            self._alert("The selected CSV file is empty.", QMessageBox.Warning)
+            self.dashboard_page.clear_csv_preview()
+            return None
+
+        headers = rows[0]
+        data_rows = rows[1:101]
+        return headers, data_rows
 
     def _alert(self, message: str, icon: QMessageBox.Icon) -> None:
         dialog = QMessageBox(self)
