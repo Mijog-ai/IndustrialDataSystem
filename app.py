@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import os
+import re
 import sys
 from typing import Any, Dict, List, Optional
 
@@ -11,8 +12,6 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication,
     QFileDialog,
-    QButtonGroup,
-    QGroupBox,
     QHeaderView,
     QHBoxLayout,
     QLabel,
@@ -20,7 +19,6 @@ from PyQt5.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QRadioButton,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -49,24 +47,6 @@ cloudinary.config(
     api_secret=os.getenv("CLOUDINARY_API_SECRET"),
     secure=True,
 )
-
-
-def normalize_role(role: Optional[str]) -> str:
-    """Normalize a role label to a comparable identifier."""
-
-    if not role:
-        return ""
-    normalized = str(role).strip().lower()
-    return normalized.replace("-", "_").replace(" ", "_")
-
-
-def format_role_label(role: Optional[str]) -> str:
-    """Create a human-friendly label for a role value."""
-
-    normalized = normalize_role(role)
-    if not normalized:
-        return ""
-    return normalized.replace("_", " ").title()
 
 
 class SessionState:
@@ -130,9 +110,10 @@ class SessionState:
 
 
 class LoginPage(QWidget):
-    """Login interface for the application."""
+    """Authentication interface allowing login and signup flows."""
 
-    login_requested = pyqtSignal(str, str, str)
+    login_requested = pyqtSignal(str, str)
+    signup_requested = pyqtSignal(str, str, str)
     forgot_password_requested = pyqtSignal()
 
     def __init__(self) -> None:
@@ -146,51 +127,177 @@ class LoginPage(QWidget):
         title.setStyleSheet("font-size: 24px; font-weight: bold;")
         layout.addWidget(title)
 
-        self.email_input = QLineEdit()
-        self.email_input.setPlaceholderText("Email")
-        layout.addWidget(self.email_input)
+        toggle_row = QHBoxLayout()
+        toggle_row.setSpacing(12)
+        toggle_row.setContentsMargins(0, 24, 0, 12)
 
-        self.password_input = QLineEdit()
-        self.password_input.setPlaceholderText("Password")
-        self.password_input.setEchoMode(QLineEdit.Password)
-        layout.addWidget(self.password_input)
+        self.login_toggle = QPushButton("Login")
+        self.signup_toggle = QPushButton("Signup")
+        for button in (self.login_toggle, self.signup_toggle):
+            button.setCheckable(True)
+            button.setCursor(Qt.PointingHandCursor)
+            button.setFlat(True)
+            button.setStyleSheet("padding: 6px 12px; font-size: 16px;")
 
-        role_box = QGroupBox("Sign in as")
-        role_layout = QHBoxLayout()
-        role_layout.setContentsMargins(12, 8, 12, 8)
-        role_layout.setSpacing(16)
+        self.login_toggle.clicked.connect(lambda: self._switch_mode("login"))
+        self.signup_toggle.clicked.connect(lambda: self._switch_mode("signup"))
 
-        self.role_group = QButtonGroup(self)
+        toggle_row.addStretch()
+        toggle_row.addWidget(self.login_toggle)
+        toggle_row.addWidget(self.signup_toggle)
+        toggle_row.addStretch()
+        layout.addLayout(toggle_row)
 
-        admin_radio = QRadioButton("Administrator")
-        admin_radio.setProperty("role", "admin")
-        self.role_group.addButton(admin_radio)
-        role_layout.addWidget(admin_radio)
+        self.form_stack = QStackedWidget()
+        layout.addWidget(self.form_stack)
 
-        joiner_radio = QRadioButton("New Joiner")
-        joiner_radio.setProperty("role", "new_joiner")
-        joiner_radio.setChecked(True)
-        self.role_group.addButton(joiner_radio)
-        role_layout.addWidget(joiner_radio)
+        self.login_form = QWidget()
+        login_layout = QVBoxLayout(self.login_form)
+        login_layout.setSpacing(12)
 
-        role_layout.addStretch()
-        role_box.setLayout(role_layout)
-        layout.addWidget(role_box)
+        login_username_label = QLabel("Username")
+        self.login_username_input = QLineEdit()
+        self.login_username_input.setPlaceholderText("Enter username")
+        self.login_username_input.setMaxLength(6)
+        login_layout.addWidget(login_username_label)
+        login_layout.addWidget(self.login_username_input)
 
-        login_button = QPushButton("Sign In")
+        login_password_label = QLabel("Password")
+        self.login_password_input = QLineEdit()
+        self.login_password_input.setPlaceholderText("Enter password")
+        self.login_password_input.setEchoMode(QLineEdit.Password)
+        self.login_password_input.setMaxLength(6)
+        login_layout.addWidget(login_password_label)
+        login_layout.addWidget(self.login_password_input)
+
+        login_button = QPushButton("Login")
         login_button.clicked.connect(self._emit_login_request)
-        layout.addWidget(login_button)
+        login_layout.addWidget(login_button)
 
         forgot_button = QPushButton("Forgot Password?")
+        forgot_button.setFlat(True)
+        forgot_button.setCursor(Qt.PointingHandCursor)
         forgot_button.clicked.connect(self.forgot_password_requested)
-        layout.addWidget(forgot_button)
+        login_layout.addWidget(forgot_button)
+
+        login_layout.addStretch()
+
+        self.form_stack.addWidget(self.login_form)
+
+        self.signup_form = QWidget()
+        signup_layout = QVBoxLayout(self.signup_form)
+        signup_layout.setSpacing(12)
+
+        signup_email_label = QLabel("Email")
+        self.signup_email_input = QLineEdit()
+        self.signup_email_input.setPlaceholderText("Enter email for password recovery")
+        signup_layout.addWidget(signup_email_label)
+        signup_layout.addWidget(self.signup_email_input)
+
+        signup_username_label = QLabel("Username")
+        self.signup_username_input = QLineEdit()
+        self.signup_username_input.setPlaceholderText("Choose a username (max 6 characters)")
+        self.signup_username_input.setMaxLength(6)
+        signup_layout.addWidget(signup_username_label)
+        signup_layout.addWidget(self.signup_username_input)
+
+        signup_password_label = QLabel("Password")
+        self.signup_password_input = QLineEdit()
+        self.signup_password_input.setPlaceholderText("Create a password (max 6 characters)")
+        self.signup_password_input.setEchoMode(QLineEdit.Password)
+        self.signup_password_input.setMaxLength(6)
+        signup_layout.addWidget(signup_password_label)
+        signup_layout.addWidget(self.signup_password_input)
+
+        signup_confirm_label = QLabel("Confirm Password")
+        self.signup_confirm_input = QLineEdit()
+        self.signup_confirm_input.setPlaceholderText("Re-enter password")
+        self.signup_confirm_input.setEchoMode(QLineEdit.Password)
+        self.signup_confirm_input.setMaxLength(6)
+        signup_layout.addWidget(signup_confirm_label)
+        signup_layout.addWidget(self.signup_confirm_input)
+
+        signup_button = QPushButton("Create Account")
+        signup_button.clicked.connect(self._emit_signup_request)
+        signup_layout.addWidget(signup_button)
+
+        signup_layout.addStretch()
+
+        self.form_stack.addWidget(self.signup_form)
+
+        self._switch_mode("login")
+
+    def show_login(self, username: str = "") -> None:
+        """Display the login form and optionally prefill the username."""
+
+        self.login_username_input.setText(username)
+        self.login_password_input.clear()
+        self.signup_email_input.clear()
+        self.signup_username_input.clear()
+        self.signup_password_input.clear()
+        self.signup_confirm_input.clear()
+        self._switch_mode("login")
+        if username:
+            self.login_password_input.setFocus()
+        else:
+            self.login_username_input.setFocus()
+
+    def show_signup(self) -> None:
+        """Display the signup form."""
+
+        self.login_username_input.clear()
+        self.login_password_input.clear()
+        self._switch_mode("signup")
+        self.signup_email_input.setFocus()
+
+    def _switch_mode(self, mode: str) -> None:
+        if mode == "signup":
+            self.form_stack.setCurrentWidget(self.signup_form)
+            self.signup_toggle.setChecked(True)
+            self.login_toggle.setChecked(False)
+        else:
+            self.form_stack.setCurrentWidget(self.login_form)
+            self.login_toggle.setChecked(True)
+            self.signup_toggle.setChecked(False)
+
+        active_style = (
+            "QPushButton { border: none; border-bottom: 2px solid #0d6efd;"
+            " color: #0d6efd; font-weight: 600; padding: 6px 12px; }"
+        )
+        inactive_style = (
+            "QPushButton { border: none; border-bottom: 2px solid transparent;"
+            " color: #6c757d; padding: 6px 12px; }"
+            "QPushButton:hover { color: #0d6efd; }"
+        )
+
+        self.login_toggle.setStyleSheet(active_style if self.login_toggle.isChecked() else inactive_style)
+        self.signup_toggle.setStyleSheet(
+            active_style if self.signup_toggle.isChecked() else inactive_style
+        )
 
     def _emit_login_request(self) -> None:
-        email = self.email_input.text().strip().lower()
-        password = self.password_input.text()
-        checked = self.role_group.checkedButton()
-        role = checked.property("role") if checked else "new_joiner"
-        self.login_requested.emit(email, password, role)
+        username = self.login_username_input.text().strip()
+        password = self.login_password_input.text()
+        if not username or not password:
+            QMessageBox.warning(self, "Industrial Data System", "Username and password are required.")
+            return
+        self.login_requested.emit(username, password)
+
+    def _emit_signup_request(self) -> None:
+        email = self.signup_email_input.text().strip()
+        username = self.signup_username_input.text().strip()
+        password = self.signup_password_input.text()
+        confirm = self.signup_confirm_input.text()
+
+        if not email or not username or not password or not confirm:
+            QMessageBox.warning(self, "Industrial Data System", "All signup fields are required.")
+            return
+
+        if password != confirm:
+            QMessageBox.warning(self, "Industrial Data System", "Passwords do not match.")
+            return
+
+        self.signup_requested.emit(email, username, password)
 
 
 class ForgotPasswordPage(QWidget):
@@ -274,9 +381,14 @@ class DashboardPage(QWidget):
         logout_button.clicked.connect(self.logout_requested)
         layout.addWidget(logout_button)
 
-    def set_user_email(self, email: str, role: Optional[str] = None) -> None:
-        role_suffix = f" · {role}" if role else ""
-        self.welcome_label.setText(f"Welcome, {email}{role_suffix}")
+    def set_user_identity(self, username: str, email: str) -> None:
+        username = username.strip()
+        email = email.strip()
+        parts = [part for part in (username, email) if part]
+        if parts:
+            self.welcome_label.setText(f"Welcome, {' · '.join(parts)}")
+        else:
+            self.welcome_label.setText("Welcome")
 
     def update_files(self, files: List[Dict[str, Any]]) -> None:
         self.table.setRowCount(len(files))
@@ -333,7 +445,7 @@ class IndustrialDataApp(QMainWindow):
         self.resize(900, 600)
 
         self.session_state = SessionState(supabase)
-        self.active_role_display: Optional[str] = None
+        self.current_username: str = ""
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -347,6 +459,7 @@ class IndustrialDataApp(QMainWindow):
         self.stack.addWidget(self.dashboard_page)
 
         self.login_page.login_requested.connect(self.handle_login)
+        self.login_page.signup_requested.connect(self.handle_signup)
         self.login_page.forgot_password_requested.connect(self.show_forgot_password)
 
         self.forgot_page.reset_requested.connect(self.handle_password_reset)
@@ -358,9 +471,9 @@ class IndustrialDataApp(QMainWindow):
 
         self.show_login()
 
-    def show_login(self) -> None:
-        self.active_role_display = None
+    def show_login(self, username: str = "") -> None:
         self.stack.setCurrentWidget(self.login_page)
+        self.login_page.show_login(username)
 
     def show_forgot_password(self) -> None:
         self.stack.setCurrentWidget(self.forgot_page)
@@ -368,9 +481,20 @@ class IndustrialDataApp(QMainWindow):
     def show_dashboard(self) -> None:
         self.stack.setCurrentWidget(self.dashboard_page)
 
-    def handle_login(self, email: str, password: str, role: str) -> None:
-        if not email or not password:
-            self._alert("Email and password are required.", QMessageBox.Warning)
+    def handle_login(self, username: str, password: str) -> None:
+        username = username.strip()
+        if not username or not password:
+            self._alert("Username and password are required.", QMessageBox.Warning)
+            return
+
+        try:
+            email = self._resolve_email_for_username(username)
+        except RuntimeError as exc:
+            self._alert(str(exc), QMessageBox.Critical)
+            return
+
+        if not email:
+            self._alert("No account found for the provided username.", QMessageBox.Warning)
             return
 
         try:
@@ -395,36 +519,72 @@ class IndustrialDataApp(QMainWindow):
             self._alert("Unable to determine the current user.", QMessageBox.Critical)
             return
 
-        selected_role = normalize_role(role) or "new_joiner"
-        metadata_role = normalize_role((user.get("metadata") or {}).get("role"))
+        metadata = (user.get("metadata") or {})
+        stored_username = str(
+            metadata.get("username") or metadata.get("username_normalized") or username
+        ).strip()
+        self.current_username = stored_username or username
 
-        if metadata_role and metadata_role != selected_role:
-            attempted_label = format_role_label(selected_role)
-            actual_label = format_role_label(metadata_role)
-            try:
-                supabase.auth.sign_out()
-            except Exception:
-                pass
-            self.session_state.clear()
+        self.dashboard_page.set_user_identity(self.current_username, user.get("email", ""))
+        self.show_dashboard()
+        self.refresh_files()
+
+    def handle_signup(self, email: str, username: str, password: str) -> None:
+        email = email.strip().lower()
+        username = username.strip()
+        if not email or not username or not password:
+            self._alert("All signup fields are required.", QMessageBox.Warning)
+            return
+
+        if len(username) > 6 or len(password) > 6:
             self._alert(
-                (
-                    "You attempted to sign in as "
-                    f"{attempted_label or 'the selected role'}, "
-                    "but this account is registered as "
-                    f"{actual_label or 'a different role'}."
-                ),
-                QMessageBox.Critical,
+                "Username and password must be 6 characters or fewer.",
+                QMessageBox.Warning,
             )
             return
 
-        display_role = metadata_role or selected_role
-        self.active_role_display = format_role_label(display_role)
+        if not self._is_valid_email(email):
+            self._alert("Enter a valid email address.", QMessageBox.Warning)
+            return
 
-        self.dashboard_page.set_user_email(
-            user.get("email", ""), self.active_role_display
+        normalized_username = username.lower()
+
+        try:
+            existing_email = self._resolve_email_for_username(normalized_username)
+        except RuntimeError as exc:
+            self._alert(str(exc), QMessageBox.Critical)
+            return
+
+        if existing_email:
+            self._alert("That username is already in use.", QMessageBox.Warning)
+            return
+
+        metadata = {
+            "username": username,
+            "username_normalized": normalized_username,
+        }
+
+        try:
+            response = supabase.auth.sign_up(
+                {
+                    "email": email,
+                    "password": password,
+                    "options": {"data": metadata},
+                }
+            )
+        except Exception as exc:
+            self._alert(f"Unable to create the account: {exc}", QMessageBox.Critical)
+            return
+
+        if not getattr(response, "user", None):
+            self._alert("Signup did not complete successfully.", QMessageBox.Critical)
+            return
+
+        self._alert(
+            "Signup successful! Check your email to verify the account and then log in using your username.",
+            QMessageBox.Information,
         )
-        self.show_dashboard()
-        self.refresh_files()
+        self.show_login(username)
 
     def handle_password_reset(self, email: str) -> None:
         if not email:
@@ -449,7 +609,7 @@ class IndustrialDataApp(QMainWindow):
         except Exception:
             pass
         self.session_state.clear()
-        self.active_role_display = None
+        self.current_username = ""
         self._alert("You have been signed out.", QMessageBox.Information)
         self.show_login()
 
@@ -460,13 +620,18 @@ class IndustrialDataApp(QMainWindow):
             self.show_login()
             return
 
-        if not self.active_role_display:
-            metadata_label = format_role_label((user.get("metadata") or {}).get("role"))
-            if metadata_label:
-                self.active_role_display = metadata_label
+        metadata = (user.get("metadata") or {})
+        metadata_username = str(
+            metadata.get("username")
+            or metadata.get("username_normalized")
+            or self.current_username
+        ).strip()
+        if metadata_username:
+            self.current_username = metadata_username
 
-        self.dashboard_page.set_user_email(
-            user.get("email", ""), self.active_role_display
+        self.dashboard_page.set_user_identity(
+            self.current_username,
+            user.get("email", ""),
         )
 
         try:
@@ -530,6 +695,43 @@ class IndustrialDataApp(QMainWindow):
 
         self._alert("File uploaded successfully.", QMessageBox.Information)
         self.refresh_files()
+
+    def _resolve_email_for_username(self, username: str) -> Optional[str]:
+        normalized = username.strip().lower()
+        if not normalized:
+            return None
+
+        admin_api = getattr(getattr(supabase, "auth", None), "admin", None)
+        if admin_api is None:
+            raise RuntimeError("Supabase admin client is not available for username lookup.")
+
+        page = 1
+        try:
+            while True:
+                response = admin_api.list_users(page=page, per_page=100)
+                users = getattr(response, "users", []) or []
+                for user in users:
+                    metadata = getattr(user, "user_metadata", {}) or {}
+                    metadata_username = str(
+                        metadata.get("username_normalized")
+                        or metadata.get("username")
+                        or ""
+                    ).strip().lower()
+                    if metadata_username == normalized:
+                        return getattr(user, "email", None)
+
+                next_page = getattr(response, "next_page", None)
+                if not next_page or next_page == page:
+                    break
+                page = next_page
+        except Exception as exc:
+            raise RuntimeError(f"Unable to query Supabase users: {exc}") from exc
+
+        return None
+
+    @staticmethod
+    def _is_valid_email(email: str) -> bool:
+        return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email))
 
     def _prepare_csv_preview(
         self, file_path: str
