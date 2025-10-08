@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+from pandas.errors import ParserError
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from auth import (
@@ -116,7 +117,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def process_file(self, path: str) -> None:
         try:
-            dataframe = pd.read_csv(path)
+            dataframe = self._read_csv_with_fallback(path)
         except Exception as exc:  # pragma: no cover - GUI feedback path
             QtWidgets.QMessageBox.critical(self, "CSV Error", f"Failed to read CSV file:\n{exc}")
             return
@@ -134,6 +135,17 @@ class MainWindow(QtWidgets.QMainWindow):
             "Upload Complete",
             f"{Path(path).name} uploaded to OneDrive successfully.",
         )
+
+    def _read_csv_with_fallback(self, path: str) -> pd.DataFrame:
+        """Load CSV allowing delimiter detection when default parsing fails."""
+
+        try:
+            return pd.read_csv(path)
+        except ParserError:
+            # Some files use semicolons or other delimiters which raise a
+            # ``ParserError`` when read with the default C engine. Re-try with
+            # the Python engine so pandas can sniff the delimiter.
+            return pd.read_csv(path, sep=None, engine="python")
 
 
 class LoginWidget(QtWidgets.QWidget):
