@@ -1,0 +1,11 @@
+body {
+  background-color: #f5f7fa;
+}
+
+.alert-stack .alert + .alert {
+  margin-top: 0.5rem;
+}
+
+.card {
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05);
+}
