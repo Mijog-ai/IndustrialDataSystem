@@ -655,7 +655,12 @@ class IndustrialDataApp(QMainWindow):
         self.dashboard_page.display_csv_preview(headers, rows)
 
         try:
-            upload_result = cloudinary.uploader.upload(file_path)
+            upload_result = cloudinary.uploader.upload(
+                file_path,
+                resource_type="raw",
+                use_filename=True,
+                unique_filename=False,
+            )
         except Exception as exc:
             self._alert(f"Cloudinary upload failed: {exc}", QMessageBox.Critical)
             return
