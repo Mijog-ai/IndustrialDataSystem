@@ -30,7 +30,7 @@ class DropArea(QtWidgets.QLabel):
         super().__init__(parent)
         self.setAcceptDrops(True)
         self.setAlignment(QtCore.Qt.AlignCenter)
-        self.setText("Drop CSV Here")
+        self.setText("Drop CSV Here to Preview & Upload")
         self.setStyleSheet(
             """
             QLabel {
@@ -124,44 +124,29 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.viewer.load_dataframe(dataframe)
 
-        option, confirmed = QtWidgets.QInputDialog.getItem(
+        reply = QtWidgets.QMessageBox.question(
             self,
-            "Select Upload Option",
-            "Select Upload Option:",
-            ["1. OneDrive (Disabled)", "2. Cloudinary"],
-            0,
-            False,
+            "Upload to Cloudinary?",
+            (
+                f"Preview loaded for {Path(path).name}.\n\n"
+                "Would you like to upload this file to Cloudinary now?"
+            ),
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
         )
 
-        if not confirmed:
+        if reply != QtWidgets.QMessageBox.Yes:
             return
 
-        if option.startswith("1"):
-            QtWidgets.QMessageBox.warning(
-                self,
-                "OneDrive Disabled",
-                "OneDrive upload is currently disabled. Please choose Cloudinary instead.",
-            )
+        try:
+            url = upload_to_cloudinary(path, self.user.username)
+        except Exception as exc:  # pragma: no cover - GUI feedback path
+            QtWidgets.QMessageBox.critical(self, "Upload Failed", str(exc))
             return
 
-        if option.startswith("2"):
-            try:
-                url = upload_to_cloudinary(path, self.user.username)
-            except Exception as exc:  # pragma: no cover - GUI feedback path
-                QtWidgets.QMessageBox.critical(self, "Upload Failed", str(exc))
-                return
-
-            QtWidgets.QMessageBox.information(
-                self,
-                "Upload Complete",
-                f"{Path(path).name} uploaded to Cloudinary successfully.\nURL: {url}",
-            )
-            return
-
-        QtWidgets.QMessageBox.warning(
+        QtWidgets.QMessageBox.information(
             self,
-            "Invalid Option",
-            "Unknown upload option selected.",
+            "Upload Complete",
+            f"{Path(path).name} uploaded to Cloudinary successfully.\nURL: {url}",
         )
 
     def _read_csv_with_fallback(self, path: str) -> pd.DataFrame:
@@ -360,6 +345,15 @@ class AuthWindow(QtWidgets.QMainWindow):
         self.stack.setCurrentWidget(self.login_widget)
 
     def handle_login(self, username: str, password: str) -> None:
+        username = username.strip()
+        if not username or not password:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Login Details Required",
+                "Enter both a username and password before continuing.",
+            )
+            return
+
         try:
             user = authenticate_user(username, password)
         except LoginError as exc:
@@ -388,6 +382,16 @@ class AuthWindow(QtWidgets.QMainWindow):
         self.close()
 
     def handle_registration(self, username: str, email: str, password: str) -> None:
+        username = username.strip()
+        email = email.strip()
+        if not username or not email or not password:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Registration Incomplete",
+                "All registration fields are required before submitting.",
+            )
+            return
+
         try:
             register_user(username, email, password)
         except RegistrationError as exc:
