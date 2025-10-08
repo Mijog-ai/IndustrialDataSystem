@@ -1,13 +1,13 @@
 # Industrial Data System Desktop Application
 
-A PyQt5 desktop application featuring admin-approved authentication, CSV previewing, and automatic uploads to OneDrive via Microsoft Graph.
+A PyQt5 desktop application featuring admin-approved authentication, CSV previewing, and optional uploads to Cloudinary. OneDrive uploads have been disabled.
 
 ## Features
 
 - Login and registration workflow with admin approval.
 - Admin panel for reviewing, approving, or rejecting pending accounts.
 - CSV viewer with upload button and drag-and-drop support.
-- OneDrive integration that stores uploads in user-specific folders under the configured app directory.
+- Cloudinary integration for storing uploads in user-specific folders. (OneDrive upload is currently disabled.)
 - Password hashing using bcrypt and environment-based configuration for secrets.
 
 ## Project Structure
@@ -17,8 +17,9 @@ project/
 ├── auth.py
 ├── database.py
 ├── main.py
-├── onedrive_auth.py
-├── onedrive_upload.py
+├── cloudinary_upload.py
+├── onedrive_auth.py      # retained for compatibility but disabled
+├── onedrive_upload.py    # retained for compatibility but disabled
 ├── requirements.txt
 ├── README.md
 └── .env               # provide your own values before running
@@ -27,7 +28,7 @@ project/
 ## Prerequisites
 
 - Python 3.10+
-- Azure AD application with `Files.ReadWrite`, `Files.ReadWrite.AppFolder`, `User.Read`, and `offline_access` permissions and admin consent granted.
+- Cloudinary account (free tier is sufficient) with API credentials.
 
 ## Installation
 
@@ -42,11 +43,10 @@ project/
 
    ```bash
    cp .env.example .env
-   # Edit .env and fill in CLIENT_ID, TENANT_ID, CLIENT_SECRET, etc.
+   # Edit .env and fill in the Cloudinary credentials.
    ```
 
-   Set the `CLIENT_ID`, `TENANT_ID`, and `CLIENT_SECRET` from your Azure application.
-   Optionally set `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `ADMIN_EMAIL` to bootstrap an approved admin on startup. Configure the OneDrive admin destination with `ONEDRIVE_USER_EMAIL` and override the upload root via `ONEDRIVE_UPLOAD_ROOT` when desired.
+   Set the `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` from your Cloudinary dashboard. Optionally set `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `ADMIN_EMAIL` to bootstrap an approved admin on startup.
 
 4. Export `IDS_DB_PATH` if you want to override the default SQLite database location (defaults to `app.db`).
 
@@ -74,7 +74,21 @@ project/
    - **Upload CSV** button in the top-left corner opens a file dialog.
    - **Drag-and-drop box** in the bottom-right corner accepts `.csv` files.
    - The center table displays the CSV contents.
-   - Uploads are automatically sent to the admin's OneDrive at `<ONEDRIVE_UPLOAD_ROOT>/<username>/<filename>`.
+   - Select **Option 2: Cloudinary** when prompted to upload to your configured Cloudinary account. Option 1 (OneDrive) is disabled.
+
+## Cloudinary Setup
+
+1. Create a free account at [Cloudinary](https://cloudinary.com/).
+2. From the dashboard, copy your **Cloud name**, **API Key**, and **API Secret**.
+3. Add them to your `.env` file:
+
+   ```ini
+   CLOUDINARY_CLOUD_NAME=your_cloud_name
+   CLOUDINARY_API_KEY=your_key
+   CLOUDINARY_API_SECRET=your_secret
+   ```
+
+4. Run the application and choose **Option 2: Cloudinary** after selecting or dropping a file.
 
 ## Admin workflow
 
@@ -98,9 +112,8 @@ The resulting binary will be placed in the `dist/` directory.
 
 ## Troubleshooting
 
-- **Missing configuration** – ensure `.env.local` (or `.env`) is present with valid Azure credentials before running the app.
-- **Token acquisition errors** – confirm the Azure AD application has the required permissions and the secrets are correct.
-- **OneDrive upload failures** – check network connectivity and that the signed-in application has access to the OneDrive account used for uploads.
+- **Missing configuration** – ensure `.env` is present with valid Cloudinary credentials before running the app.
+- **Cloudinary upload failures** – verify that your API credentials are correct and the account allows the selected resource type.
 
 ## Security Notes
 
