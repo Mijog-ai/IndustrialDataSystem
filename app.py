@@ -96,10 +96,20 @@ class SessionState:
                 current_session, "refresh_token", self.refresh_token
             )
 
+        # Access raw_user_meta_data or user_metadata
+        metadata = (
+                getattr(user, "raw_user_meta_data", None)
+                or getattr(user, "user_metadata", None)
+                or {}
+        )
+
+        if not isinstance(metadata, dict):
+            metadata = {}
+
         self.user = {
             "id": getattr(user, "id", None),
             "email": getattr(user, "email", ""),
-            "metadata": getattr(user, "user_metadata", {}) or {},
+            "metadata": metadata,
         }
         return self.user
 
@@ -567,7 +577,8 @@ class IndustrialDataApp(QMainWindow):
             self.show_login(email)
             return
 
-        if not self._process_auth_response("", auth_response):
+        # Pass the username to _process_auth_response so it can be stored
+        if not self._process_auth_response(username, auth_response):
             self.show_login(email)
             return
 
@@ -696,29 +707,59 @@ class IndustrialDataApp(QMainWindow):
         if not normalized:
             return None
 
-        admin_api = getattr(getattr(supabase, "auth", None), "admin", None)
-        if admin_api is None:
-            raise RuntimeError("Supabase admin client is not available for username lookup.")
-
-        page = 1
         try:
+            import requests
+
+            headers = {
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+            }
+
+            # Query auth.users via REST API
+            url = f"{SUPABASE_URL}/auth/v1/admin/users"
+
+            page = 1
+            per_page = 1000
+
             while True:
-                response = admin_api.list_users(page=page, per_page=100)
-                users = getattr(response, "users", []) or []
+                params = {"page": page, "per_page": per_page}
+                response = requests.get(url, headers=headers, params=params)
+                response.raise_for_status()
+
+                data = response.json()
+
+                # Handle both response formats
+                if isinstance(data, dict):
+                    users = data.get("users", [])
+                elif isinstance(data, list):
+                    users = data
+                else:
+                    users = []
+
                 for user in users:
-                    metadata = getattr(user, "user_metadata", {}) or {}
+                    # The REST API returns user_metadata, not raw_user_meta_data
+                    metadata = user.get("user_metadata") or {}
+
+                    if not isinstance(metadata, dict):
+                        metadata = {}
+
                     metadata_username = str(
                         metadata.get("username_normalized")
                         or metadata.get("username")
                         or ""
                     ).strip().lower()
-                    if metadata_username == normalized:
-                        return getattr(user, "email", None)
 
-                next_page = getattr(response, "next_page", None)
-                if not next_page or next_page == page:
+                    if metadata_username == normalized:
+                        return user.get("email")
+
+                # Check for more pages
+                if len(users) < per_page:
                     break
-                page = next_page
+                page += 1
+
+                if page > 10:  # Safety limit
+                    break
+
         except Exception as exc:
             raise RuntimeError(f"Unable to query Supabase users: {exc}") from exc
 
@@ -751,9 +792,11 @@ class IndustrialDataApp(QMainWindow):
 
         metadata = (user.get("metadata") or {})
         stored_username = str(
-            metadata.get("username") or metadata.get("username_normalized") or username
+            metadata.get("username") or metadata.get("username_normalized") or ""
         ).strip()
-        self.current_username = stored_username or username
+
+        # Use the passed username if stored_username is empty
+        self.current_username = stored_username if stored_username else username
 
         self.dashboard_page.set_user_identity(self.current_username, user.get("email", ""))
         self.show_dashboard()
