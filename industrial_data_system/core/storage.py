@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
-from config import AppConfig, get_config
-from db_manager import DatabaseManager
+from industrial_data_system.core.config import AppConfig, get_config
+from industrial_data_system.core.db_manager import DatabaseManager
 
 
 class StorageError(RuntimeError):

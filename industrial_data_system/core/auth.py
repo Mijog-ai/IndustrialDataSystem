@@ -7,9 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from db_manager import DatabaseManager, UploadRecord, UserRecord
+from industrial_data_system.core.db_manager import (
+    DatabaseManager,
+    UploadRecord,
+    UserRecord,
+)
 
-DATA_DIR = Path(__file__).resolve().parent / "data"
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 

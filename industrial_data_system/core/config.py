@@ -32,6 +32,8 @@ def _load_environment() -> None:
         candidate_paths = []
         script_directory = Path(__file__).resolve().parent
         candidate_paths.append(script_directory / ".env")
+        candidate_paths.append(script_directory.parent / ".env")
+        candidate_paths.append(script_directory.parent.parent / ".env")
 
         meipass_dir = getattr(os, "_MEIPASS", None)
         if meipass_dir:
