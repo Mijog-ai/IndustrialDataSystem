@@ -956,7 +956,14 @@ class DashboardPage(QWidget):
             )
             return
 
-        file_path, _ = QFileDialog.getOpenFileName(self, "Select File to Upload")
+        file_dialog_filter = "Data Files (*.csv *.xlsx *.xlsm *.xltx *.xltm);;"
+        file_dialog_filter += "CSV Files (*.csv);;Excel Files (*.xlsx *.xlsm *.xltx *.xltm)"
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select File to Upload",
+            "",
+            file_dialog_filter,
+        )
         if file_path:
             self.upload_requested.emit(file_path, test_type)
 
@@ -1219,12 +1226,19 @@ class IndustrialDataApp(QMainWindow):
             self._alert("Please select a test type.", QMessageBox.Warning)
             return
 
-        if not file_path.lower().endswith(".csv"):
-            self._alert("Only CSV files can be uploaded.", QMessageBox.Warning)
+        supported_extensions = {".csv", ".xlsx", ".xlsm", ".xltx", ".xltm"}
+        file_extension = Path(file_path).suffix.lower()
+
+        if file_extension not in supported_extensions:
+            allowed = ", ".join(sorted(supported_extensions))
+            self._alert(
+                f"Only CSV or Excel files ({allowed}) can be uploaded.",
+                QMessageBox.Warning,
+            )
             self.dashboard_page.clear_csv_preview()
             return
 
-        preview_result = self._prepare_csv_preview(file_path)
+        preview_result = self._prepare_file_preview(file_path, file_extension)
         if preview_result is None:
             return
 
@@ -1380,25 +1394,67 @@ class IndustrialDataApp(QMainWindow):
     def _is_valid_email(email: str) -> bool:
         return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email))
 
-    def _prepare_csv_preview(
-        self, file_path: str
+    def _prepare_file_preview(
+        self, file_path: str, file_extension: str
     ) -> Optional[tuple[List[str], List[List[str]]]]:
-        try:
-            with open(file_path, newline="", encoding="utf-8") as file:
-                reader = csv.reader(file)
-                rows = list(reader)
-        except Exception as exc:
-            self._alert(f"Unable to read CSV file: {exc}", QMessageBox.Critical)
-            self.dashboard_page.clear_csv_preview()
-            return None
+        rows: List[List[str]] = []
+        if file_extension == ".csv":
+            try:
+                with open(file_path, newline="", encoding="utf-8") as file:
+                    reader = csv.reader(file)
+                    rows = list(reader)
+            except Exception as exc:
+                self._alert(f"Unable to read CSV file: {exc}", QMessageBox.Critical)
+                self.dashboard_page.clear_csv_preview()
+                return None
+        else:
+            try:
+                from openpyxl import load_workbook
+            except ImportError:
+                self._alert(
+                    "Excel support is unavailable because openpyxl is not installed.",
+                    QMessageBox.Critical,
+                )
+                self.dashboard_page.clear_csv_preview()
+                return None
+            workbook = None
+            try:
+                workbook = load_workbook(
+                    filename=file_path,
+                    read_only=True,
+                    data_only=True,
+                )
+                worksheet = workbook.active
+                for row in worksheet.iter_rows(values_only=True):
+                    rows.append([
+                        "" if cell is None else str(cell)
+                        for cell in row
+                    ])
+                    if len(rows) >= 101:
+                        break
+            except Exception as exc:
+                self._alert(
+                    f"Unable to read Excel file: {exc}", QMessageBox.Critical,
+                )
+                self.dashboard_page.clear_csv_preview()
+                return None
+            finally:
+                if workbook is not None:
+                    try:
+                        workbook.close()
+                    except Exception:
+                        pass
 
         if not rows:
-            self._alert("The selected CSV file is empty.", QMessageBox.Warning)
+            self._alert("The selected file is empty.", QMessageBox.Warning)
             self.dashboard_page.clear_csv_preview()
             return None
 
-        headers = rows[0]
-        data_rows = rows[1:101]
+        headers = [str(value) for value in rows[0]] if rows else []
+        data_rows = [
+            [str(value) for value in row]
+            for row in rows[1:101]
+        ]
         return headers, data_rows
 
     def _alert(self, message: str, icon: QMessageBox.Icon) -> None:
