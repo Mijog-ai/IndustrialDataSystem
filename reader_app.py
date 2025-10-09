@@ -1,12 +1,12 @@
-"""Standalone reader application for browsing Cloudinary assets."""
+"""Standalone reader application for browsing shared-drive assets."""
 from __future__ import annotations
 
-import os
+import shutil
 import sys
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional
 
-import requests
 from PyQt5.QtCore import Qt, QUrl, pyqtSignal
 from PyQt5.QtGui import QDesktopServices, QFont, QPixmap
 from PyQt5.QtWidgets import (
@@ -30,56 +30,36 @@ from PyQt5.QtWidgets import (
     QFormLayout,
 )
 
-import cloudinary.api
-
 from app import IndustrialTheme
-from auth import LocalAuthStore, LocalUser, default_data_path
+from auth import LocalAuthStore, LocalUser
+from config import get_config
+from db_manager import DatabaseManager
+from storage_manager import LocalStorageManager
 
 READER_SECURITY_CODE = "123321"
 
 
 @dataclass
-class CloudinaryResource:
-    """Small helper wrapper around Cloudinary resource metadata."""
+class LocalResource:
+    """Representation of a file stored on the shared drive."""
 
     name: str
-    resource: Dict[str, Any]
-    path_parts: List[str]
-
-    @property
-    def secure_url(self) -> str:
-        return self.resource.get("secure_url", "")
-
-    @property
-    def format(self) -> str:
-        return (self.resource.get("format") or "").lower()
-
-    @property
-    def resource_type(self) -> str:
-        return (self.resource.get("resource_type") or "").lower()
+    absolute_path: Path
+    relative_path: Path
+    test_type: str
+    file_size: Optional[int]
+    created_at: Optional[str]
 
     @property
     def display_name(self) -> str:
-        if self.format and not self.name.lower().endswith(f".{self.format}"):
-            return f"{self.name}.{self.format}"
         return self.name
 
     @property
     def folder(self) -> str:
-        folder = self.resource.get("folder")
-        return folder or "/".join(self.path_parts[:-1])
-
-    @property
-    def bytes(self) -> Optional[int]:
-        value = self.resource.get("bytes")
-        try:
-            return int(value) if value is not None else None
-        except (TypeError, ValueError):
-            return None
-
-    @property
-    def public_id(self) -> str:
-        return self.resource.get("public_id", "")
+        parts = list(self.relative_path.parts)
+        if len(parts) > 1:
+            return "/".join(parts[:-1])
+        return ""
 
 
 class ReaderLoginPage(QWidget):
@@ -272,7 +252,7 @@ class ReaderSignupDialog(QDialog):
         return self._result
 
 class ReaderDashboard(QWidget):
-    """Dashboard that renders Cloudinary folders and file previews."""
+    """Dashboard that renders shared-drive folders and file previews."""
 
     logout_requested = pyqtSignal()
     refresh_requested = pyqtSignal()
@@ -347,7 +327,7 @@ class ReaderDashboard(QWidget):
 
         self.tree.currentItemChanged.connect(self._handle_selection)
 
-        self._current_resource: Optional[CloudinaryResource] = None
+        self._current_resource: Optional[LocalResource] = None
 
     def set_user_identity(self, display_name: str, email: str) -> None:
         if display_name:
@@ -364,7 +344,7 @@ class ReaderDashboard(QWidget):
         self.download_button.setEnabled(False)
         self._current_resource = None
 
-    def populate(self, resources: Iterable[CloudinaryResource]) -> None:
+    def populate(self, resources: Iterable[LocalResource]) -> None:
         self.clear()
         folders: Dict[str, QTreeWidgetItem] = {}
         root = self.tree.invisibleRootItem()
@@ -372,7 +352,8 @@ class ReaderDashboard(QWidget):
         for resource in resources:
             parent = root
             path_so_far: List[str] = []
-            for folder_name in resource.path_parts[:-1]:
+            parts = list(resource.relative_path.parts)
+            for folder_name in parts[:-1]:
                 path_so_far.append(folder_name)
                 path_key = "/".join(path_so_far)
                 if path_key not in folders:
@@ -385,14 +366,18 @@ class ReaderDashboard(QWidget):
                 parent = folders[path_key]
 
             file_item = QTreeWidgetItem(
-                [resource.display_name, resource.format.upper() or "File", resource.folder]
+                [
+                    resource.display_name,
+                    resource.absolute_path.suffix.replace(".", "").upper() or "File",
+                    resource.folder,
+                ]
             )
             file_item.setData(0, Qt.UserRole, {"type": "file", "resource": resource})
             parent.addChild(file_item)
 
         self.tree.expandAll()
         if self.tree.topLevelItemCount() == 0:
-            self._show_message("No files were found in Cloudinary.")
+            self._show_message("No files were found on the shared drive.")
 
     def _handle_selection(self, current: Optional[QTreeWidgetItem], _: Optional[QTreeWidgetItem]) -> None:
         if not current:
@@ -408,50 +393,51 @@ class ReaderDashboard(QWidget):
             self._show_message("Select a file to preview")
             return
 
-        resource: CloudinaryResource = data["resource"]
+        resource: LocalResource = data["resource"]
         self._current_resource = resource
         self.download_button.setEnabled(True)
         self._preview_resource(resource)
 
-    def _preview_resource(self, resource: CloudinaryResource) -> None:
+    def _preview_resource(self, resource: LocalResource) -> None:
         self.image_preview.hide()
         self.text_preview.hide()
 
-        secure_url = resource.secure_url
-        if not secure_url:
-            self._show_message("No secure URL is available for this file.")
+        path = resource.absolute_path
+        if not path.exists():
+            self._show_message("File is not accessible on the shared drive.")
             return
 
-        preview_type = resource.resource_type
-        fmt = resource.format
+        suffix = path.suffix.lower()
+        image_ext = {".png", ".jpg", ".jpeg", ".bmp", ".gif"}
+        text_ext = {".txt", ".csv", ".json", ".log", ".md"}
 
-        try:
-            if preview_type == "image":
-                response = requests.get(secure_url, timeout=30)
-                response.raise_for_status()
-                pixmap = QPixmap()
-                pixmap.loadFromData(response.content)
-                self.image_preview.setPixmap(
-                    pixmap.scaled(640, 480, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                )
-                self.image_preview.show()
-                self._show_message("Image preview")
+        if suffix in image_ext:
+            pixmap = QPixmap(str(path))
+            if pixmap.isNull():
+                self._show_message("Unable to load image preview.")
                 return
+            self.image_preview.setPixmap(
+                pixmap.scaled(640, 480, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+            self.image_preview.show()
+            self._show_message("Image preview")
+            return
 
-            if fmt in {"txt", "csv", "json", "log", "md"} or preview_type == "text":
-                response = requests.get(secure_url, timeout=30)
-                response.raise_for_status()
-                text = response.text
-                if len(text) > 12000:
-                    text = text[:12000] + "\n\n… Preview truncated."
-                self.text_preview.setPlainText(text)
-                self.text_preview.show()
-                self._show_message("Text preview")
+        if suffix in text_ext:
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as handle:
+                    text = handle.read(12000)
+                    if handle.read(1):
+                        text += "\n\n… Preview truncated."
+            except Exception as exc:
+                self._show_message(f"Unable to read file: {exc}")
                 return
+            self.text_preview.setPlainText(text)
+            self.text_preview.show()
+            self._show_message("Text preview")
+            return
 
-            self._show_message("Preview is not available. Use Download to open the file.")
-        except Exception as exc:
-            self._show_message(f"Unable to preview this file: {exc}")
+        self._show_message("Preview is not available. Use Download to open the file.")
 
     def _show_message(self, message: str) -> None:
         self.preview_message.setText(message)
@@ -467,63 +453,45 @@ class ReaderDashboard(QWidget):
         if not file_path:
             return
 
-        secure_url = self._current_resource.secure_url
-        if not secure_url:
-            QMessageBox.critical(self, "Download Failed", "This file does not have a secure URL.")
+        source = self._current_resource.absolute_path
+        if not source.exists():
+            QMessageBox.critical(
+                self,
+                "Download Failed",
+                "The source file is not accessible on the shared drive.",
+            )
             return
 
         try:
-            response = requests.get(secure_url, stream=True, timeout=60)
-            response.raise_for_status()
-            with open(file_path, "wb") as handle:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        handle.write(chunk)
+            shutil.copy2(source, file_path)
         except Exception as exc:
-            QMessageBox.critical(self, "Download Failed", f"Unable to download file: {exc}")
+            QMessageBox.critical(self, "Download Failed", f"Unable to copy file: {exc}")
             return
-
         QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
 
 
-def _collect_resources(prefix: str) -> List[CloudinaryResource]:
-    normalized_prefix = prefix.strip("/")
-    api_prefix = f"{normalized_prefix}/" if normalized_prefix else ""
-
-    resources: List[Dict[str, Any]] = []
-    next_cursor: Optional[str] = None
-
-    while True:
-        params = {
-            "type": "upload",
-            "prefix": api_prefix,
-            "max_results": 500,
-        }
-        if next_cursor:
-            params["next_cursor"] = next_cursor
-        response = cloudinary.api.resources(**params)
-        resources.extend(response.get("resources", []))
-        next_cursor = response.get("next_cursor")
-        if not next_cursor:
-            break
-
-    structured: List[CloudinaryResource] = []
-    for raw in resources:
-        public_id = raw.get("public_id", "")
-        if api_prefix and public_id.startswith(api_prefix):
-            relative = public_id[len(api_prefix):]
-        else:
-            relative = public_id
-        parts = [segment for segment in relative.split("/") if segment]
-        if not parts:
+def _collect_resources(
+    manager: DatabaseManager, storage: LocalStorageManager
+) -> List[LocalResource]:
+    resources: List[LocalResource] = []
+    for record in manager.list_uploads():
+        file_path = record.file_path
+        if not file_path:
             continue
-        name = parts[-1]
-        structured.append(
-            CloudinaryResource(name=name, resource=raw, path_parts=parts)
+        relative_path = Path(file_path)
+        absolute_path = storage.base_path / relative_path
+        resources.append(
+            LocalResource(
+                name=absolute_path.name,
+                absolute_path=absolute_path,
+                relative_path=relative_path,
+                test_type=record.test_type,
+                file_size=record.file_size,
+                created_at=record.created_at,
+            )
         )
-
-    structured.sort(key=lambda res: res.path_parts)
-    return structured
+    resources.sort(key=lambda res: (res.test_type.lower(), res.relative_path.parts))
+    return resources
 
 
 class ReaderApp(QMainWindow):
@@ -531,12 +499,14 @@ class ReaderApp(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Cloudinary Reader App")
+        self.setWindowTitle("Industrial Data Reader")
         self.setMinimumSize(1100, 700)
 
-        self.auth_store = LocalAuthStore(default_data_path("reader_users.json"))
+        self.config = get_config()
+        self.db_manager = DatabaseManager()
+        self.storage_manager = LocalStorageManager(config=self.config, database=self.db_manager)
+        self.auth_store = LocalAuthStore(self.db_manager)
         self.current_user: Optional[LocalUser] = None
-        self.cloudinary_root = os.getenv("CLOUDINARY_READER_ROOT", "tests")
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -584,6 +554,10 @@ class ReaderApp(QMainWindow):
         if not user:
             self.login_page.show_error("Invalid email or password.")
             return
+        role = user.metadata.get("role")
+        if role and role != "reader":
+            self.login_page.show_error("This account does not have reader access.")
+            return
 
         self.login_page.show_error("")
         self.current_user = user
@@ -601,7 +575,7 @@ class ReaderApp(QMainWindow):
         if not result:
             return
 
-        metadata: Dict[str, str] = {}
+        metadata: Dict[str, str] = {"role": "reader"}
         if result.get("display_name"):
             metadata["display_name"] = result["display_name"]
 
@@ -627,23 +601,27 @@ class ReaderApp(QMainWindow):
         self.current_user = None
         self.show_login()
 
-    # ------------------------------------------------------------------
-    # Cloudinary integration
-    # ------------------------------------------------------------------
-
     def refresh_resources(self) -> None:
         if not self.current_user:
             self.login_page.show_error("Please sign in to view files.")
             self.show_login()
             return
 
+        if not self.storage_manager.base_path.exists():
+            QMessageBox.critical(
+                self,
+                "Shared Drive Error",
+                "The shared drive is not accessible. Please check your connection.",
+            )
+            return
+
         try:
-            resources = _collect_resources(self.cloudinary_root)
+            resources = _collect_resources(self.db_manager, self.storage_manager)
         except Exception as exc:
             QMessageBox.critical(
                 self,
-                "Cloudinary Error",
-                f"Unable to load Cloudinary resources: {exc}",
+                "Shared Drive Error",
+                f"Unable to load local resources: {exc}",
             )
             return
 

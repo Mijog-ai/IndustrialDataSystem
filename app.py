@@ -5,13 +5,13 @@ import csv
 import os
 import re
 import sys
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from pathlib import Path
-
 from dotenv import load_dotenv
-from PyQt5.QtCore import Qt, pyqtSignal, QSize
-from PyQt5.QtGui import QFont, QPalette, QColor, QIcon
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QUrl
+from PyQt5.QtGui import QDesktopServices, QFont, QPalette, QColor, QIcon
 from PyQt5.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -33,11 +33,10 @@ from PyQt5.QtWidgets import (
     QDialog,
     QDialogButtonBox,
 )
-import cloudinary
-import cloudinary.uploader
-import cloudinary.api
-
-from auth import LocalAuthStore, LocalUser, UploadHistoryStore, default_data_path
+from auth import LocalAuthStore, LocalUser, UploadHistoryStore
+from config import get_config
+from db_manager import DatabaseManager
+from storage_manager import LocalStorageManager, StorageError
 
 # ---------------------------------------------------------------------------
 # Environment loading helpers
@@ -73,18 +72,7 @@ def _load_environment() -> None:
 
 _load_environment()
 
-cloudinary.config(
-    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
-    api_key=os.getenv("CLOUDINARY_API_KEY"),
-    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
-    secure=True,
-)
-
-# Storage limit in bytes (default: 1GB if not set in .env)
-STORAGE_LIMIT_BYTES = int(os.getenv("STORAGE_LIMIT_MB", "1024")) * 1024 * 1024
-
-UPLOAD_CREDENTIALS_PATH = default_data_path("upload_users.json")
-UPLOAD_HISTORY_PATH = default_data_path("upload_history.json")
+CONFIG = get_config()
 
 
 class IndustrialTheme:
@@ -331,7 +319,9 @@ class NewTestTypeDialog(QDialog):
         layout.addWidget(title)
 
         # Description
-        desc = QLabel("Enter a name for the new test type. This will create a new folder in Cloudinary.")
+        desc = QLabel(
+            "Enter a name for the new test type. A matching folder will be created on the shared drive."
+        )
         desc.setProperty("caption", True)
         desc.setWordWrap(True)
         layout.addWidget(desc)
@@ -344,6 +334,16 @@ class NewTestTypeDialog(QDialog):
         self.test_type_input = QLineEdit()
         self.test_type_input.setPlaceholderText("e.g., Performance Test, Load Test, Stress Test")
         layout.addWidget(self.test_type_input)
+
+        description_label = QLabel("Description (optional)")
+        description_label.setStyleSheet(
+            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
+        )
+        layout.addWidget(description_label)
+
+        self.description_input = QLineEdit()
+        self.description_input.setPlaceholderText("Short summary for this test type")
+        layout.addWidget(self.description_input)
 
         # Buttons
         button_box = QDialogButtonBox(
@@ -364,6 +364,9 @@ class NewTestTypeDialog(QDialog):
 
     def get_test_type(self) -> str:
         return self.test_type_input.text().strip()
+
+    def get_description(self) -> str:
+        return self.description_input.text().strip()
 
 
 class SessionState:
@@ -677,6 +680,7 @@ class DashboardPage(QWidget):
     logout_requested = pyqtSignal()
     upload_requested = pyqtSignal(str, str)  # file_path, test_type
     refresh_requested = pyqtSignal()
+    test_type_created = pyqtSignal(str, str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -762,7 +766,9 @@ class DashboardPage(QWidget):
 
         upload_layout.addLayout(test_type_layout)
 
-        info_label = QLabel("Select a test type before uploading files. Files will be organized in Cloudinary by test type.")
+        info_label = QLabel(
+            "Select a test type before uploading files. Files are saved to the shared drive in folders by test type."
+        )
         info_label.setProperty("caption", True)
         info_label.setWordWrap(True)
         upload_layout.addWidget(info_label)
@@ -782,7 +788,7 @@ class DashboardPage(QWidget):
         files_layout.addWidget(files_header)
 
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Filename", "Test Type", "URL", "Uploaded"])
+        self.table.setHorizontalHeaderLabels(["Filename", "Test Type", "Path", "Uploaded"])
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
@@ -792,6 +798,33 @@ class DashboardPage(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         files_layout.addWidget(self.table)
+
+        actions_layout = QHBoxLayout()
+        actions_layout.setContentsMargins(16, 12, 16, 16)
+        actions_layout.setSpacing(12)
+
+        self.open_file_button = QPushButton("Open File")
+        self.open_file_button.setProperty("secondary", True)
+        self.open_file_button.clicked.connect(self._open_selected_file)
+        actions_layout.addWidget(self.open_file_button)
+
+        self.open_folder_button = QPushButton("Open in Explorer")
+        self.open_folder_button.setProperty("secondary", True)
+        self.open_folder_button.clicked.connect(self._open_selected_folder)
+        actions_layout.addWidget(self.open_folder_button)
+
+        self.copy_path_button = QPushButton("Copy Path")
+        self.copy_path_button.setProperty("secondary", True)
+        self.copy_path_button.clicked.connect(self._copy_selected_path)
+        actions_layout.addWidget(self.copy_path_button)
+
+        self.show_properties_button = QPushButton("Show Properties")
+        self.show_properties_button.setProperty("secondary", True)
+        self.show_properties_button.clicked.connect(self._show_selected_properties)
+        actions_layout.addWidget(self.show_properties_button)
+
+        actions_layout.addStretch()
+        files_layout.addLayout(actions_layout)
 
         layout.addWidget(files_card)
 
@@ -841,7 +874,9 @@ class DashboardPage(QWidget):
         dialog = NewTestTypeDialog(self)
         if dialog.exec_() == QDialog.Accepted:
             test_type = dialog.get_test_type()
+            description = dialog.get_description()
             if test_type:
+                self.test_type_created.emit(test_type, description)
                 # Add to combo box
                 if test_type not in self.test_types:
                     self.test_types.append(test_type)
@@ -869,20 +904,117 @@ class DashboardPage(QWidget):
             self.subtitle_label.setText("Manage your industrial test data")
 
     def update_files(self, files: List[Dict[str, Any]]) -> None:
+        self.file_records = files
         self.table.setRowCount(len(files))
         for row, file_record in enumerate(files):
             filename_item = QTableWidgetItem(file_record.get("filename", ""))
             test_type_item = QTableWidgetItem(file_record.get("test_type", ""))
-            url_item = QTableWidgetItem(file_record.get("url", ""))
+            path_item = QTableWidgetItem(file_record.get("absolute_path") or file_record.get("file_path", ""))
             created_item = QTableWidgetItem(file_record.get("created_at", ""))
 
-            for item in (filename_item, test_type_item, url_item, created_item):
+            for item in (filename_item, test_type_item, path_item, created_item):
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
 
             self.table.setItem(row, 0, filename_item)
             self.table.setItem(row, 1, test_type_item)
-            self.table.setItem(row, 2, url_item)
+            self.table.setItem(row, 2, path_item)
             self.table.setItem(row, 3, created_item)
+
+    def _get_selected_record(self) -> Optional[Dict[str, Any]]:
+        selection = self.table.selectionModel().selectedRows()
+        if not selection:
+            return None
+        row = selection[0].row()
+        if 0 <= row < len(self.file_records):
+            return self.file_records[row]
+        return None
+
+    def _open_selected_file(self) -> None:
+        record = self._get_selected_record()
+        if not record:
+            QMessageBox.information(self, "Industrial Data System", "Select a file first.")
+            return
+        path_value = record.get("absolute_path") or record.get("file_path")
+        if not path_value:
+            QMessageBox.warning(self, "Industrial Data System", "No file path available.")
+            return
+        path = Path(path_value)
+        if not path.is_absolute():
+            base_path = record.get("base_path")
+            if base_path:
+                path = Path(base_path) / path
+        if not path.exists():
+            QMessageBox.warning(self, "Industrial Data System", f"File not found: {path}")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def _open_selected_folder(self) -> None:
+        record = self._get_selected_record()
+        if not record:
+            QMessageBox.information(self, "Industrial Data System", "Select a file first.")
+            return
+        path_value = record.get("absolute_path") or record.get("file_path")
+        if not path_value:
+            QMessageBox.warning(self, "Industrial Data System", "No file path available.")
+            return
+        path = Path(path_value)
+        if not path.is_absolute():
+            base_path = record.get("base_path")
+            if base_path:
+                path = Path(base_path) / path
+        if not path.exists():
+            QMessageBox.warning(self, "Industrial Data System", f"File not found: {path}")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent)))
+
+    def _copy_selected_path(self) -> None:
+        record = self._get_selected_record()
+        if not record:
+            QMessageBox.information(self, "Industrial Data System", "Select a file first.")
+            return
+        path_value = record.get("absolute_path") or record.get("file_path")
+        if not path_value:
+            QMessageBox.warning(self, "Industrial Data System", "No file path available.")
+            return
+        path = Path(path_value)
+        if not path.is_absolute():
+            base_path = record.get("base_path")
+            if base_path:
+                path = Path(base_path) / path
+        QApplication.clipboard().setText(str(path))
+        QMessageBox.information(self, "Industrial Data System", "File path copied to clipboard.")
+
+    def _show_selected_properties(self) -> None:
+        record = self._get_selected_record()
+        if not record:
+            QMessageBox.information(self, "Industrial Data System", "Select a file first.")
+            return
+        path_value = record.get("absolute_path") or record.get("file_path")
+        if not path_value:
+            QMessageBox.warning(self, "Industrial Data System", "No file path available.")
+            return
+        path = Path(path_value)
+        if not path.is_absolute():
+            base_path = record.get("base_path")
+            if base_path:
+                path = Path(base_path) / path
+        if not path.exists():
+            QMessageBox.warning(self, "Industrial Data System", f"File not found: {path}")
+            return
+        stat = path.stat()
+        size_mb = stat.st_size / (1024 * 1024)
+        modified = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        created = datetime.fromtimestamp(stat.st_ctime).strftime("%Y-%m-%d %H:%M:%S")
+        QMessageBox.information(
+            self,
+            "Industrial Data System",
+            (
+                f"Location: {path}\n"
+                f"Size: {size_mb:.2f} MB\n"
+                f"Created: {created}\n"
+                f"Modified: {modified}"
+            ),
+        )
 
     def _select_file(self) -> None:
         test_type = self.get_selected_test_type()
@@ -941,8 +1073,10 @@ class IndustrialDataApp(QMainWindow):
         self.setMinimumSize(900, 600)
 
         self.session_state = SessionState()
-        self.auth_store = LocalAuthStore(UPLOAD_CREDENTIALS_PATH)
-        self.history_store = UploadHistoryStore(UPLOAD_HISTORY_PATH)
+        self.db_manager = DatabaseManager()
+        self.auth_store = LocalAuthStore(self.db_manager)
+        self.history_store = UploadHistoryStore(self.db_manager)
+        self.storage_manager = LocalStorageManager(config=CONFIG, database=self.db_manager)
         self.current_username: str = ""
 
         self.stack = QStackedWidget()
@@ -966,6 +1100,7 @@ class IndustrialDataApp(QMainWindow):
         self.dashboard_page.logout_requested.connect(self.handle_logout)
         self.dashboard_page.upload_requested.connect(self.handle_upload)
         self.dashboard_page.refresh_requested.connect(self.refresh_files)
+        self.dashboard_page.test_type_created.connect(self.handle_new_test_type)
 
         self.show_login()
 
@@ -981,21 +1116,35 @@ class IndustrialDataApp(QMainWindow):
         self.load_test_types()
 
     def load_test_types(self) -> None:
-        """Load available test types from Cloudinary folders."""
+        """Load available test types from the database and shared drive."""
         try:
-            # Get all folders in Cloudinary under 'tests/' path
-            result = cloudinary.api.subfolders("tests")
-            folders = result.get("folders", [])
-            test_types = [folder.get("name") for folder in folders if folder.get("name")]
-
-            # If no folders exist, create a default one
-            if not test_types:
-                test_types = []
-
-            self.dashboard_page.set_test_types(test_types)
+            records = self.db_manager.list_test_types()
+            test_types = {record.name for record in records}
+            tests_dir = CONFIG.files_base_path / "tests"
+            if tests_dir.exists():
+                for child in tests_dir.iterdir():
+                    if child.is_dir():
+                        test_types.add(child.name)
+            test_type_list = sorted(test_types)
+            self.dashboard_page.set_test_types(test_type_list)
         except Exception as exc:
-            # If 'tests' folder doesn't exist yet, start with empty list
             self.dashboard_page.set_test_types([])
+
+    def handle_new_test_type(self, name: str, description: str) -> None:
+        description_value = description.strip() or None
+        try:
+            record = self.db_manager.ensure_test_type(name, description_value)
+            self.storage_manager.ensure_folder_exists(record.name)
+        except StorageError as exc:
+            self._alert(str(exc), QMessageBox.Warning)
+            return
+        except Exception as exc:
+            self._alert(f"Unable to create test type: {exc}", QMessageBox.Critical)
+            return
+        self.load_test_types()
+        index = self.dashboard_page.test_type_combo.findText(record.name)
+        if index >= 0:
+            self.dashboard_page.test_type_combo.setCurrentIndex(index)
 
     def handle_login(self, identifier: str, password: str) -> None:
         identifier = identifier.strip()
@@ -1116,7 +1265,23 @@ class IndustrialDataApp(QMainWindow):
             user.get("email", ""),
         )
 
-        records = self.history_store.get_records_for_user(user.get("id", ""))
+        user_id = user.get("id")
+        if user_id is None:
+            self._alert("Session error: missing user identifier.", QMessageBox.Warning)
+            self.show_login()
+            return
+
+        records = []
+        for record in self.history_store.get_records_for_user(int(user_id)):
+            relative_path = record.get("file_path")
+            absolute_path = None
+            if relative_path:
+                absolute_candidate = (CONFIG.files_base_path / Path(relative_path)).resolve()
+                absolute_path = str(absolute_candidate)
+            record["absolute_path"] = absolute_path
+            record["base_path"] = str(CONFIG.files_base_path)
+            records.append(record)
+
         self.dashboard_page.update_files(records)
         self.load_test_types()
 
@@ -1150,34 +1315,33 @@ class IndustrialDataApp(QMainWindow):
         headers, rows = preview_result
         self.dashboard_page.display_csv_preview(headers, rows)
 
-        # Upload to Cloudinary in organized folder structure
-        folder_path = f"tests/{test_type}"
+        try:
+            stored = self.storage_manager.upload_file(file_path, test_type)
+        except StorageError as exc:
+            self._alert(str(exc), QMessageBox.Critical)
+            return
 
         try:
-            upload_result = cloudinary.uploader.upload(
-                file_path,
-                resource_type="raw",
-                folder=folder_path,
-                use_filename=True,
-                unique_filename=True,
+            self.history_store.add_record(
+                user_id=int(user.get("id")),
+                filename=os.path.basename(file_path),
+                file_path=str(stored.relative_path),
+                test_type=test_type,
+                file_size=stored.size_bytes,
             )
         except Exception as exc:
-            self._alert(f"Cloudinary upload failed: {exc}", QMessageBox.Critical)
+            # Attempt to clean up the copied file if database write fails
+            try:
+                self.storage_manager.delete_file(stored.absolute_path)
+            except StorageError:
+                pass
+            self._alert(f"Failed to record upload: {exc}", QMessageBox.Critical)
             return
 
-        file_url = upload_result.get("secure_url")
-        if not file_url:
-            self._alert("Cloudinary did not return a file URL.", QMessageBox.Critical)
-            return
-
-        self.history_store.add_record(
-            user_id=user.get("id", ""),
-            filename=os.path.basename(file_path),
-            url=file_url,
-            test_type=test_type,
+        self._alert(
+            f"File uploaded to shared drive at: {stored.absolute_path}",
+            QMessageBox.Information,
         )
-
-        self._alert(f"File uploaded successfully to '{test_type}' test type.", QMessageBox.Information)
         self.refresh_files()
 
     @staticmethod

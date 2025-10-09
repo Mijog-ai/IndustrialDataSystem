@@ -1,111 +1,149 @@
-# Industrial Data System (Cloudinary Desktop Suite)
+# Industrial Data System (Shared Drive Edition)
 
-This project bundles two PyQt5 desktop applications that integrate with
-Cloudinary. The Upload App lets operators organise and upload structured data,
-while the Read & Process App provides a secure, read-only view of existing
-assets. Both apps use lightweight JSON files to store credentials locally so the
-only external dependency is Cloudinary itself.
+This repository contains two PyQt5 desktop applications for managing
+industrial test data. The Upload App allows operators to preview CSV/Excel
+files and publish them to a shared network drive, while the Reader App provides
+read-only access to the stored files with inline previews and download tools.
+Both applications now rely on a central SQLite database for authentication and
+metadata tracking—no cloud services are required.
 
 ## Features
 
-- Local authentication for the Upload App with CSV/Excel previews and
-  Cloudinary uploads organised by test type.
-- Dedicated Read & Process App with its own credentials and security code gate
-  (`123321`) for browsing Cloudinary assets.
-- Cloudinary folder discovery under `tests/` with inline previews for supported
-  formats and secure file downloads.
-- Environment-driven configuration via `.env` powered by `python-dotenv`.
+- **Shared drive storage** – Files are organised under `files/tests/<test_type>`
+  on a configurable network share. The application gracefully handles drive
+  availability checks and name collisions.
+- **SQLite-backed authentication** – Uploaders and readers share a single
+  credential store managed through `DatabaseManager`. Passwords are hashed with
+  per-user salts.
+- **Rich upload workflow** – CSV and Excel files are previewed in-app before
+  being copied to the shared drive. Upload history (including file size and
+  test type) is automatically recorded.
+- **Reader experience** – The Reader App browses the shared drive hierarchy,
+  previews images and text-based files locally, and lets users copy or download
+  artefacts without leaving the network.
+- **Environment-driven configuration** – Paths and storage limits are managed
+  through a `.env` file interpreted by `config.py`.
 
 ## Prerequisites
 
 - Python 3.10+
-- Cloudinary account (free tier works great).
+- Access to the shared drive defined in your `.env`
+- Optional: PyInstaller for packaging the applications
 
 ## Installation
 
-1. **Clone and install dependencies**
+1. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-2. **Create a `.env` file**
+2. **Configure environment variables**
 
-   Copy `.env.example` to `.env` and fill in your project values:
-   ```bash
-   cp .env.example .env
+   Create a `.env` file (or edit the one provided) with values that match your
+   environment. Example:
+
+   ```ini
+   SHARED_DRIVE_PATH=\\\\SharedDrive\\IndustrialData
+   # Linux/Mac alternative:
+   # SHARED_DRIVE_PATH=/mnt/shared/IndustrialData
+   DATABASE_PATH=\\\\SharedDrive\\IndustrialData\\database\\industrial_data.db
+   FILES_BASE_PATH=\\\\SharedDrive\\IndustrialData\\files
+   STORAGE_LIMIT_MB=10240
    ```
 
    | Variable | Description |
    | --- | --- |
-   | `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud/tenant name. |
-   | `CLOUDINARY_API_KEY` | Cloudinary API key. |
-   | `CLOUDINARY_API_SECRET` | Cloudinary API secret. |
-   | `CLOUDINARY_READER_ROOT` | Optional Cloudinary folder prefix (defaults to `tests`). |
+   | `SHARED_DRIVE_PATH` | Root of the network share used for both the database and files. |
+   | `DATABASE_PATH` | Full path to the SQLite database file. |
+   | `FILES_BASE_PATH` | Directory where uploaded files are stored. |
+   | `STORAGE_LIMIT_MB` | Maximum total storage (in MB) allowed for uploads. |
 
-3. **Launch the desktop gateway**
-
+3. **Launch the gateway**
    ```bash
    python main.py
    ```
-
-   A PyQt5 window appears with buttons for the **Upload App** and the
-   **Read & Process App**. Each tool opens in its own window while the gateway
-   stays hidden in the background.
+   The launcher window lets you open either the Upload App or the Reader App.
 
 ## Usage
 
-1. Launch `python main.py` and select the desired application from the gateway.
-2. The **Upload App** maintains its own credentials in
-   `data/upload_users.json`. Use the Sign Up tab to create a short username and
-   password (six characters or fewer), then upload CSV/Excel files to
-   Cloudinary. Uploaded file metadata is tracked locally in
-   `data/upload_history.json`.
-3. The **Read & Process App** uses a separate credential store in
-   `data/reader_users.json` and requires the security code `123321` during
-   sign-up and sign-in. After authentication it lists all assets under the
-   `tests/` folder in Cloudinary, allows previewing supported files, and lets
-   you download them via their secure URLs.
-4. Closing an application window returns you to the gateway so you can launch
-   the other tool.
+### Upload App
 
-## Development Notes
+1. Sign up or sign in using the Upload tab. Accounts are stored in the SQLite
+   database—passwords remain local.
+2. Choose a test type from the dashboard. Create new test types to generate the
+   matching folder structure on the shared drive.
+3. Select a CSV or Excel file. The preview panel displays up to the first 100
+   rows before uploading.
+4. On upload, the file is copied to the shared drive, metadata is recorded in
+   the database, and the dashboard lists the new entry. The table offers quick
+   access to open the file, open its folder, copy the path, or view properties.
 
-- User accounts and upload history are stored as JSON files inside the `data/`
-  directory next to the application code. These files are created on first run.
-- All file uploads are streamed directly to Cloudinary; no data is stored on the
-  local file system beyond the metadata JSON files.
-- To customize styles, edit `static/css/styles.css`.
+### Reader App
 
-## Deployment
+1. Sign in with a reader account (the default security code remains `123321`).
+2. The tree view mirrors the shared drive hierarchy. Selecting a file shows an
+   inline preview for images or text-based formats, and the Download button
+   copies the file to a user-selected location.
+3. Reader accounts can be created from the login screen or managed through the
+   admin tools described below.
 
-Deploy the desktop applications on any system with Python and Qt available or bundle them with PyInstaller as described below. Ensure the `.env` file with Cloudinary credentials ships alongside the binaries.
+## Migration and Test Utilities
 
-## Packaging the app as a Windows executable
+- **`migrate_auth.py`** – Imports existing JSON credential and upload history
+  files into the SQLite database while leaving timestamped backups.
+- **`migrate_data.py`** – Replays legacy upload history and optionally copies
+  files from an exported directory into the new shared-drive structure.
+- **`setup_test_data.py`** – Generates sample users, test types, and files for
+  local testing.
 
-You can create a standalone Windows executable with [PyInstaller](https://pyinstaller.org/). The repository includes a ready-made `IndustrialDataSystem.spec` file that bundles the dynamic PyQt5 and Cloudinary dependencies detected during development. The steps below assume you are working on Windows and have Python and the project dependencies installed.
+## Administrative Helpers
 
-1. **Install PyInstaller** (inside your virtual environment if you use one)
+`admin_tools.py` provides several maintenance commands:
 
-   ```bash
-   pip install pyinstaller
-   ```
+```bash
+python admin_tools.py backup-db [--output PATH]
+python admin_tools.py restore-db PATH
+python admin_tools.py list-users
+python admin_tools.py storage-report
+```
 
-2. **Build the executable**
+These commands create database backups, restore from snapshots, list users, and
+report on shared-drive usage.
 
-   From the project root, run:
+## Packaging with PyInstaller
 
-   ```bash
-   pyinstaller IndustrialDataSystem.spec
-   ```
+A refreshed `IndustrialDataSystem.spec` is included. It removes Cloudinary
+hooks and bundles the `.env` file. Build the executable with:
 
-   The spec file pulls in the PyQt5 and Cloudinary packages that need to be explicitly collected when freezing the application and produces a single `IndustrialDataSystem.exe` file in the `dist` folder.
+```bash
+pyinstaller IndustrialDataSystem.spec
+```
 
-3. **Provide environment variables at runtime**
+Ensure the shared drive is accessible when launching the packaged application.
 
-   The executable still needs the same Cloudinary environment variables. The application looks for a `.env` file next to the executable, inside the unpacked PyInstaller directory, or in the current working directory. Alternatively, set the variables in the Windows environment before launching the app.
+## Testing
 
-4. **Run the executable**
+Before distributing a build, run a quick byte-compilation check to catch syntax
+errors:
 
-   Double-click the generated `IndustrialDataSystem.exe` or start it from a terminal. The PyQt gateway window will appear just like when running `python main.py`.
+```bash
+python -m compileall .
+```
 
-For custom icons or splash screens, consult the [PyInstaller documentation](https://pyinstaller.org/en/stable/). If you need to ship additional assets (for example, SSL certificates), add more `--add-data` entries pointing to those files.
+For a full end-to-end verification, exercise the upload and reader workflows
+against a real shared drive to confirm connectivity, preview rendering, and the
+database migration scripts.
+
+## Troubleshooting
+
+- **Shared drive unavailable** – Both applications surface warnings if the
+  configured drive cannot be reached. Verify network connectivity and that the
+  UNC/mount path in `.env` is correct.
+- **Storage limit reached** – The upload workflow enforces the `STORAGE_LIMIT_MB`
+  quota. Use the admin storage report or archive older files before retrying.
+- **Database locked** – SQLite may briefly lock during concurrent operations;
+  retry after a moment. The database manager includes backoff logic to minimise
+  interruptions.
+
+For detailed setup instructions (including operating system-specific steps for
+mounting the shared drive), consult [`SETUP.md`](SETUP.md).

@@ -1,25 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_submodules
 
 
 block_cipher = None
 
-supabase_data = collect_data_files("supabase")
-cloudinary_data = collect_data_files("cloudinary")
-werkzeug_data = collect_data_files("werkzeug")
-
-hiddenimports = (
-    ["dotenv"]
-    + collect_submodules("supabase")
-    + collect_submodules("cloudinary")
-)
+hiddenimports = ["dotenv"] + collect_submodules("sqlite3")
 
 a = Analysis(
     ['app.py'],
     pathex=[],
     binaries=[],
-    datas=supabase_data + cloudinary_data + werkzeug_data,
+    datas=[(".env", ".")],
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
