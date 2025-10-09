@@ -55,6 +55,9 @@ cloudinary.config(
     secure=True,
 )
 
+# Storage limit in bytes (default: 1GB if not set in .env)
+STORAGE_LIMIT_BYTES = int(os.getenv("STORAGE_LIMIT_MB", "1024")) * 1024 * 1024
+
 
 class IndustrialTheme:
     """Industrial design system color palette and styles."""
