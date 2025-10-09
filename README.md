@@ -1,32 +1,24 @@
-# Industrial Data System (Supabase + Cloudinary)
+# Industrial Data System (Cloudinary Desktop Suite)
 
-This project provides a lightweight Flask dashboard that connects to Supabase for
-authentication and structured data and uses Cloudinary for file storage. The
-application no longer relies on any local database or file system state – every
-piece of data lives in managed cloud services.
+This project bundles two PyQt5 desktop applications that integrate with
+Cloudinary. The Upload App lets operators organise and upload structured data,
+while the Read & Process App provides a secure, read-only view of existing
+assets. Both apps use lightweight JSON files to store credentials locally so the
+only external dependency is Cloudinary itself.
 
 ## Features
 
-- Supabase authentication for secure login and password reset workflows.
-- Dashboard for uploading files directly to Cloudinary.
-- Dedicated reader application that lists and previews Cloudinary assets for read-only users.
-- File metadata stored in a Supabase table for easy listing and management.
+- Local authentication for the Upload App with CSV/Excel previews and
+  Cloudinary uploads organised by test type.
+- Dedicated Read & Process App with its own credentials and security code gate
+  (`123321`) for browsing Cloudinary assets.
+- Cloudinary folder discovery under `tests/` with inline previews for supported
+  formats and secure file downloads.
 - Environment-driven configuration via `.env` powered by `python-dotenv`.
 
 ## Prerequisites
 
 - Python 3.10+
-- Supabase project with Email/Password auth enabled and a `files` table similar
-  to:
-  ```sql
-  create table files (
-    id uuid primary key default gen_random_uuid(),
-    user_id uuid not null,
-    filename text not null,
-    url text not null,
-    created_at timestamp with time zone default now()
-  );
-  ```
 - Cloudinary account (free tier works great).
 
 ## Installation
@@ -45,69 +37,52 @@ piece of data lives in managed cloud services.
 
    | Variable | Description |
    | --- | --- |
-   | `SUPABASE_URL` | Supabase project URL, e.g. `https://your-project-id.supabase.co`. |
-   | `SUPABASE_KEY` | Supabase service-role API key. |
    | `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud/tenant name. |
    | `CLOUDINARY_API_KEY` | Cloudinary API key. |
    | `CLOUDINARY_API_SECRET` | Cloudinary API secret. |
-| `FLASK_SECRET_KEY` | Secret key used by Flask for session signing (generate a random string). |
-| `CLOUDINARY_READER_ROOT` | Optional Cloudinary folder prefix (defaults to `tests`). |
-| `READER_ALLOWED_ROLES` | Comma separated list of Supabase user metadata roles that may access the reader app (defaults to `reader`). |
+   | `CLOUDINARY_READER_ROOT` | Optional Cloudinary folder prefix (defaults to `tests`). |
 
-3. **Run the uploader application**
+3. **Launch the desktop gateway**
 
    ```bash
-   flask --app app run
+   python main.py
    ```
 
-   The app listens on <http://127.0.0.1:5000> by default. Ensure the Supabase
-   and Cloudinary credentials allow calls from your environment.
-
-4. **Run the reader application**
-
-   ```bash
-   python reader_app.py
-   ```
-
-   The reader app launches a PyQt5 desktop window. Sign in with a Supabase
-   account whose metadata `role` (or `user_role`) matches one of the values in
-   `READER_ALLOWED_ROLES`. After authentication the app lists every file inside
-   the `CLOUDINARY_READER_ROOT` folder in Cloudinary, supports previewing images
-   and text-based files, and allows downloading any asset through its secure
-   URL.
+   A PyQt5 window appears with buttons for the **Upload App** and the
+   **Read & Process App**. Each tool opens in its own window while the gateway
+   stays hidden in the background.
 
 ## Usage
 
-1. Navigate to `/login` and sign in using a Supabase user account.
-2. From the dashboard you can upload files. The file is uploaded to Cloudinary
-   and metadata (file name, secure URL, and owning user) is written to Supabase.
-3. Uploaded files are listed on the dashboard with links to the Cloudinary
-   asset.
-4. Use the **Forgot password?** link on the login page to trigger Supabase's
-   password reset email flow.
-5. Click the **Logout** button in the navigation bar to end the session.
+1. Launch `python main.py` and select the desired application from the gateway.
+2. The **Upload App** maintains its own credentials in
+   `data/upload_users.json`. Use the Sign Up tab to create a short username and
+   password (six characters or fewer), then upload CSV/Excel files to
+   Cloudinary. Uploaded file metadata is tracked locally in
+   `data/upload_history.json`.
+3. The **Read & Process App** uses a separate credential store in
+   `data/reader_users.json` and requires the security code `123321` during
+   sign-up and sign-in. After authentication it lists all assets under the
+   `tests/` folder in Cloudinary, allows previewing supported files, and lets
+   you download them via their secure URLs.
+4. Closing an application window returns you to the gateway so you can launch
+   the other tool.
 
 ## Development Notes
 
-- The Flask server stores the Supabase access and refresh token inside the
-  session cookie. Logging out clears the session and calls `supabase.auth.sign_out()`.
+- User accounts and upload history are stored as JSON files inside the `data/`
+  directory next to the application code. These files are created on first run.
 - All file uploads are streamed directly to Cloudinary; no data is stored on the
-  local file system.
+  local file system beyond the metadata JSON files.
 - To customize styles, edit `static/css/styles.css`.
 
 ## Deployment
 
-Deploy the app to any environment capable of running Flask (Render, Fly.io,
-Railway, etc.). Remember to set all required environment variables and supply a
-`SECRET_KEY` for Flask sessions in production.
+Deploy the desktop applications on any system with Python and Qt available or bundle them with PyInstaller as described below. Ensure the `.env` file with Cloudinary credentials ships alongside the binaries.
 
 ## Packaging the app as a Windows executable
 
-You can create a standalone Windows executable with
-[PyInstaller](https://pyinstaller.org/). The repository includes a ready-made
-`IndustrialDataSystem.spec` file that bundles the dynamic Supabase and
-Cloudinary dependencies detected during development. The steps below assume you
-are working on Windows and have Python and the project dependencies installed.
+You can create a standalone Windows executable with [PyInstaller](https://pyinstaller.org/). The repository includes a ready-made `IndustrialDataSystem.spec` file that bundles the dynamic PyQt5 and Cloudinary dependencies detected during development. The steps below assume you are working on Windows and have Python and the project dependencies installed.
 
 1. **Install PyInstaller** (inside your virtual environment if you use one)
 
@@ -123,23 +98,14 @@ are working on Windows and have Python and the project dependencies installed.
    pyinstaller IndustrialDataSystem.spec
    ```
 
-   The spec file pulls in the Supabase, Cloudinary, and Werkzeug packages that
-   need to be explicitly collected when freezing the application and produces a
-   single `IndustrialDataSystem.exe` file in the `dist` folder.
+   The spec file pulls in the PyQt5 and Cloudinary packages that need to be explicitly collected when freezing the application and produces a single `IndustrialDataSystem.exe` file in the `dist` folder.
 
 3. **Provide environment variables at runtime**
 
-   The executable still needs the same Supabase and Cloudinary environment
-   variables. The application now looks for a `.env` file next to the
-   executable, inside the unpacked PyInstaller directory, or in the current
-   working directory. Alternatively, set the variables in the Windows
-   environment before launching the app.
+   The executable still needs the same Cloudinary environment variables. The application looks for a `.env` file next to the executable, inside the unpacked PyInstaller directory, or in the current working directory. Alternatively, set the variables in the Windows environment before launching the app.
 
 4. **Run the executable**
 
-   Double-click the generated `IndustrialDataSystem.exe` or start it from a
-   terminal. Flask will bind to `http://127.0.0.1:5000` by default.
+   Double-click the generated `IndustrialDataSystem.exe` or start it from a terminal. The PyQt gateway window will appear just like when running `python main.py`.
 
-For custom icons or splash screens, consult the [PyInstaller documentation](https://pyinstaller.org/en/stable/). If you
-need to ship additional assets (for example, SSL certificates), add more
-`--add-data` entries pointing to those files.
+For custom icons or splash screens, consult the [PyInstaller documentation](https://pyinstaller.org/en/stable/). If you need to ship additional assets (for example, SSL certificates), add more `--add-data` entries pointing to those files.
