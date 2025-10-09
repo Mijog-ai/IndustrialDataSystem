@@ -7,6 +7,8 @@ import re
 import sys
 from typing import Any, Dict, List, Optional
 
+from pathlib import Path
+
 from dotenv import load_dotenv
 from PyQt5.QtCore import Qt, pyqtSignal, QSize
 from PyQt5.QtGui import QFont, QPalette, QColor, QIcon
@@ -36,7 +38,39 @@ import cloudinary.uploader
 import cloudinary.api
 from supabase import Client, create_client
 
-load_dotenv()
+# ---------------------------------------------------------------------------
+# Environment loading helpers
+# ---------------------------------------------------------------------------
+
+
+def _load_environment() -> None:
+    """Load environment variables with support for frozen executables."""
+
+    candidate_paths = []
+
+    # 1. Directory that contains the running script (useful in development).
+    script_directory = Path(__file__).resolve().parent
+    candidate_paths.append(script_directory / ".env")
+
+    # 2. When running from a PyInstaller bundle, assets live under ``_MEIPASS``.
+    meipass_dir = getattr(sys, "_MEIPASS", None)
+    if meipass_dir:
+        candidate_paths.append(Path(meipass_dir) / ".env")
+
+    # 3. Current working directory (covers the case where the .exe is launched
+    #    from a shortcut or another folder but the .env sits next to it).
+    candidate_paths.append(Path.cwd() / ".env")
+
+    for env_path in candidate_paths:
+        if env_path.is_file():
+            load_dotenv(env_path)
+            break
+    else:
+        # Fall back to the default search behaviour which looks up the tree.
+        load_dotenv()
+
+
+_load_environment()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
