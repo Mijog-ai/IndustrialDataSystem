@@ -956,8 +956,12 @@ class DashboardPage(QWidget):
             )
             return
 
-        file_dialog_filter = "Data Files (*.csv *.xlsx *.xlsm *.xltx *.xltm);;"
-        file_dialog_filter += "CSV Files (*.csv);;Excel Files (*.xlsx *.xlsm *.xltx *.xltm)"
+        file_dialog_filter = (
+            "Data Files (*.csv *.asc *.xlsx *.xlsm *.xltx *.xltm *.xls);;"
+            "CSV Files (*.csv);;"
+            "ASCII Files (*.asc);;"
+            "Excel Files (*.xlsx *.xlsm *.xltx *.xltm *.xls)"
+        )
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select File to Upload",
@@ -1226,13 +1230,21 @@ class IndustrialDataApp(QMainWindow):
             self._alert("Please select a test type.", QMessageBox.Warning)
             return
 
-        supported_extensions = {".csv", ".xlsx", ".xlsm", ".xltx", ".xltm"}
+        supported_extensions = {
+            ".csv",
+            ".asc",
+            ".xlsx",
+            ".xlsm",
+            ".xltx",
+            ".xltm",
+            ".xls",
+        }
         file_extension = Path(file_path).suffix.lower()
 
         if file_extension not in supported_extensions:
             allowed = ", ".join(sorted(supported_extensions))
             self._alert(
-                f"Only CSV or Excel files ({allowed}) can be uploaded.",
+                f"Only CSV, ASCII, or Excel files ({allowed}) can be uploaded.",
                 QMessageBox.Warning,
             )
             self.dashboard_page.clear_csv_preview()
@@ -1398,13 +1410,49 @@ class IndustrialDataApp(QMainWindow):
         self, file_path: str, file_extension: str
     ) -> Optional[tuple[List[str], List[List[str]]]]:
         rows: List[List[str]] = []
-        if file_extension == ".csv":
+        if file_extension in {".csv", ".asc"}:
+            rows = self._read_delimited_file(file_path)
+            if rows is None:
+                return None
+        elif file_extension == ".xls":
             try:
-                with open(file_path, newline="", encoding="utf-8") as file:
-                    reader = csv.reader(file)
-                    rows = list(reader)
+                import xlrd
+            except ImportError:
+                self._alert(
+                    "Legacy Excel support requires the 'xlrd' package to be installed.",
+                    QMessageBox.Critical,
+                )
+                self.dashboard_page.clear_csv_preview()
+                return None
+
+            try:
+                from xlrd import xldate as xlrd_xldate
+            except ImportError:
+                xlrd_xldate = None
+
+            try:
+                workbook = xlrd.open_workbook(file_path)
+                sheet = workbook.sheet_by_index(0)
+                for row_idx in range(min(sheet.nrows, 101)):
+                    row_values: List[str] = []
+                    for col_idx in range(sheet.ncols):
+                        cell = sheet.cell(row_idx, col_idx)
+                        value = cell.value
+                        if cell.ctype == xlrd.XL_CELL_DATE and xlrd_xldate is not None:
+                            try:
+                                value = xlrd_xldate.xldate_as_datetime(
+                                    value,
+                                    workbook.datemode,
+                                )
+                            except Exception:
+                                pass
+                        row_values.append("" if value is None else str(value))
+                    rows.append(row_values)
             except Exception as exc:
-                self._alert(f"Unable to read CSV file: {exc}", QMessageBox.Critical)
+                self._alert(
+                    f"Unable to read Excel file: {exc}",
+                    QMessageBox.Critical,
+                )
                 self.dashboard_page.clear_csv_preview()
                 return None
         else:
@@ -1456,6 +1504,40 @@ class IndustrialDataApp(QMainWindow):
             for row in rows[1:101]
         ]
         return headers, data_rows
+
+    def _read_delimited_file(self, file_path: str) -> Optional[List[List[str]]]:
+        sample_size = 4096
+        encodings_to_try = ("utf-8", "utf-8-sig", "latin-1")
+
+        last_exception: Optional[Exception] = None
+
+        for encoding in encodings_to_try:
+            try:
+                with open(file_path, "r", encoding=encoding, newline="") as file:
+                    sample = file.read(sample_size)
+                    file.seek(0)
+                    try:
+                        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t| ")
+                    except csv.Error:
+                        dialect = csv.excel
+                    reader = csv.reader(file, dialect)
+                    rows = list(reader)
+                    return rows
+            except Exception as exc:
+                last_exception = exc
+                continue
+
+        if last_exception is None:
+            message = "Unable to read delimited file due to an unknown error."
+        else:
+            message = f"Unable to read delimited file: {last_exception}"
+
+        self._alert(
+            message,
+            QMessageBox.Critical,
+        )
+        self.dashboard_page.clear_csv_preview()
+        return None
 
     def _alert(self, message: str, icon: QMessageBox.Icon) -> None:
         dialog = QMessageBox(self)
