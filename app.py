@@ -1,4 +1,4 @@
-"""PyQt5 desktop application for the Industrial Data System."""
+"""Enhanced PyQt5 UI with industrial design standards."""
 from __future__ import annotations
 
 import csv
@@ -8,7 +8,8 @@ import sys
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QSize
+from PyQt5.QtGui import QFont, QPalette, QColor, QIcon
 from PyQt5.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -24,6 +25,8 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
+    QFrame,
+    QScrollArea,
 )
 import cloudinary
 import cloudinary.uploader
@@ -47,6 +50,201 @@ cloudinary.config(
     api_secret=os.getenv("CLOUDINARY_API_SECRET"),
     secure=True,
 )
+
+
+class IndustrialTheme:
+    """Industrial design system color palette and styles."""
+
+    # Color Palette
+    PRIMARY = "#1E3A8A"  # Deep Blue
+    PRIMARY_LIGHT = "#3B82F6"  # Light Blue
+    PRIMARY_DARK = "#1E40AF"  # Darker Blue
+
+    SECONDARY = "#64748B"  # Slate Gray
+    SECONDARY_LIGHT = "#94A3B8"
+
+    SUCCESS = "#10B981"  # Green
+    WARNING = "#F59E0B"  # Amber
+    ERROR = "#EF4444"  # Red
+
+    BACKGROUND = "#F8FAFC"  # Light Gray
+    SURFACE = "#FFFFFF"  # White
+    SURFACE_DARK = "#F1F5F9"
+
+    TEXT_PRIMARY = "#0F172A"  # Dark Slate
+    TEXT_SECONDARY = "#475569"  # Medium Slate
+    TEXT_HINT = "#94A3B8"  # Light Slate
+
+    BORDER = "#E2E8F0"
+    BORDER_FOCUS = "#3B82F6"
+
+    @staticmethod
+    def get_stylesheet():
+        """Return complete application stylesheet."""
+        return f"""
+            QMainWindow {{
+                background-color: {IndustrialTheme.BACKGROUND};
+            }}
+            
+            QWidget {{
+                font-family: 'Segoe UI', 'San Francisco', 'Helvetica Neue', Arial, sans-serif;
+                font-size: 14px;
+                color: {IndustrialTheme.TEXT_PRIMARY};
+            }}
+            
+            QLabel {{
+                color: {IndustrialTheme.TEXT_PRIMARY};
+            }}
+            
+            QLabel[heading="true"] {{
+                font-size: 28px;
+                font-weight: 600;
+                color: {IndustrialTheme.TEXT_PRIMARY};
+                padding: 8px 0px;
+            }}
+            
+            QLabel[subheading="true"] {{
+                font-size: 18px;
+                font-weight: 500;
+                color: {IndustrialTheme.TEXT_PRIMARY};
+                padding: 4px 0px;
+            }}
+            
+            QLabel[caption="true"] {{
+                font-size: 12px;
+                color: {IndustrialTheme.TEXT_SECONDARY};
+            }}
+            
+            QLineEdit {{
+                padding: 12px 16px;
+                border: 2px solid {IndustrialTheme.BORDER};
+                border-radius: 8px;
+                background-color: {IndustrialTheme.SURFACE};
+                color: {IndustrialTheme.TEXT_PRIMARY};
+                font-size: 14px;
+            }}
+            
+            QLineEdit:focus {{
+                border: 2px solid {IndustrialTheme.BORDER_FOCUS};
+                outline: none;
+            }}
+            
+            QLineEdit:disabled {{
+                background-color: {IndustrialTheme.SURFACE_DARK};
+                color: {IndustrialTheme.TEXT_HINT};
+            }}
+            
+            QPushButton {{
+                padding: 12px 24px;
+                border: none;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 500;
+                min-height: 44px;
+            }}
+            
+            QPushButton[primary="true"] {{
+                background-color: {IndustrialTheme.PRIMARY};
+                color: white;
+            }}
+            
+            QPushButton[primary="true"]:hover {{
+                background-color: {IndustrialTheme.PRIMARY_DARK};
+            }}
+            
+            QPushButton[primary="true"]:pressed {{
+                background-color: {IndustrialTheme.PRIMARY_DARK};
+            }}
+            
+            QPushButton[secondary="true"] {{
+                background-color: {IndustrialTheme.SURFACE};
+                color: {IndustrialTheme.TEXT_PRIMARY};
+                border: 2px solid {IndustrialTheme.BORDER};
+            }}
+            
+            QPushButton[secondary="true"]:hover {{
+                background-color: {IndustrialTheme.SURFACE_DARK};
+                border: 2px solid {IndustrialTheme.SECONDARY};
+            }}
+            
+            QPushButton[danger="true"] {{
+                background-color: {IndustrialTheme.ERROR};
+                color: white;
+            }}
+            
+            QPushButton[danger="true"]:hover {{
+                background-color: #DC2626;
+            }}
+            
+            QPushButton[flat="true"] {{
+                background-color: transparent;
+                color: {IndustrialTheme.PRIMARY};
+                padding: 8px 16px;
+            }}
+            
+            QPushButton[flat="true"]:hover {{
+                background-color: rgba(59, 130, 246, 0.1);
+            }}
+            
+            QPushButton:disabled {{
+                background-color: {IndustrialTheme.SURFACE_DARK};
+                color: {IndustrialTheme.TEXT_HINT};
+            }}
+            
+            QTableWidget {{
+                background-color: {IndustrialTheme.SURFACE};
+                border: 1px solid {IndustrialTheme.BORDER};
+                border-radius: 8px;
+                gridline-color: {IndustrialTheme.BORDER};
+            }}
+            
+            QTableWidget::item {{
+                padding: 12px;
+                border-bottom: 1px solid {IndustrialTheme.BORDER};
+            }}
+            
+            QTableWidget::item:selected {{
+                background-color: rgba(59, 130, 246, 0.1);
+                color: {IndustrialTheme.TEXT_PRIMARY};
+            }}
+            
+            QHeaderView::section {{
+                background-color: {IndustrialTheme.SURFACE_DARK};
+                padding: 12px;
+                border: none;
+                border-bottom: 2px solid {IndustrialTheme.BORDER};
+                font-weight: 600;
+                color: {IndustrialTheme.TEXT_PRIMARY};
+            }}
+            
+            QFrame[card="true"] {{
+                background-color: {IndustrialTheme.SURFACE};
+                border: 1px solid {IndustrialTheme.BORDER};
+                border-radius: 12px;
+                padding: 24px;
+            }}
+            
+            QScrollBar:vertical {{
+                border: none;
+                background-color: {IndustrialTheme.SURFACE_DARK};
+                width: 12px;
+                border-radius: 6px;
+            }}
+            
+            QScrollBar::handle:vertical {{
+                background-color: {IndustrialTheme.SECONDARY_LIGHT};
+                border-radius: 6px;
+                min-height: 30px;
+            }}
+            
+            QScrollBar::handle:vertical:hover {{
+                background-color: {IndustrialTheme.SECONDARY};
+            }}
+            
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+        """
 
 
 class SessionState:
@@ -96,7 +294,6 @@ class SessionState:
                 current_session, "refresh_token", self.refresh_token
             )
 
-        # Access raw_user_meta_data or user_metadata
         metadata = (
                 getattr(user, "raw_user_meta_data", None)
                 or getattr(user, "user_metadata", None)
@@ -120,7 +317,7 @@ class SessionState:
 
 
 class LoginPage(QWidget):
-    """Authentication interface allowing login and signup flows."""
+    """Modern authentication interface with industrial design."""
 
     login_requested = pyqtSignal(str, str)
     signup_requested = pyqtSignal(str, str, str)
@@ -129,116 +326,166 @@ class LoginPage(QWidget):
     def __init__(self) -> None:
         super().__init__()
 
-        layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignTop)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setAlignment(Qt.AlignCenter)
+        layout.setContentsMargins(40, 60, 40, 60)
+        layout.setSpacing(32)
+
+        # Header
+        header_widget = QWidget()
+        header_layout = QVBoxLayout(header_widget)
+        header_layout.setSpacing(8)
+        header_layout.setAlignment(Qt.AlignCenter)
 
         title = QLabel("Industrial Data System")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 24px; font-weight: bold;")
-        layout.addWidget(title)
+        title.setProperty("heading", True)
+        header_layout.addWidget(title, alignment=Qt.AlignCenter)
 
-        toggle_row = QHBoxLayout()
-        toggle_row.setSpacing(12)
-        toggle_row.setContentsMargins(0, 24, 0, 12)
+        subtitle = QLabel("Secure data management platform")
+        subtitle.setProperty("caption", True)
+        header_layout.addWidget(subtitle, alignment=Qt.AlignCenter)
 
-        self.login_toggle = QPushButton("Login")
-        self.signup_toggle = QPushButton("Signup")
+        layout.addWidget(header_widget)
+
+        # Tab Toggle
+        toggle_card = QFrame()
+        toggle_card.setProperty("card", True)
+        toggle_card.setMaximumWidth(480)
+        toggle_layout = QVBoxLayout(toggle_card)
+        toggle_layout.setContentsMargins(8, 8, 8, 8)
+        toggle_layout.setSpacing(0)
+
+        tab_row = QHBoxLayout()
+        tab_row.setSpacing(0)
+        tab_row.setContentsMargins(0, 0, 0, 0)
+
+        self.login_toggle = QPushButton("Sign In")
+        self.signup_toggle = QPushButton("Sign Up")
+
         for button in (self.login_toggle, self.signup_toggle):
             button.setCheckable(True)
             button.setCursor(Qt.PointingHandCursor)
-            button.setFlat(True)
-            button.setStyleSheet("padding: 6px 12px; font-size: 16px;")
+            button.setMinimumHeight(48)
+            button.setProperty("secondary", True)
 
         self.login_toggle.clicked.connect(lambda: self._switch_mode("login"))
         self.signup_toggle.clicked.connect(lambda: self._switch_mode("signup"))
 
-        toggle_row.addStretch()
-        toggle_row.addWidget(self.login_toggle)
-        toggle_row.addWidget(self.signup_toggle)
-        toggle_row.addStretch()
-        layout.addLayout(toggle_row)
+        tab_row.addWidget(self.login_toggle)
+        tab_row.addWidget(self.signup_toggle)
+        toggle_layout.addLayout(tab_row)
+
+        layout.addWidget(toggle_card, alignment=Qt.AlignCenter)
+
+        # Form Container
+        form_card = QFrame()
+        form_card.setProperty("card", True)
+        form_card.setMaximumWidth(480)
+        form_layout = QVBoxLayout(form_card)
+        form_layout.setSpacing(24)
+        form_layout.setContentsMargins(32, 32, 32, 32)
 
         self.form_stack = QStackedWidget()
-        layout.addWidget(self.form_stack)
+        form_layout.addWidget(self.form_stack)
 
         # Login Form
         self.login_form = QWidget()
         login_layout = QVBoxLayout(self.login_form)
-        login_layout.setSpacing(12)
+        login_layout.setSpacing(20)
+        login_layout.setContentsMargins(0, 0, 0, 0)
 
         login_email_label = QLabel("Email or Username")
+        login_email_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         self.login_email_input = QLineEdit()
-        self.login_email_input.setPlaceholderText("Enter username or email")
+        self.login_email_input.setPlaceholderText("Enter your email or username")
         login_layout.addWidget(login_email_label)
         login_layout.addWidget(self.login_email_input)
 
         login_password_label = QLabel("Password")
+        login_password_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         self.login_password_input = QLineEdit()
-        self.login_password_input.setPlaceholderText("Enter password")
+        self.login_password_input.setPlaceholderText("Enter your password")
         self.login_password_input.setEchoMode(QLineEdit.Password)
         login_layout.addWidget(login_password_label)
         login_layout.addWidget(self.login_password_input)
 
-        login_button = QPushButton("Login")
+        login_button = QPushButton("Sign In")
+        login_button.setProperty("primary", True)
         login_button.clicked.connect(self._emit_login_request)
         login_layout.addWidget(login_button)
 
         forgot_button = QPushButton("Forgot Password?")
-        forgot_button.setFlat(True)
+        forgot_button.setProperty("flat", True)
         forgot_button.setCursor(Qt.PointingHandCursor)
         forgot_button.clicked.connect(self.forgot_password_requested)
-        login_layout.addWidget(forgot_button)
-
-        login_layout.addStretch()
+        login_layout.addWidget(forgot_button, alignment=Qt.AlignCenter)
 
         self.form_stack.addWidget(self.login_form)
 
         # Signup Form
         self.signup_form = QWidget()
         signup_layout = QVBoxLayout(self.signup_form)
-        signup_layout.setSpacing(12)
+        signup_layout.setSpacing(20)
+        signup_layout.setContentsMargins(0, 0, 0, 0)
 
         signup_email_label = QLabel("Email")
+        signup_email_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         self.signup_email_input = QLineEdit()
-        self.signup_email_input.setPlaceholderText("Enter email for password recovery")
+        self.signup_email_input.setPlaceholderText("your.email@company.com")
         signup_layout.addWidget(signup_email_label)
         signup_layout.addWidget(self.signup_email_input)
 
         signup_username_label = QLabel("Username")
+        signup_username_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         self.signup_username_input = QLineEdit()
-        self.signup_username_input.setPlaceholderText("Choose a username (max 6 characters)")
+        self.signup_username_input.setPlaceholderText("Username (max 6 characters)")
         self.signup_username_input.setMaxLength(6)
         signup_layout.addWidget(signup_username_label)
         signup_layout.addWidget(self.signup_username_input)
 
         signup_password_label = QLabel("Password")
+        signup_password_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         self.signup_password_input = QLineEdit()
-        self.signup_password_input.setPlaceholderText("Create a password (max 6 characters)")
+        self.signup_password_input.setPlaceholderText("Password (max 6 characters)")
         self.signup_password_input.setEchoMode(QLineEdit.Password)
         self.signup_password_input.setMaxLength(6)
         signup_layout.addWidget(signup_password_label)
         signup_layout.addWidget(self.signup_password_input)
 
         signup_confirm_label = QLabel("Confirm Password")
+        signup_confirm_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         self.signup_confirm_input = QLineEdit()
-        self.signup_confirm_input.setPlaceholderText("Re-enter password")
+        self.signup_confirm_input.setPlaceholderText("Re-enter your password")
         self.signup_confirm_input.setEchoMode(QLineEdit.Password)
         self.signup_confirm_input.setMaxLength(6)
         signup_layout.addWidget(signup_confirm_label)
         signup_layout.addWidget(self.signup_confirm_input)
 
         signup_button = QPushButton("Create Account")
+        signup_button.setProperty("primary", True)
         signup_button.clicked.connect(self._emit_signup_request)
         signup_layout.addWidget(signup_button)
 
-        signup_layout.addStretch()
-
         self.form_stack.addWidget(self.signup_form)
+
+        layout.addWidget(form_card, alignment=Qt.AlignCenter)
+        layout.addStretch()
+
+        scroll.setWidget(container)
+        main_layout.addWidget(scroll)
 
         self._switch_mode("login")
 
     def show_login(self, email: str = "") -> None:
-        """Display the login form and optionally prefill the email."""
         self.login_email_input.setText(email)
         self.login_password_input.clear()
         self.signup_email_input.clear()
@@ -252,7 +499,6 @@ class LoginPage(QWidget):
             self.login_email_input.setFocus()
 
     def show_signup(self) -> None:
-        """Display the signup form."""
         self.login_email_input.clear()
         self.login_password_input.clear()
         self._switch_mode("signup")
@@ -263,25 +509,23 @@ class LoginPage(QWidget):
             self.form_stack.setCurrentWidget(self.signup_form)
             self.signup_toggle.setChecked(True)
             self.login_toggle.setChecked(False)
+            self.signup_toggle.setProperty("primary", True)
+            self.signup_toggle.setProperty("secondary", False)
+            self.login_toggle.setProperty("primary", False)
+            self.login_toggle.setProperty("secondary", True)
         else:
             self.form_stack.setCurrentWidget(self.login_form)
             self.login_toggle.setChecked(True)
             self.signup_toggle.setChecked(False)
+            self.login_toggle.setProperty("primary", True)
+            self.login_toggle.setProperty("secondary", False)
+            self.signup_toggle.setProperty("primary", False)
+            self.signup_toggle.setProperty("secondary", True)
 
-        active_style = (
-            "QPushButton { border: none; border-bottom: 2px solid #0d6efd;"
-            " color: #0d6efd; font-weight: 600; padding: 6px 12px; }"
-        )
-        inactive_style = (
-            "QPushButton { border: none; border-bottom: 2px solid transparent;"
-            " color: #6c757d; padding: 6px 12px; }"
-            "QPushButton:hover { color: #0d6efd; }"
-        )
-
-        self.login_toggle.setStyleSheet(active_style if self.login_toggle.isChecked() else inactive_style)
-        self.signup_toggle.setStyleSheet(
-            active_style if self.signup_toggle.isChecked() else inactive_style
-        )
+        self.login_toggle.style().unpolish(self.login_toggle)
+        self.login_toggle.style().polish(self.login_toggle)
+        self.signup_toggle.style().unpolish(self.signup_toggle)
+        self.signup_toggle.style().polish(self.signup_toggle)
 
     def _emit_login_request(self) -> None:
         identifier = self.login_email_input.text().strip()
@@ -309,7 +553,7 @@ class LoginPage(QWidget):
 
 
 class ForgotPasswordPage(QWidget):
-    """Interface allowing the user to initiate a password reset."""
+    """Password reset interface with modern design."""
 
     reset_requested = pyqtSignal(str)
     back_requested = pyqtSignal()
@@ -317,25 +561,47 @@ class ForgotPasswordPage(QWidget):
     def __init__(self) -> None:
         super().__init__()
 
-        layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignTop)
+        main_layout = QVBoxLayout(self)
+        main_layout.setAlignment(Qt.AlignCenter)
+        main_layout.setContentsMargins(40, 60, 40, 60)
+        main_layout.setSpacing(32)
 
+        # Header
         title = QLabel("Reset Password")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 24px; font-weight: bold;")
-        layout.addWidget(title)
+        title.setProperty("heading", True)
+        main_layout.addWidget(title, alignment=Qt.AlignCenter)
 
+        subtitle = QLabel("Enter your email to receive reset instructions")
+        subtitle.setProperty("caption", True)
+        main_layout.addWidget(subtitle, alignment=Qt.AlignCenter)
+
+        # Form Card
+        form_card = QFrame()
+        form_card.setProperty("card", True)
+        form_card.setMaximumWidth(480)
+        form_layout = QVBoxLayout(form_card)
+        form_layout.setSpacing(20)
+        form_layout.setContentsMargins(32, 32, 32, 32)
+
+        email_label = QLabel("Email Address")
+        email_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         self.email_input = QLineEdit()
-        self.email_input.setPlaceholderText("Email")
-        layout.addWidget(self.email_input)
+        self.email_input.setPlaceholderText("your.email@company.com")
+        form_layout.addWidget(email_label)
+        form_layout.addWidget(self.email_input)
 
         reset_button = QPushButton("Send Reset Instructions")
+        reset_button.setProperty("primary", True)
         reset_button.clicked.connect(self._emit_reset_request)
-        layout.addWidget(reset_button)
+        form_layout.addWidget(reset_button)
 
         back_button = QPushButton("Back to Sign In")
+        back_button.setProperty("flat", True)
         back_button.clicked.connect(self.back_requested)
-        layout.addWidget(back_button)
+        form_layout.addWidget(back_button, alignment=Qt.AlignCenter)
+
+        main_layout.addWidget(form_card, alignment=Qt.AlignCenter)
+        main_layout.addStretch()
 
     def _emit_reset_request(self) -> None:
         email = self.email_input.text().strip().lower()
@@ -343,7 +609,7 @@ class ForgotPasswordPage(QWidget):
 
 
 class DashboardPage(QWidget):
-    """Dashboard interface displaying uploaded files."""
+    """Modern dashboard with enhanced data visualization."""
 
     logout_requested = pyqtSignal()
     upload_requested = pyqtSignal(str)
@@ -352,12 +618,69 @@ class DashboardPage(QWidget):
     def __init__(self) -> None:
         super().__init__()
 
-        layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignTop)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.welcome_label = QLabel("Welcome")
-        self.welcome_label.setStyleSheet("font-size: 18px; font-weight: bold;")
-        layout.addWidget(self.welcome_label)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(40, 32, 40, 32)
+        layout.setSpacing(24)
+
+        # Header Section
+        header_layout = QHBoxLayout()
+        header_widget = QWidget()
+        header_inner = QVBoxLayout(header_widget)
+        header_inner.setSpacing(4)
+        header_inner.setContentsMargins(0, 0, 0, 0)
+
+        self.welcome_label = QLabel("Dashboard")
+        self.welcome_label.setProperty("heading", True)
+        header_inner.addWidget(self.welcome_label)
+
+        self.subtitle_label = QLabel("Manage your industrial data files")
+        self.subtitle_label.setProperty("caption", True)
+        header_inner.addWidget(self.subtitle_label)
+
+        header_layout.addWidget(header_widget)
+        header_layout.addStretch()
+
+        # Action Buttons
+        action_layout = QHBoxLayout()
+        action_layout.setSpacing(12)
+
+        upload_button = QPushButton("Upload File")
+        upload_button.setProperty("primary", True)
+        upload_button.clicked.connect(self._select_file)
+        action_layout.addWidget(upload_button)
+
+        refresh_button = QPushButton("Refresh")
+        refresh_button.setProperty("secondary", True)
+        refresh_button.clicked.connect(self.refresh_requested.emit)
+        action_layout.addWidget(refresh_button)
+
+        logout_button = QPushButton("Sign Out")
+        logout_button.setProperty("danger", True)
+        logout_button.clicked.connect(self.logout_requested)
+        action_layout.addWidget(logout_button)
+
+        header_layout.addLayout(action_layout)
+        layout.addLayout(header_layout)
+
+        # Files Card
+        files_card = QFrame()
+        files_card.setProperty("card", True)
+        files_layout = QVBoxLayout(files_card)
+        files_layout.setContentsMargins(0, 0, 0, 0)
+        files_layout.setSpacing(0)
+
+        files_header = QLabel("Uploaded Files")
+        files_header.setProperty("subheading", True)
+        files_header.setStyleSheet(f"padding: 20px 24px; border-bottom: 1px solid {IndustrialTheme.BORDER};")
+        files_layout.addWidget(files_header)
 
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels(["Filename", "URL", "Uploaded"])
@@ -365,38 +688,49 @@ class DashboardPage(QWidget):
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        layout.addWidget(self.table)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setAlternatingRowColors(True)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        files_layout.addWidget(self.table)
+
+        layout.addWidget(files_card)
+
+        # CSV Preview Card
+        self.csv_card = QFrame()
+        self.csv_card.setProperty("card", True)
+        csv_layout = QVBoxLayout(self.csv_card)
+        csv_layout.setContentsMargins(0, 0, 0, 0)
+        csv_layout.setSpacing(0)
 
         self.csv_preview_label = QLabel("CSV Preview")
-        self.csv_preview_label.setStyleSheet("font-size: 16px; font-weight: bold;")
-        self.csv_preview_label.hide()
-        layout.addWidget(self.csv_preview_label)
+        self.csv_preview_label.setProperty("subheading", True)
+        self.csv_preview_label.setStyleSheet(f"padding: 20px 24px; border-bottom: 1px solid {IndustrialTheme.BORDER};")
+        csv_layout.addWidget(self.csv_preview_label)
 
         self.csv_table = QTableWidget(0, 0)
         self.csv_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.csv_table.hide()
-        layout.addWidget(self.csv_table)
+        self.csv_table.verticalHeader().setVisible(False)
+        self.csv_table.setAlternatingRowColors(True)
+        csv_layout.addWidget(self.csv_table)
 
-        upload_button = QPushButton("Upload File")
-        upload_button.clicked.connect(self._select_file)
-        layout.addWidget(upload_button)
+        self.csv_card.hide()
+        layout.addWidget(self.csv_card)
 
-        refresh_button = QPushButton("Refresh Files")
-        refresh_button.clicked.connect(self.refresh_requested.emit)
-        layout.addWidget(refresh_button)
-
-        logout_button = QPushButton("Sign Out")
-        logout_button.clicked.connect(self.logout_requested)
-        layout.addWidget(logout_button)
+        scroll.setWidget(container)
+        main_layout.addWidget(scroll)
 
     def set_user_identity(self, username: str, email: str) -> None:
         username = username.strip()
         email = email.strip()
-        parts = [part for part in (username, email) if part]
-        if parts:
-            self.welcome_label.setText(f"Welcome, {' · '.join(parts)}")
+        if username:
+            self.welcome_label.setText(f"Welcome, {username}")
+            self.subtitle_label.setText(email if email else "Manage your industrial data files")
+        elif email:
+            self.welcome_label.setText(f"Welcome, {email}")
+            self.subtitle_label.setText("Manage your industrial data files")
         else:
-            self.welcome_label.setText("Welcome")
+            self.welcome_label.setText("Dashboard")
+            self.subtitle_label.setText("Manage your industrial data files")
 
     def update_files(self, files: List[Dict[str, Any]]) -> None:
         self.table.setRowCount(len(files))
@@ -434,24 +768,23 @@ class DashboardPage(QWidget):
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 self.csv_table.setItem(row_index, column_index, item)
 
-        self.csv_preview_label.show()
-        self.csv_table.show()
+        self.csv_card.show()
 
     def clear_csv_preview(self) -> None:
         self.csv_table.clear()
         self.csv_table.setRowCount(0)
         self.csv_table.setColumnCount(0)
-        self.csv_table.hide()
-        self.csv_preview_label.hide()
+        self.csv_card.hide()
 
 
 class IndustrialDataApp(QMainWindow):
-    """Main window hosting the Industrial Data System interface."""
+    """Main window with modern industrial UI design."""
 
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Industrial Data System")
-        self.resize(900, 600)
+        self.resize(1200, 800)
+        self.setMinimumSize(900, 600)
 
         self.session_state = SessionState(supabase)
         self.current_username: str = ""
@@ -496,11 +829,9 @@ class IndustrialDataApp(QMainWindow):
             self._alert("Username/Email and password are required.", QMessageBox.Warning)
             return
 
-        # Check if identifier is an email or username
         if '@' in identifier:
             email = identifier.lower()
         else:
-            # It's a username, resolve to email
             try:
                 email = self._resolve_email_for_username(identifier.lower())
             except RuntimeError as exc:
@@ -577,7 +908,6 @@ class IndustrialDataApp(QMainWindow):
             self.show_login(email)
             return
 
-        # Pass the username to _process_auth_response so it can be stored
         if not self._process_auth_response(username, auth_response):
             self.show_login(email)
             return
@@ -715,7 +1045,6 @@ class IndustrialDataApp(QMainWindow):
                 "Authorization": f"Bearer {SUPABASE_KEY}",
             }
 
-            # Query auth.users via REST API
             url = f"{SUPABASE_URL}/auth/v1/admin/users"
 
             page = 1
@@ -728,7 +1057,6 @@ class IndustrialDataApp(QMainWindow):
 
                 data = response.json()
 
-                # Handle both response formats
                 if isinstance(data, dict):
                     users = data.get("users", [])
                 elif isinstance(data, list):
@@ -737,7 +1065,6 @@ class IndustrialDataApp(QMainWindow):
                     users = []
 
                 for user in users:
-                    # The REST API returns user_metadata, not raw_user_meta_data
                     metadata = user.get("user_metadata") or {}
 
                     if not isinstance(metadata, dict):
@@ -752,12 +1079,11 @@ class IndustrialDataApp(QMainWindow):
                     if metadata_username == normalized:
                         return user.get("email")
 
-                # Check for more pages
                 if len(users) < per_page:
                     break
                 page += 1
 
-                if page > 10:  # Safety limit
+                if page > 10:
                     break
 
         except Exception as exc:
@@ -795,7 +1121,6 @@ class IndustrialDataApp(QMainWindow):
             metadata.get("username") or metadata.get("username_normalized") or ""
         ).strip()
 
-        # Use the passed username if stored_username is empty
         self.current_username = stored_username if stored_username else username
 
         self.dashboard_page.set_user_identity(self.current_username, user.get("email", ""))
@@ -844,11 +1169,32 @@ class IndustrialDataApp(QMainWindow):
         dialog.setIcon(icon)
         dialog.setText(message)
         dialog.setWindowTitle("Industrial Data System")
+        dialog.setStyleSheet(f"""
+            QMessageBox {{
+                background-color: {IndustrialTheme.SURFACE};
+            }}
+            QMessageBox QLabel {{
+                color: {IndustrialTheme.TEXT_PRIMARY};
+                font-size: 14px;
+                padding: 10px;
+            }}
+            QPushButton {{
+                min-width: 80px;
+                padding: 8px 16px;
+            }}
+        """)
         dialog.exec_()
 
 
 def main() -> None:
     app = QApplication(sys.argv)
+
+    # Apply industrial theme stylesheet
+    app.setStyleSheet(IndustrialTheme.get_stylesheet())
+
+    # Set application-wide font
+    app.setFont(QFont("Segoe UI", 10))
+
     window = IndustrialDataApp()
     window.show()
     sys.exit(app.exec_())
