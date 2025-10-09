@@ -25,11 +25,17 @@ from PyQt5.QtWidgets import (
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
 )
 
 import cloudinary.api
 
-from app import IndustrialTheme, SessionState, supabase
+from app import IndustrialTheme
+from auth import LocalAuthStore, LocalUser, default_data_path
+
+READER_SECURITY_CODE = "123321"
 
 
 @dataclass
@@ -79,7 +85,8 @@ class CloudinaryResource:
 class ReaderLoginPage(QWidget):
     """Minimal login screen dedicated to reader accounts."""
 
-    login_requested = pyqtSignal(str, str)
+    login_requested = pyqtSignal(str, str, str)
+    signup_requested = pyqtSignal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -130,10 +137,26 @@ class ReaderLoginPage(QWidget):
         self.password_input.setEchoMode(QLineEdit.Password)
         form_layout.addWidget(self.password_input)
 
+        code_label = QLabel("Security Code")
+        code_label.setStyleSheet(
+            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
+        )
+        form_layout.addWidget(code_label)
+
+        self.security_input = QLineEdit()
+        self.security_input.setPlaceholderText("Enter security code")
+        self.security_input.setEchoMode(QLineEdit.Password)
+        form_layout.addWidget(self.security_input)
+
         self.login_button = QPushButton("Sign In")
         self.login_button.setProperty("primary", True)
         self.login_button.clicked.connect(self._emit_login)
         form_layout.addWidget(self.login_button)
+
+        self.signup_button = QPushButton("Create Account")
+        self.signup_button.setProperty("secondary", True)
+        self.signup_button.clicked.connect(self.signup_requested.emit)
+        form_layout.addWidget(self.signup_button)
 
         layout.addWidget(form_container, alignment=Qt.AlignCenter)
         layout.addStretch()
@@ -142,12 +165,111 @@ class ReaderLoginPage(QWidget):
         self.error_label.hide()
         email = self.email_input.text().strip().lower()
         password = self.password_input.text()
-        self.login_requested.emit(email, password)
+        security_code = self.security_input.text().strip()
+        self.login_requested.emit(email, password, security_code)
 
     def show_error(self, message: str) -> None:
-        self.error_label.setText(message)
-        self.error_label.show()
+        if message:
+            self.error_label.setText(message)
+            self.error_label.show()
+        else:
+            self.error_label.hide()
 
+    def reset_fields(self) -> None:
+        self.email_input.clear()
+        self.password_input.clear()
+        self.security_input.clear()
+        self.error_label.hide()
+
+
+
+
+class ReaderSignupDialog(QDialog):
+    """Dialog for creating reader accounts."""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Create Reader Account")
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
+
+        form_layout = QFormLayout()
+        form_layout.setSpacing(12)
+
+        self.email_input = QLineEdit()
+        self.email_input.setPlaceholderText("reader@example.com")
+        form_layout.addRow("Email", self.email_input)
+
+        self.display_name_input = QLineEdit()
+        self.display_name_input.setPlaceholderText("Display name (optional)")
+        form_layout.addRow("Display Name", self.display_name_input)
+
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.Password)
+        form_layout.addRow("Password", self.password_input)
+
+        self.confirm_input = QLineEdit()
+        self.confirm_input.setEchoMode(QLineEdit.Password)
+        form_layout.addRow("Confirm Password", self.confirm_input)
+
+        self.code_input = QLineEdit()
+        self.code_input.setEchoMode(QLineEdit.Password)
+        self.code_input.setPlaceholderText("Security code")
+        form_layout.addRow("Security Code", self.code_input)
+
+        layout.addLayout(form_layout)
+
+        self.error_label = QLabel()
+        self.error_label.setStyleSheet("color: #EF4444; font-weight: 500;")
+        self.error_label.hide()
+        layout.addWidget(self.error_label)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Cancel | QDialogButtonBox.Ok)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+        self._result: Optional[Dict[str, str]] = None
+
+    def accept(self) -> None:
+        email = self.email_input.text().strip().lower()
+        password = self.password_input.text()
+        confirm = self.confirm_input.text()
+        security_code = self.code_input.text().strip()
+        display_name = self.display_name_input.text().strip()
+
+        if not email or not password or not security_code:
+            self._show_error("Email, password, and security code are required.")
+            return
+
+        if password != confirm:
+            self._show_error("Passwords do not match.")
+            return
+
+        if security_code != READER_SECURITY_CODE:
+            self._show_error("Invalid security code.")
+            return
+
+        self._result = {
+            "email": email,
+            "password": password,
+            "display_name": display_name,
+        }
+        self._show_error("")
+        super().accept()
+
+    def _show_error(self, message: str) -> None:
+        if message:
+            self.error_label.setText(message)
+            self.error_label.show()
+        else:
+            self.error_label.hide()
+
+    def get_result(self) -> Optional[Dict[str, str]]:
+        return self._result
 
 class ReaderDashboard(QWidget):
     """Dashboard that renders Cloudinary folders and file previews."""
@@ -412,12 +534,8 @@ class ReaderApp(QMainWindow):
         self.setWindowTitle("Cloudinary Reader App")
         self.setMinimumSize(1100, 700)
 
-        self.session_state = SessionState(supabase)
-        self.allowed_roles = {
-            role.strip().lower()
-            for role in os.getenv("READER_ALLOWED_ROLES", "reader").split(",")
-            if role.strip()
-        }
+        self.auth_store = LocalAuthStore(default_data_path("reader_users.json"))
+        self.current_user: Optional[LocalUser] = None
         self.cloudinary_root = os.getenv("CLOUDINARY_READER_ROOT", "tests")
 
         self.stack = QStackedWidget()
@@ -430,6 +548,7 @@ class ReaderApp(QMainWindow):
         self.stack.addWidget(self.dashboard)
 
         self.login_page.login_requested.connect(self.handle_login)
+        self.login_page.signup_requested.connect(self.open_signup_dialog)
         self.dashboard.logout_requested.connect(self.handle_logout)
         self.dashboard.refresh_requested.connect(self.refresh_resources)
         self.dashboard.download_button.clicked.connect(self.dashboard.download_current)
@@ -441,6 +560,7 @@ class ReaderApp(QMainWindow):
     # ------------------------------------------------------------------
 
     def show_login(self) -> None:
+        self.login_page.reset_fields()
         self.stack.setCurrentWidget(self.login_page)
         self.dashboard.clear()
 
@@ -451,71 +571,60 @@ class ReaderApp(QMainWindow):
     # Authentication
     # ------------------------------------------------------------------
 
-    def handle_login(self, email: str, password: str) -> None:
-        if not email or not password:
-            self.login_page.show_error("Email and password are required.")
+    def handle_login(self, email: str, password: str, security_code: str) -> None:
+        if not email or not password or not security_code:
+            self.login_page.show_error("Email, password, and security code are required.")
             return
 
-        try:
-            response = supabase.auth.sign_in_with_password({
-                "email": email,
-                "password": password,
-            })
-        except Exception as exc:
-            self.login_page.show_error(f"Unable to sign in: {exc}")
+        if security_code != READER_SECURITY_CODE:
+            self.login_page.show_error("Invalid security code.")
             return
 
-        session = getattr(response, "session", None)
-        if not session:
-            self.login_page.show_error("Supabase did not return a session.")
-            return
-
-        access_token = getattr(session, "access_token", None)
-        refresh_token = getattr(session, "refresh_token", None)
-        if not access_token or not refresh_token:
-            self.login_page.show_error("Authentication response was incomplete.")
-            return
-
-        self.session_state.set_tokens(access_token, refresh_token)
-        user = self.session_state.user
+        user = self.auth_store.authenticate(email, password)
         if not user:
-            self.login_page.show_error("Unable to retrieve user information.")
+            self.login_page.show_error("Invalid email or password.")
             return
 
-        metadata = user.get("metadata") or {}
-        if not self._is_reader(metadata):
-            self.session_state.clear()
-            try:
-                supabase.auth.sign_out()
-            except Exception:
-                pass
-            self.login_page.show_error("This account does not have reader access.")
-            return
-
-        display_name = (
-            metadata.get("display_name")
-            or metadata.get("username")
-            or metadata.get("full_name")
-            or ""
-        )
-        self.dashboard.set_user_identity(display_name, user.get("email", ""))
+        self.login_page.show_error("")
+        self.current_user = user
+        display_name = user.metadata.get("display_name") or user.display_name()
+        self.dashboard.set_user_identity(display_name, user.email)
         self.show_dashboard()
         self.refresh_resources()
 
-    def _is_reader(self, metadata: Dict[str, Any]) -> bool:
-        if not self.allowed_roles:
-            return True
-        role = metadata.get("role") or metadata.get("user_role")
-        if role is None:
-            return False
-        return str(role).strip().lower() in self.allowed_roles
+    def open_signup_dialog(self) -> None:
+        dialog = ReaderSignupDialog(self)
+        if dialog.exec_() != QDialog.Accepted:
+            return
+
+        result = dialog.get_result()
+        if not result:
+            return
+
+        metadata: Dict[str, str] = {}
+        if result.get("display_name"):
+            metadata["display_name"] = result["display_name"]
+
+        try:
+            self.auth_store.create_user(
+                email=result["email"],
+                password=result["password"],
+                metadata=metadata,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Reader Signup", str(exc))
+            return
+
+        QMessageBox.information(
+            self,
+            "Reader Signup",
+            "Account created successfully. You can now sign in.",
+        )
+        self.show_login()
+        self.login_page.email_input.setText(result["email"])
 
     def handle_logout(self) -> None:
-        try:
-            supabase.auth.sign_out()
-        except Exception:
-            pass
-        self.session_state.clear()
+        self.current_user = None
         self.show_login()
 
     # ------------------------------------------------------------------
@@ -523,6 +632,11 @@ class ReaderApp(QMainWindow):
     # ------------------------------------------------------------------
 
     def refresh_resources(self) -> None:
+        if not self.current_user:
+            self.login_page.show_error("Please sign in to view files.")
+            self.show_login()
+            return
+
         try:
             resources = _collect_resources(self.cloudinary_root)
         except Exception as exc:
@@ -533,6 +647,11 @@ class ReaderApp(QMainWindow):
             )
             return
 
+        display_name = (
+            self.current_user.metadata.get("display_name")
+            or self.current_user.display_name()
+        )
+        self.dashboard.set_user_identity(display_name, self.current_user.email)
         self.dashboard.populate(resources)
 
 

@@ -36,7 +36,8 @@ from PyQt5.QtWidgets import (
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
-from supabase import Client, create_client
+
+from auth import LocalAuthStore, LocalUser, UploadHistoryStore, default_data_path
 
 # ---------------------------------------------------------------------------
 # Environment loading helpers
@@ -72,16 +73,6 @@ def _load_environment() -> None:
 
 _load_environment()
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError(
-        "SUPABASE_URL and SUPABASE_KEY must be configured in environment variables."
-    )
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
     api_key=os.getenv("CLOUDINARY_API_KEY"),
@@ -91,6 +82,9 @@ cloudinary.config(
 
 # Storage limit in bytes (default: 1GB if not set in .env)
 STORAGE_LIMIT_BYTES = int(os.getenv("STORAGE_LIMIT_MB", "1024")) * 1024 * 1024
+
+UPLOAD_CREDENTIALS_PATH = default_data_path("upload_users.json")
+UPLOAD_HISTORY_PATH = default_data_path("upload_history.json")
 
 
 class IndustrialTheme:
@@ -373,71 +367,15 @@ class NewTestTypeDialog(QDialog):
 
 
 class SessionState:
-    """Manage Supabase authentication state for the desktop application."""
+    """Minimal session holder for the desktop application."""
 
-    def __init__(self, client: Client) -> None:
-        self._client = client
-        self.access_token: Optional[str] = None
-        self.refresh_token: Optional[str] = None
+    def __init__(self) -> None:
         self.user: Optional[Dict[str, Any]] = None
 
-    def set_tokens(self, access_token: str, refresh_token: str) -> None:
-        self.access_token = access_token
-        self.refresh_token = refresh_token
-        self.refresh_user()
-
-    def refresh_user(self) -> Optional[Dict[str, Any]]:
-        if not self.access_token or not self.refresh_token:
-            self.user = None
-            return None
-
-        try:
-            session_response = self._client.auth.set_session(
-                self.access_token, self.refresh_token
-            )
-            response = self._client.auth.get_user(self.access_token)
-        except Exception:
-            self.clear()
-            return None
-
-        user = response.user if response else None
-        if not user:
-            self.clear()
-            return None
-
-        current_session = None
-        if session_response and getattr(session_response, "session", None):
-            current_session = session_response.session
-        else:
-            current_session = getattr(self._client.auth, "session", None)
-
-        if current_session is not None:
-            self.access_token = getattr(
-                current_session, "access_token", self.access_token
-            )
-            self.refresh_token = getattr(
-                current_session, "refresh_token", self.refresh_token
-            )
-
-        metadata = (
-                getattr(user, "raw_user_meta_data", None)
-                or getattr(user, "user_metadata", None)
-                or {}
-        )
-
-        if not isinstance(metadata, dict):
-            metadata = {}
-
-        self.user = {
-            "id": getattr(user, "id", None),
-            "email": getattr(user, "email", ""),
-            "metadata": metadata,
-        }
-        return self.user
+    def set_user(self, user: Dict[str, Any]) -> None:
+        self.user = user
 
     def clear(self) -> None:
-        self.access_token = None
-        self.refresh_token = None
         self.user = None
 
 
@@ -1002,7 +940,9 @@ class IndustrialDataApp(QMainWindow):
         self.resize(1200, 800)
         self.setMinimumSize(900, 600)
 
-        self.session_state = SessionState(supabase)
+        self.session_state = SessionState()
+        self.auth_store = LocalAuthStore(UPLOAD_CREDENTIALS_PATH)
+        self.history_store = UploadHistoryStore(UPLOAD_HISTORY_PATH)
         self.current_username: str = ""
 
         self.stack = QStackedWidget()
@@ -1063,25 +1003,32 @@ class IndustrialDataApp(QMainWindow):
             self._alert("Username/Email and password are required.", QMessageBox.Warning)
             return
 
-        if '@' in identifier:
-            email = identifier.lower()
-        else:
-            try:
-                email = self._resolve_email_for_username(identifier.lower())
-            except RuntimeError as exc:
-                self._alert(str(exc), QMessageBox.Critical)
-                return
-
-            if not email:
-                self._alert("No account found for the provided username.", QMessageBox.Warning)
-                return
-
-        auth_response = self._sign_in_with_email(email, password)
-        if not auth_response:
+        user = self.auth_store.authenticate(identifier, password)
+        if not user:
+            self._alert("Invalid credentials. Please try again.", QMessageBox.Warning)
             return
 
-        if not self._process_auth_response("", auth_response):
-            return
+        self._set_logged_in_user(user)
+
+    def _set_logged_in_user(self, user: LocalUser) -> None:
+        session_payload = {
+            "id": user.id,
+            "email": user.email,
+            "username": (
+                user.username
+                or user.metadata.get("username")
+                or user.metadata.get("username_normalized")
+                or ""
+            ),
+            "metadata": user.metadata,
+        }
+        self.session_state.set_user(session_payload)
+        self.current_username = session_payload["username"] or ""
+        self.dashboard_page.set_user_identity(
+            self.current_username, session_payload.get("email", "")
+        )
+        self.show_dashboard()
+        self.refresh_files()
 
     def handle_signup(self, email: str, username: str, password: str) -> None:
         email = email.strip().lower()
@@ -1103,116 +1050,74 @@ class IndustrialDataApp(QMainWindow):
 
         normalized_username = username.lower()
 
-        try:
-            existing_email = self._resolve_email_for_username(normalized_username)
-        except RuntimeError as exc:
-            self._alert(str(exc), QMessageBox.Critical)
-            return
-
-        if existing_email:
-            self._alert("That username is already in use.", QMessageBox.Warning)
-            return
-
         metadata = {
             "username": username,
             "username_normalized": normalized_username,
         }
 
         try:
-            response = supabase.auth.sign_up(
-                {
-                    "email": email,
-                    "password": password,
-                    "options": {"data": metadata},
-                }
+            user = self.auth_store.create_user(
+                email=email,
+                password=password,
+                username=normalized_username,
+                metadata=metadata,
             )
-        except Exception as exc:
-            self._alert(f"Unable to create the account: {exc}", QMessageBox.Critical)
-            return
-
-        user = getattr(response, "user", None)
-        if not user:
-            self._alert("Signup did not complete successfully.", QMessageBox.Critical)
-            return
-
-        self._confirm_user_email(user)
-
-        auth_response = self._sign_in_with_email(email, password)
-        if not auth_response:
-            self.show_login(email)
-            return
-
-        if not self._process_auth_response(username, auth_response):
-            self.show_login(email)
+        except ValueError as exc:
+            self._alert(str(exc), QMessageBox.Warning)
             return
 
         self._alert(
             "Signup successful! You're now signed in.",
             QMessageBox.Information,
         )
+        self._set_logged_in_user(user)
 
     def handle_password_reset(self, email: str) -> None:
         if not email:
             self._alert("Email is required to reset the password.", QMessageBox.Warning)
             return
 
-        try:
-            supabase.auth.reset_password_email(email)
-        except Exception as exc:
-            self._alert(f"Failed to initiate password reset: {exc}", QMessageBox.Critical)
+        user_exists = any(user.email == email.strip().lower() for user in self.auth_store.list_users())
+        if not user_exists:
+            self._alert("No account was found with that email.", QMessageBox.Warning)
             return
 
         self._alert(
-            "Password reset instructions have been sent if the email exists.",
+            "Password resets must be handled by an administrator for local accounts.",
             QMessageBox.Information,
         )
-        self.show_login()
+        self.show_login(email)
 
     def handle_logout(self) -> None:
-        try:
-            supabase.auth.sign_out()
-        except Exception:
-            pass
         self.session_state.clear()
         self.current_username = ""
         self._alert("You have been signed out.", QMessageBox.Information)
         self.show_login()
 
     def refresh_files(self) -> None:
-        user = self.session_state.refresh_user()
+        user = self.session_state.user
         if not user:
             self._alert("Session expired. Please sign in again.", QMessageBox.Warning)
             self.show_login()
             return
 
-        metadata = (user.get("metadata") or {})
-        metadata_username = str(
-            metadata.get("username")
+        metadata = user.get("metadata") or {}
+        username = (
+            user.get("username")
+            or metadata.get("username")
             or metadata.get("username_normalized")
             or self.current_username
+            or ""
         ).strip()
-        if metadata_username:
-            self.current_username = metadata_username
+        self.current_username = username
 
         self.dashboard_page.set_user_identity(
             self.current_username,
             user.get("email", ""),
         )
 
-        try:
-            response = (
-                supabase.table("files")
-                .select("id, filename, url, test_type, created_at")
-                .eq("user_id", user["id"])
-                .order("created_at", desc=True)
-                .execute()
-            )
-            files = response.data or []
-        except Exception as exc:
-            self._alert(f"Failed to load files from Supabase: {exc}", QMessageBox.Critical)
-            files = []
-
-        self.dashboard_page.update_files(files)
+        records = self.history_store.get_records_for_user(user.get("id", ""))
+        self.dashboard_page.update_files(records)
         self.load_test_types()
 
     def handle_upload(self, file_path: str, test_type: str) -> None:
@@ -1265,130 +1170,15 @@ class IndustrialDataApp(QMainWindow):
             self._alert("Cloudinary did not return a file URL.", QMessageBox.Critical)
             return
 
-        metadata = {
-            "user_id": user.get("id"),
-            "filename": os.path.basename(file_path),
-            "url": file_url,
-            "test_type": test_type,
-        }
-
-        try:
-            supabase.table("files").insert(metadata).execute()
-        except Exception as exc:
-            self._alert(
-                f"Failed to store file metadata in Supabase: {exc}", QMessageBox.Critical
-            )
-            return
+        self.history_store.add_record(
+            user_id=user.get("id", ""),
+            filename=os.path.basename(file_path),
+            url=file_url,
+            test_type=test_type,
+        )
 
         self._alert(f"File uploaded successfully to '{test_type}' test type.", QMessageBox.Information)
         self.refresh_files()
-
-    def _resolve_email_for_username(self, username: str) -> Optional[str]:
-        normalized = username.strip().lower()
-        if not normalized:
-            return None
-
-        try:
-            import requests
-
-            headers = {
-                "apikey": SUPABASE_KEY,
-                "Authorization": f"Bearer {SUPABASE_KEY}",
-            }
-
-            url = f"{SUPABASE_URL}/auth/v1/admin/users"
-
-            page = 1
-            per_page = 1000
-
-            while True:
-                params = {"page": page, "per_page": per_page}
-                response = requests.get(url, headers=headers, params=params)
-                response.raise_for_status()
-
-                data = response.json()
-
-                if isinstance(data, dict):
-                    users = data.get("users", [])
-                elif isinstance(data, list):
-                    users = data
-                else:
-                    users = []
-
-                for user in users:
-                    metadata = user.get("user_metadata") or {}
-
-                    if not isinstance(metadata, dict):
-                        metadata = {}
-
-                    metadata_username = str(
-                        metadata.get("username_normalized")
-                        or metadata.get("username")
-                        or ""
-                    ).strip().lower()
-
-                    if metadata_username == normalized:
-                        return user.get("email")
-
-                if len(users) < per_page:
-                    break
-                page += 1
-
-                if page > 10:
-                    break
-
-        except Exception as exc:
-            raise RuntimeError(f"Unable to query Supabase users: {exc}") from exc
-
-        return None
-
-    def _sign_in_with_email(self, email: str, password: str) -> Optional[Any]:
-        try:
-            return supabase.auth.sign_in_with_password(
-                {"email": email, "password": password}
-            )
-        except Exception as exc:
-            self._alert(f"Unable to sign in: {exc}", QMessageBox.Critical)
-            return None
-
-    def _process_auth_response(self, username: str, auth_response: Any) -> bool:
-        session = getattr(auth_response, "session", None)
-        if not session:
-            self._alert("No active Supabase session returned.", QMessageBox.Critical)
-            return False
-
-        self.session_state.set_tokens(
-            session.access_token,
-            session.refresh_token,
-        )
-
-        user = self.session_state.user
-        if not user:
-            self._alert("Unable to determine the current user.", QMessageBox.Critical)
-            return False
-
-        metadata = (user.get("metadata") or {})
-        stored_username = str(
-            metadata.get("username") or metadata.get("username_normalized") or ""
-        ).strip()
-
-        self.current_username = stored_username if stored_username else username
-
-        self.dashboard_page.set_user_identity(self.current_username, user.get("email", ""))
-        self.show_dashboard()
-        self.refresh_files()
-        return True
-
-    def _confirm_user_email(self, user: Any) -> None:
-        admin_api = getattr(getattr(supabase, "auth", None), "admin", None)
-        user_id = getattr(user, "id", None)
-        if admin_api is None or not user_id:
-            return
-
-        try:
-            admin_api.update_user_by_id(user_id, {"email_confirm": True})
-        except Exception:
-            pass
 
     @staticmethod
     def _is_valid_email(email: str) -> bool:
