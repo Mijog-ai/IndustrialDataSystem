@@ -84,3 +84,54 @@ piece of data lives in managed cloud services.
 Deploy the app to any environment capable of running Flask (Render, Fly.io,
 Railway, etc.). Remember to set all required environment variables and supply a
 `SECRET_KEY` for Flask sessions in production.
+
+## Packaging the app as a Windows executable
+
+You can create a standalone Windows executable with [PyInstaller](https://pyinstaller.org/).
+The steps below assume you are working on Windows and have Python and the
+project dependencies installed.
+
+1. **Install PyInstaller** (inside your virtual environment if you use one)
+
+   ```bash
+   pip install pyinstaller
+   ```
+
+2. **Build the executable**
+
+   From the project root, run:
+
+   ```bash
+   pyinstaller --name IndustrialDataSystem \
+     --add-data "templates;templates" \
+     --add-data "static;static" \
+     --hidden-import "dotenv" \
+     --hidden-import "supabase" \
+     --hidden-import "cloudinary" \
+     --collect-all "supabase" \
+     --collect-all "cloudinary" \
+     --collect-all "werkzeug" \
+     --onefile app.py
+   ```
+
+   - `--add-data` copies the HTML templates and static assets into the bundle.
+     On macOS/Linux use `:` instead of `;` to separate the source and target paths.
+   - `--hidden-import` and `--collect-all` help PyInstaller discover packages
+     that Flask dynamically imports at runtime.
+   - `--onefile` produces a single `IndustrialDataSystem.exe` file in the `dist`
+     folder.
+
+3. **Provide environment variables at runtime**
+
+   The executable still needs the same Supabase and Cloudinary environment
+   variables. Create a `.env` file alongside the `.exe` or set the variables in
+   the Windows environment before launching the app.
+
+4. **Run the executable**
+
+   Double-click the generated `IndustrialDataSystem.exe` or start it from a
+   terminal. Flask will bind to `http://127.0.0.1:5000` by default.
+
+For custom icons or splash screens, consult the [PyInstaller documentation](https://pyinstaller.org/en/stable/). If you
+need to ship additional assets (for example, SSL certificates), add more
+`--add-data` entries pointing to those files.
