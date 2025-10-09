@@ -1,4 +1,4 @@
-"""Enhanced PyQt5 UI with industrial design standards."""
+"""Enhanced PyQt5 UI with test type organization for uploads."""
 from __future__ import annotations
 
 import csv
@@ -27,9 +27,13 @@ from PyQt5.QtWidgets import (
     QWidget,
     QFrame,
     QScrollArea,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
 )
 import cloudinary
 import cloudinary.uploader
+import cloudinary.api
 from supabase import Client, create_client
 
 load_dotenv()
@@ -134,6 +138,33 @@ class IndustrialTheme:
                 color: {IndustrialTheme.TEXT_HINT};
             }}
             
+            QComboBox {{
+                padding: 12px 16px;
+                border: 2px solid {IndustrialTheme.BORDER};
+                border-radius: 8px;
+                background-color: {IndustrialTheme.SURFACE};
+                color: {IndustrialTheme.TEXT_PRIMARY};
+                font-size: 14px;
+                min-height: 44px;
+            }}
+            
+            QComboBox:focus {{
+                border: 2px solid {IndustrialTheme.BORDER_FOCUS};
+            }}
+            
+            QComboBox::drop-down {{
+                border: none;
+                width: 30px;
+            }}
+            
+            QComboBox QAbstractItemView {{
+                background-color: {IndustrialTheme.SURFACE};
+                border: 2px solid {IndustrialTheme.BORDER};
+                border-radius: 8px;
+                selection-background-color: {IndustrialTheme.PRIMARY_LIGHT};
+                padding: 4px;
+            }}
+            
             QPushButton {{
                 padding: 12px 24px;
                 border: none;
@@ -224,6 +255,10 @@ class IndustrialTheme:
                 padding: 24px;
             }}
             
+            QDialog {{
+                background-color: {IndustrialTheme.SURFACE};
+            }}
+            
             QScrollBar:vertical {{
                 border: none;
                 background-color: {IndustrialTheme.SURFACE_DARK};
@@ -245,6 +280,59 @@ class IndustrialTheme:
                 height: 0px;
             }}
         """
+
+
+class NewTestTypeDialog(QDialog):
+    """Dialog for creating a new test type."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Create New Test Type")
+        self.setMinimumWidth(400)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(20)
+        layout.setContentsMargins(24, 24, 24, 24)
+
+        # Title
+        title = QLabel("New Test Type")
+        title.setProperty("subheading", True)
+        layout.addWidget(title)
+
+        # Description
+        desc = QLabel("Enter a name for the new test type. This will create a new folder in Cloudinary.")
+        desc.setProperty("caption", True)
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        # Input field
+        input_label = QLabel("Test Type Name")
+        input_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
+        layout.addWidget(input_label)
+
+        self.test_type_input = QLineEdit()
+        self.test_type_input.setPlaceholderText("e.g., Performance Test, Load Test, Stress Test")
+        layout.addWidget(self.test_type_input)
+
+        # Buttons
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+
+        # Style buttons
+        for button in button_box.buttons():
+            if button_box.buttonRole(button) == QDialogButtonBox.AcceptRole:
+                button.setProperty("primary", True)
+            else:
+                button.setProperty("secondary", True)
+            button.setMinimumHeight(44)
+
+        layout.addWidget(button_box)
+
+    def get_test_type(self) -> str:
+        return self.test_type_input.text().strip()
 
 
 class SessionState:
@@ -609,10 +697,10 @@ class ForgotPasswordPage(QWidget):
 
 
 class DashboardPage(QWidget):
-    """Modern dashboard with enhanced data visualization."""
+    """Modern dashboard with test type organization."""
 
     logout_requested = pyqtSignal()
-    upload_requested = pyqtSignal(str)
+    upload_requested = pyqtSignal(str, str)  # file_path, test_type
     refresh_requested = pyqtSignal()
 
     def __init__(self) -> None:
@@ -641,7 +729,7 @@ class DashboardPage(QWidget):
         self.welcome_label.setProperty("heading", True)
         header_inner.addWidget(self.welcome_label)
 
-        self.subtitle_label = QLabel("Manage your industrial data files")
+        self.subtitle_label = QLabel("Manage your industrial test data")
         self.subtitle_label.setProperty("caption", True)
         header_inner.addWidget(self.subtitle_label)
 
@@ -670,6 +758,42 @@ class DashboardPage(QWidget):
         header_layout.addLayout(action_layout)
         layout.addLayout(header_layout)
 
+        # Upload Section Card
+        upload_card = QFrame()
+        upload_card.setProperty("card", True)
+        upload_layout = QVBoxLayout(upload_card)
+        upload_layout.setSpacing(16)
+
+        upload_title = QLabel("Test Type Selection")
+        upload_title.setProperty("subheading", True)
+        upload_layout.addWidget(upload_title)
+
+        # Test type selector
+        test_type_layout = QHBoxLayout()
+        test_type_layout.setSpacing(12)
+
+        test_type_label = QLabel("Test Type:")
+        test_type_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
+        test_type_layout.addWidget(test_type_label)
+
+        self.test_type_combo = QComboBox()
+        self.test_type_combo.setMinimumWidth(250)
+        test_type_layout.addWidget(self.test_type_combo, stretch=1)
+
+        new_type_button = QPushButton("+ New Test Type")
+        new_type_button.setProperty("secondary", True)
+        new_type_button.clicked.connect(self._create_new_test_type)
+        test_type_layout.addWidget(new_type_button)
+
+        upload_layout.addLayout(test_type_layout)
+
+        info_label = QLabel("Select a test type before uploading files. Files will be organized in Cloudinary by test type.")
+        info_label.setProperty("caption", True)
+        info_label.setWordWrap(True)
+        upload_layout.addWidget(info_label)
+
+        layout.addWidget(upload_card)
+
         # Files Card
         files_card = QFrame()
         files_card.setProperty("card", True)
@@ -682,12 +806,13 @@ class DashboardPage(QWidget):
         files_header.setStyleSheet(f"padding: 20px 24px; border-bottom: 1px solid {IndustrialTheme.BORDER};")
         files_layout.addWidget(files_header)
 
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Filename", "URL", "Uploaded"])
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["Filename", "Test Type", "URL", "Uploaded"])
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -719,37 +844,84 @@ class DashboardPage(QWidget):
         scroll.setWidget(container)
         main_layout.addWidget(scroll)
 
+        self.test_types: List[str] = []
+
+    def set_test_types(self, test_types: List[str]) -> None:
+        """Update the test type dropdown with available types."""
+        self.test_types = sorted(test_types)
+        self.test_type_combo.clear()
+        if self.test_types:
+            self.test_type_combo.addItems(self.test_types)
+        else:
+            self.test_type_combo.addItem("No test types available")
+
+    def get_selected_test_type(self) -> Optional[str]:
+        """Get the currently selected test type."""
+        if not self.test_types:
+            return None
+        return self.test_type_combo.currentText()
+
+    def _create_new_test_type(self) -> None:
+        """Show dialog to create a new test type."""
+        dialog = NewTestTypeDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            test_type = dialog.get_test_type()
+            if test_type:
+                # Add to combo box
+                if test_type not in self.test_types:
+                    self.test_types.append(test_type)
+                    self.test_types.sort()
+                    self.test_type_combo.clear()
+                    self.test_type_combo.addItems(self.test_types)
+                    # Select the new type
+                    index = self.test_type_combo.findText(test_type)
+                    if index >= 0:
+                        self.test_type_combo.setCurrentIndex(index)
+                else:
+                    QMessageBox.information(self, "Industrial Data System", f"Test type '{test_type}' already exists.")
+
     def set_user_identity(self, username: str, email: str) -> None:
         username = username.strip()
         email = email.strip()
         if username:
             self.welcome_label.setText(f"Welcome, {username}")
-            self.subtitle_label.setText(email if email else "Manage your industrial data files")
+            self.subtitle_label.setText(email if email else "Manage your industrial test data")
         elif email:
             self.welcome_label.setText(f"Welcome, {email}")
-            self.subtitle_label.setText("Manage your industrial data files")
+            self.subtitle_label.setText("Manage your industrial test data")
         else:
             self.welcome_label.setText("Dashboard")
-            self.subtitle_label.setText("Manage your industrial data files")
+            self.subtitle_label.setText("Manage your industrial test data")
 
     def update_files(self, files: List[Dict[str, Any]]) -> None:
         self.table.setRowCount(len(files))
         for row, file_record in enumerate(files):
             filename_item = QTableWidgetItem(file_record.get("filename", ""))
+            test_type_item = QTableWidgetItem(file_record.get("test_type", ""))
             url_item = QTableWidgetItem(file_record.get("url", ""))
             created_item = QTableWidgetItem(file_record.get("created_at", ""))
 
-            for item in (filename_item, url_item, created_item):
+            for item in (filename_item, test_type_item, url_item, created_item):
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
 
             self.table.setItem(row, 0, filename_item)
-            self.table.setItem(row, 1, url_item)
-            self.table.setItem(row, 2, created_item)
+            self.table.setItem(row, 1, test_type_item)
+            self.table.setItem(row, 2, url_item)
+            self.table.setItem(row, 3, created_item)
 
     def _select_file(self) -> None:
+        test_type = self.get_selected_test_type()
+        if not test_type or test_type == "No test types available":
+            QMessageBox.warning(
+                self,
+                "Industrial Data System",
+                "Please select or create a test type before uploading files."
+            )
+            return
+
         file_path, _ = QFileDialog.getOpenFileName(self, "Select File to Upload")
         if file_path:
-            self.upload_requested.emit(file_path)
+            self.upload_requested.emit(file_path, test_type)
 
     def display_csv_preview(self, headers: List[str], rows: List[List[str]]) -> None:
         if not headers:
@@ -822,6 +994,24 @@ class IndustrialDataApp(QMainWindow):
 
     def show_dashboard(self) -> None:
         self.stack.setCurrentWidget(self.dashboard_page)
+        self.load_test_types()
+
+    def load_test_types(self) -> None:
+        """Load available test types from Cloudinary folders."""
+        try:
+            # Get all folders in Cloudinary under 'tests/' path
+            result = cloudinary.api.subfolders("tests")
+            folders = result.get("folders", [])
+            test_types = [folder.get("name") for folder in folders if folder.get("name")]
+
+            # If no folders exist, create a default one
+            if not test_types:
+                test_types = []
+
+            self.dashboard_page.set_test_types(test_types)
+        except Exception as exc:
+            # If 'tests' folder doesn't exist yet, start with empty list
+            self.dashboard_page.set_test_types([])
 
     def handle_login(self, identifier: str, password: str) -> None:
         identifier = identifier.strip()
@@ -968,7 +1158,7 @@ class IndustrialDataApp(QMainWindow):
         try:
             response = (
                 supabase.table("files")
-                .select("id, filename, url, created_at")
+                .select("id, filename, url, test_type, created_at")
                 .eq("user_id", user["id"])
                 .order("created_at", desc=True)
                 .execute()
@@ -979,12 +1169,17 @@ class IndustrialDataApp(QMainWindow):
             files = []
 
         self.dashboard_page.update_files(files)
+        self.load_test_types()
 
-    def handle_upload(self, file_path: str) -> None:
+    def handle_upload(self, file_path: str, test_type: str) -> None:
         user = self.session_state.user
         if not user:
             self._alert("Session expired. Please sign in again.", QMessageBox.Warning)
             self.show_login()
+            return
+
+        if not test_type:
+            self._alert("Please select a test type.", QMessageBox.Warning)
             return
 
         if not file_path.lower().endswith(".csv"):
@@ -999,12 +1194,16 @@ class IndustrialDataApp(QMainWindow):
         headers, rows = preview_result
         self.dashboard_page.display_csv_preview(headers, rows)
 
+        # Upload to Cloudinary in organized folder structure
+        folder_path = f"tests/{test_type}"
+
         try:
             upload_result = cloudinary.uploader.upload(
                 file_path,
                 resource_type="raw",
+                folder=folder_path,
                 use_filename=True,
-                unique_filename=False,
+                unique_filename=True,
             )
         except Exception as exc:
             self._alert(f"Cloudinary upload failed: {exc}", QMessageBox.Critical)
@@ -1019,6 +1218,7 @@ class IndustrialDataApp(QMainWindow):
             "user_id": user.get("id"),
             "filename": os.path.basename(file_path),
             "url": file_url,
+            "test_type": test_type,
         }
 
         try:
@@ -1029,7 +1229,7 @@ class IndustrialDataApp(QMainWindow):
             )
             return
 
-        self._alert("File uploaded successfully.", QMessageBox.Information)
+        self._alert(f"File uploaded successfully to '{test_type}' test type.", QMessageBox.Information)
         self.refresh_files()
 
     def _resolve_email_for_username(self, username: str) -> Optional[str]:
