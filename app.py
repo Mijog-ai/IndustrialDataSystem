@@ -151,22 +151,21 @@ class LoginPage(QWidget):
         self.form_stack = QStackedWidget()
         layout.addWidget(self.form_stack)
 
+        # Login Form
         self.login_form = QWidget()
         login_layout = QVBoxLayout(self.login_form)
         login_layout.setSpacing(12)
 
-        login_username_label = QLabel("Username")
-        self.login_username_input = QLineEdit()
-        self.login_username_input.setPlaceholderText("Enter username")
-        self.login_username_input.setMaxLength(6)
-        login_layout.addWidget(login_username_label)
-        login_layout.addWidget(self.login_username_input)
+        login_email_label = QLabel("Email or Username")
+        self.login_email_input = QLineEdit()
+        self.login_email_input.setPlaceholderText("Enter username or email")
+        login_layout.addWidget(login_email_label)
+        login_layout.addWidget(self.login_email_input)
 
         login_password_label = QLabel("Password")
         self.login_password_input = QLineEdit()
         self.login_password_input.setPlaceholderText("Enter password")
         self.login_password_input.setEchoMode(QLineEdit.Password)
-        self.login_password_input.setMaxLength(6)
         login_layout.addWidget(login_password_label)
         login_layout.addWidget(self.login_password_input)
 
@@ -184,6 +183,7 @@ class LoginPage(QWidget):
 
         self.form_stack.addWidget(self.login_form)
 
+        # Signup Form
         self.signup_form = QWidget()
         signup_layout = QVBoxLayout(self.signup_form)
         signup_layout.setSpacing(12)
@@ -227,25 +227,23 @@ class LoginPage(QWidget):
 
         self._switch_mode("login")
 
-    def show_login(self, username: str = "") -> None:
-        """Display the login form and optionally prefill the username."""
-
-        self.login_username_input.setText(username)
+    def show_login(self, email: str = "") -> None:
+        """Display the login form and optionally prefill the email."""
+        self.login_email_input.setText(email)
         self.login_password_input.clear()
         self.signup_email_input.clear()
         self.signup_username_input.clear()
         self.signup_password_input.clear()
         self.signup_confirm_input.clear()
         self._switch_mode("login")
-        if username:
+        if email:
             self.login_password_input.setFocus()
         else:
-            self.login_username_input.setFocus()
+            self.login_email_input.setFocus()
 
     def show_signup(self) -> None:
         """Display the signup form."""
-
-        self.login_username_input.clear()
+        self.login_email_input.clear()
         self.login_password_input.clear()
         self._switch_mode("signup")
         self.signup_email_input.setFocus()
@@ -276,12 +274,12 @@ class LoginPage(QWidget):
         )
 
     def _emit_login_request(self) -> None:
-        username = self.login_username_input.text().strip()
+        identifier = self.login_email_input.text().strip()
         password = self.login_password_input.text()
-        if not username or not password:
-            QMessageBox.warning(self, "Industrial Data System", "Username and password are required.")
+        if not identifier or not password:
+            QMessageBox.warning(self, "Industrial Data System", "Username/Email and password are required.")
             return
-        self.login_requested.emit(username, password)
+        self.login_requested.emit(identifier, password)
 
     def _emit_signup_request(self) -> None:
         email = self.signup_email_input.text().strip()
@@ -436,6 +434,7 @@ class DashboardPage(QWidget):
         self.csv_table.hide()
         self.csv_preview_label.hide()
 
+
 class IndustrialDataApp(QMainWindow):
     """Main window hosting the Industrial Data System interface."""
 
@@ -471,9 +470,9 @@ class IndustrialDataApp(QMainWindow):
 
         self.show_login()
 
-    def show_login(self, username: str = "") -> None:
+    def show_login(self, email: str = "") -> None:
         self.stack.setCurrentWidget(self.login_page)
-        self.login_page.show_login(username)
+        self.login_page.show_login(email)
 
     def show_forgot_password(self) -> None:
         self.stack.setCurrentWidget(self.forgot_page)
@@ -481,27 +480,32 @@ class IndustrialDataApp(QMainWindow):
     def show_dashboard(self) -> None:
         self.stack.setCurrentWidget(self.dashboard_page)
 
-    def handle_login(self, username: str, password: str) -> None:
-        username = username.strip()
-        if not username or not password:
-            self._alert("Username and password are required.", QMessageBox.Warning)
+    def handle_login(self, identifier: str, password: str) -> None:
+        identifier = identifier.strip()
+        if not identifier or not password:
+            self._alert("Username/Email and password are required.", QMessageBox.Warning)
             return
 
-        try:
-            email = self._resolve_email_for_username(username)
-        except RuntimeError as exc:
-            self._alert(str(exc), QMessageBox.Critical)
-            return
+        # Check if identifier is an email or username
+        if '@' in identifier:
+            email = identifier.lower()
+        else:
+            # It's a username, resolve to email
+            try:
+                email = self._resolve_email_for_username(identifier.lower())
+            except RuntimeError as exc:
+                self._alert(str(exc), QMessageBox.Critical)
+                return
 
-        if not email:
-            self._alert("No account found for the provided username.", QMessageBox.Warning)
-            return
+            if not email:
+                self._alert("No account found for the provided username.", QMessageBox.Warning)
+                return
 
         auth_response = self._sign_in_with_email(email, password)
         if not auth_response:
             return
 
-        if not self._process_auth_response(username, auth_response):
+        if not self._process_auth_response("", auth_response):
             return
 
     def handle_signup(self, email: str, username: str, password: str) -> None:
@@ -560,11 +564,11 @@ class IndustrialDataApp(QMainWindow):
 
         auth_response = self._sign_in_with_email(email, password)
         if not auth_response:
-            self.show_login(username)
+            self.show_login(email)
             return
 
-        if not self._process_auth_response(username, auth_response):
-            self.show_login(username)
+        if not self._process_auth_response("", auth_response):
+            self.show_login(email)
             return
 
         self._alert(
