@@ -9,6 +9,7 @@ piece of data lives in managed cloud services.
 
 - Supabase authentication for secure login and password reset workflows.
 - Dashboard for uploading files directly to Cloudinary.
+- Dedicated reader application that lists and previews Cloudinary assets for read-only users.
 - File metadata stored in a Supabase table for easy listing and management.
 - Environment-driven configuration via `.env` powered by `python-dotenv`.
 
@@ -49,9 +50,11 @@ piece of data lives in managed cloud services.
    | `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud/tenant name. |
    | `CLOUDINARY_API_KEY` | Cloudinary API key. |
    | `CLOUDINARY_API_SECRET` | Cloudinary API secret. |
-   | `FLASK_SECRET_KEY` | Secret key used by Flask for session signing (generate a random string). |
+| `FLASK_SECRET_KEY` | Secret key used by Flask for session signing (generate a random string). |
+| `CLOUDINARY_READER_ROOT` | Optional Cloudinary folder prefix (defaults to `tests`). |
+| `READER_ALLOWED_ROLES` | Comma separated list of Supabase user metadata roles that may access the reader app (defaults to `reader`). |
 
-3. **Run the application**
+3. **Run the uploader application**
 
    ```bash
    flask --app app run
@@ -59,6 +62,19 @@ piece of data lives in managed cloud services.
 
    The app listens on <http://127.0.0.1:5000> by default. Ensure the Supabase
    and Cloudinary credentials allow calls from your environment.
+
+4. **Run the reader application**
+
+   ```bash
+   python reader_app.py
+   ```
+
+   The reader app launches a PyQt5 desktop window. Sign in with a Supabase
+   account whose metadata `role` (or `user_role`) matches one of the values in
+   `READER_ALLOWED_ROLES`. After authentication the app lists every file inside
+   the `CLOUDINARY_READER_ROOT` folder in Cloudinary, supports previewing images
+   and text-based files, and allows downloading any asset through its secure
+   URL.
 
 ## Usage
 
