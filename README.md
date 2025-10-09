@@ -87,9 +87,11 @@ Railway, etc.). Remember to set all required environment variables and supply a
 
 ## Packaging the app as a Windows executable
 
-You can create a standalone Windows executable with [PyInstaller](https://pyinstaller.org/).
-The steps below assume you are working on Windows and have Python and the
-project dependencies installed.
+You can create a standalone Windows executable with
+[PyInstaller](https://pyinstaller.org/). The repository includes a ready-made
+`IndustrialDataSystem.spec` file that bundles the dynamic Supabase and
+Cloudinary dependencies detected during development. The steps below assume you
+are working on Windows and have Python and the project dependencies installed.
 
 1. **Install PyInstaller** (inside your virtual environment if you use one)
 
@@ -102,30 +104,20 @@ project dependencies installed.
    From the project root, run:
 
    ```bash
-   pyinstaller --name IndustrialDataSystem \
-     --add-data "templates;templates" \
-     --add-data "static;static" \
-     --hidden-import "dotenv" \
-     --hidden-import "supabase" \
-     --hidden-import "cloudinary" \
-     --collect-all "supabase" \
-     --collect-all "cloudinary" \
-     --collect-all "werkzeug" \
-     --onefile app.py
+   pyinstaller IndustrialDataSystem.spec
    ```
 
-   - `--add-data` copies the HTML templates and static assets into the bundle.
-     On macOS/Linux use `:` instead of `;` to separate the source and target paths.
-   - `--hidden-import` and `--collect-all` help PyInstaller discover packages
-     that Flask dynamically imports at runtime.
-   - `--onefile` produces a single `IndustrialDataSystem.exe` file in the `dist`
-     folder.
+   The spec file pulls in the Supabase, Cloudinary, and Werkzeug packages that
+   need to be explicitly collected when freezing the application and produces a
+   single `IndustrialDataSystem.exe` file in the `dist` folder.
 
 3. **Provide environment variables at runtime**
 
    The executable still needs the same Supabase and Cloudinary environment
-   variables. Create a `.env` file alongside the `.exe` or set the variables in
-   the Windows environment before launching the app.
+   variables. The application now looks for a `.env` file next to the
+   executable, inside the unpacked PyInstaller directory, or in the current
+   working directory. Alternatively, set the variables in the Windows
+   environment before launching the app.
 
 4. **Run the executable**
 
