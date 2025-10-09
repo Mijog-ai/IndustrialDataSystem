@@ -1,69 +1,45 @@
-"""Local authentication and upload history storage helpers."""
+"""Local authentication and upload history storage backed by SQLite."""
 from __future__ import annotations
 
 import hashlib
-import json
-import os
 import secrets
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, List, Optional
+
+from db_manager import DatabaseManager, UploadRecord, UserRecord
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def default_data_path(filename: str) -> Path:
-    """Return a path inside the shared data directory."""
+    """Return a path inside the legacy shared data directory."""
+
     return DATA_DIR / filename
 
 
 @dataclass
 class LocalUser:
-    """Simple representation of a locally stored account."""
+    """Representation of a locally stored account fetched from SQLite."""
 
-    id: str
+    id: int
     email: str
     username: Optional[str]
     password_hash: str
     salt: str
-    metadata: Dict[str, str]
+    metadata: Dict[str, Any]
+    created_at: str
 
     def display_name(self) -> str:
         return self.metadata.get("display_name") or (self.username or self.email)
 
 
 class LocalAuthStore:
-    """Store and validate credentials in a JSON file."""
+    """Store and validate credentials against the SQLite database."""
 
-    def __init__(self, path: Path) -> None:
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._data: Dict[str, Dict[str, Dict[str, str]]] = {"users": {}}
-        self._load()
-
-    # ------------------------------------------------------------------
-    # Persistence helpers
-    # ------------------------------------------------------------------
-    def _load(self) -> None:
-        if self.path.is_file():
-            try:
-                with open(self.path, "r", encoding="utf-8") as handle:
-                    loaded = json.load(handle)
-                    if isinstance(loaded, dict) and "users" in loaded:
-                        self._data = loaded
-                        return
-            except Exception:
-                pass
-        self._data = {"users": {}}
-        self._save()
-
-    def _save(self) -> None:
-        tmp_path = self.path.with_suffix(".tmp")
-        with open(tmp_path, "w", encoding="utf-8") as handle:
-            json.dump(self._data, handle, indent=2)
-        os.replace(tmp_path, self.path)
+    def __init__(self, manager: Optional[DatabaseManager] = None) -> None:
+        self.manager = manager or DatabaseManager()
 
     # ------------------------------------------------------------------
     # Utility helpers
@@ -72,34 +48,16 @@ class LocalAuthStore:
     def _hash_password(password: str, salt: str) -> str:
         return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
 
-    def _users(self) -> Iterable[LocalUser]:
-        for user_id, payload in self._data.get("users", {}).items():
-            yield LocalUser(
-                id=user_id,
-                email=payload.get("email", ""),
-                username=payload.get("username"),
-                password_hash=payload.get("password_hash", ""),
-                salt=payload.get("salt", ""),
-                metadata=payload.get("metadata", {}) or {},
-            )
-
-    def _get_user_by_email(self, email: str) -> Optional[LocalUser]:
-        email = email.strip().lower()
-        if not email:
-            return None
-        for user in self._users():
-            if user.email.lower() == email:
-                return user
-        return None
-
-    def _get_user_by_username(self, username: str) -> Optional[LocalUser]:
-        username = username.strip().lower()
-        if not username:
-            return None
-        for user in self._users():
-            if (user.username or "").strip().lower() == username:
-                return user
-        return None
+    def _user_from_record(self, record: UserRecord) -> LocalUser:
+        return LocalUser(
+            id=record.id,
+            email=record.email,
+            username=record.username,
+            password_hash=record.password_hash,
+            salt=record.salt,
+            metadata=record.metadata,
+            created_at=record.created_at,
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -110,112 +68,115 @@ class LocalAuthStore:
         password: str,
         *,
         username: Optional[str] = None,
-        metadata: Optional[Dict[str, str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> LocalUser:
         email = email.strip().lower()
-        if self._get_user_by_email(email):
+        if self.manager.get_user_by_email(email):
             raise ValueError("An account with that email already exists.")
 
         normalized_username: Optional[str] = None
         if username:
             normalized_username = username.strip()
-            if self._get_user_by_username(normalized_username):
+            if self.manager.get_user_by_username(normalized_username):
                 raise ValueError("That username is already in use.")
 
         salt = secrets.token_hex(16)
         password_hash = self._hash_password(password, salt)
-        user_id = secrets.token_hex(12)
-        payload = {
-            "email": email,
-            "username": normalized_username,
-            "password_hash": password_hash,
-            "salt": salt,
-            "metadata": metadata or {},
-            "created_at": datetime.utcnow().isoformat() + "Z",
-        }
-        self._data.setdefault("users", {})[user_id] = payload
-        self._save()
-        return LocalUser(
-            id=user_id,
+        record = self.manager.create_user(
             email=email,
             username=normalized_username,
             password_hash=password_hash,
             salt=salt,
-            metadata=payload["metadata"],
+            metadata=metadata or {},
         )
+        return self._user_from_record(record)
 
     def authenticate(self, identifier: str, password: str) -> Optional[LocalUser]:
         identifier = identifier.strip()
+        record: Optional[UserRecord]
         if "@" in identifier:
-            user = self._get_user_by_email(identifier)
+            record = self.manager.get_user_by_email(identifier)
         else:
-            user = self._get_user_by_username(identifier)
-            if user is None:
-                user = self._get_user_by_email(identifier)
-        if not user:
+            record = self.manager.get_user_by_username(identifier)
+            if record is None:
+                record = self.manager.get_user_by_email(identifier)
+        if not record:
             return None
-        expected = self._hash_password(password, user.salt)
-        if secrets.compare_digest(expected, user.password_hash):
-            return user
+
+        expected = self._hash_password(password, record.salt)
+        if secrets.compare_digest(expected, record.password_hash):
+            return self._user_from_record(record)
         return None
 
     def list_users(self) -> List[LocalUser]:
-        return list(self._users())
+        return [self._user_from_record(record) for record in self.manager.list_users()]
 
 
 class UploadHistoryStore:
-    """Track uploads performed by local users."""
+    """Track uploads performed by local users in SQLite."""
 
-    def __init__(self, path: Path) -> None:
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._data: Dict[str, List[Dict[str, str]]] = {"records": []}
-        self._load()
-
-    def _load(self) -> None:
-        if self.path.is_file():
-            try:
-                with open(self.path, "r", encoding="utf-8") as handle:
-                    loaded = json.load(handle)
-                    if isinstance(loaded, dict) and "records" in loaded:
-                        self._data = loaded
-                        return
-            except Exception:
-                pass
-        self._data = {"records": []}
-        self._save()
-
-    def _save(self) -> None:
-        tmp_path = self.path.with_suffix(".tmp")
-        with open(tmp_path, "w", encoding="utf-8") as handle:
-            json.dump(self._data, handle, indent=2)
-        os.replace(tmp_path, self.path)
+    def __init__(self, manager: Optional[DatabaseManager] = None) -> None:
+        self.manager = manager or DatabaseManager()
 
     def add_record(
         self,
         *,
-        user_id: str,
+        user_id: int,
         filename: str,
-        url: str,
+        file_path: str,
         test_type: str,
-        created_at: Optional[str] = None,
-    ) -> None:
-        record = {
-            "user_id": user_id,
-            "filename": filename,
-            "url": url,
-            "test_type": test_type,
-            "created_at": created_at
-            or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
-        }
-        self._data.setdefault("records", []).append(record)
-        self._save()
+        file_size: Optional[int] = None,
+        mime_type: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> UploadRecord:
+        test_type_record = self.manager.ensure_test_type(test_type, description)
+        return self.manager.create_upload(
+            user_id=user_id,
+            filename=filename,
+            file_path=file_path,
+            test_type=test_type,
+            file_size=file_size,
+            mime_type=mime_type,
+            test_type_id=test_type_record.id if test_type_record else None,
+        )
 
-    def get_records_for_user(self, user_id: str) -> List[Dict[str, str]]:
-        records = [
-            record
-            for record in self._data.get("records", [])
-            if record.get("user_id") == user_id
-        ]
-        records.sort(key=lambda rec: rec.get("created_at", ""), reverse=True)
-        return records
+    def get_records_for_user(self, user_id: int) -> List[Dict[str, Any]]:
+        records = self.manager.list_uploads(user_id=user_id)
+        return [self._record_to_dict(record) for record in records]
+
+    def query(
+        self,
+        *,
+        user_id: Optional[int] = None,
+        test_type: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        records = self.manager.list_uploads(
+            user_id=user_id,
+            test_type=test_type,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return [self._record_to_dict(record) for record in records]
+
+    def _record_to_dict(self, record: UploadRecord) -> Dict[str, Any]:
+        return {
+            "id": record.id,
+            "user_id": record.user_id,
+            "filename": record.filename,
+            "file_path": record.file_path,
+            "test_type": record.test_type,
+            "file_size": record.file_size,
+            "mime_type": record.mime_type,
+            "created_at": record.created_at,
+            "test_type_id": record.test_type_id,
+        }
+
+
+__all__ = [
+    "LocalAuthStore",
+    "LocalUser",
+    "UploadHistoryStore",
+    "default_data_path",
+]
