@@ -6,11 +6,10 @@ import json
 from pathlib import Path
 from typing import Dict
 
-from auth import default_data_path
-from auth import UploadHistoryStore
-from config import get_config
-from db_manager import DatabaseManager
-from storage_manager import LocalStorageManager, StorageError
+from industrial_data_system.core.auth import UploadHistoryStore, default_data_path
+from industrial_data_system.core.config import get_config
+from industrial_data_system.core.db_manager import DatabaseManager
+from industrial_data_system.core.storage import LocalStorageManager, StorageError
 
 
 def main() -> None:

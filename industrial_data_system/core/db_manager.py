@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
 
-from database import SQLiteDatabase, get_database
+from industrial_data_system.core.database import SQLiteDatabase, get_database
 
 
 @dataclass

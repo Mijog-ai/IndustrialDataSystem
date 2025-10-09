@@ -7,10 +7,10 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from auth import LocalAuthStore
-from config import get_config
-from db_manager import DatabaseManager
-from storage_manager import LocalStorageManager
+from industrial_data_system.core.auth import LocalAuthStore
+from industrial_data_system.core.config import get_config
+from industrial_data_system.core.db_manager import DatabaseManager
+from industrial_data_system.core.storage import LocalStorageManager
 
 
 def backup_database(destination: Path) -> Path:

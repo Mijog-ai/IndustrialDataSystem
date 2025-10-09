@@ -59,8 +59,8 @@ Record the mounted path—you will reference it in the `.env` file.
 If you have existing JSON data from earlier versions:
 
 ```bash
-python migrate_auth.py
-python migrate_data.py --legacy-dir /path/to/exported/files
+python -m industrial_data_system.cli.migrate_auth
+python -m industrial_data_system.cli.migrate_data --legacy-dir /path/to/exported/files
 ```
 
 Both scripts leave timestamped backups of the original JSON files in the `data/`
@@ -68,8 +68,8 @@ folder for reference.
 
 ## 5. Routine Maintenance
 
-- Schedule regular database backups via `python admin_tools.py backup-db`.
-- Monitor shared-drive capacity with `python admin_tools.py storage-report`.
+- Schedule regular database backups via `python -m industrial_data_system.cli.admin backup-db`.
+- Monitor shared-drive capacity with `python -m industrial_data_system.cli.admin storage-report`.
 - Keep the `.env` file consistent across workstations so paths remain valid.
 
 Following these steps ensures the applications operate against a consistent,

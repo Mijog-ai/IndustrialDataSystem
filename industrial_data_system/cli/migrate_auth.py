@@ -6,8 +6,8 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from auth import default_data_path
-from database import migrate_from_json
+from industrial_data_system.core.auth import default_data_path
+from industrial_data_system.core.database import migrate_from_json
 
 
 def _backup_file(path: Path) -> None:

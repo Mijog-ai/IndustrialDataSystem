@@ -30,11 +30,11 @@ from PyQt5.QtWidgets import (
     QFormLayout,
 )
 
-from app import IndustrialTheme
-from auth import LocalAuthStore, LocalUser
-from config import get_config
-from db_manager import DatabaseManager
-from storage_manager import LocalStorageManager
+from industrial_data_system.apps.upload import IndustrialTheme
+from industrial_data_system.core.auth import LocalAuthStore, LocalUser
+from industrial_data_system.core.config import get_config
+from industrial_data_system.core.db_manager import DatabaseManager
+from industrial_data_system.core.storage import LocalStorageManager
 
 READER_SECURITY_CODE = "123321"
 

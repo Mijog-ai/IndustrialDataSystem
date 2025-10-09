@@ -33,10 +33,10 @@ from PyQt5.QtWidgets import (
     QDialog,
     QDialogButtonBox,
 )
-from auth import LocalAuthStore, LocalUser, UploadHistoryStore
-from config import get_config
-from db_manager import DatabaseManager
-from storage_manager import LocalStorageManager, StorageError
+from industrial_data_system.core.auth import LocalAuthStore, LocalUser, UploadHistoryStore
+from industrial_data_system.core.config import get_config
+from industrial_data_system.core.db_manager import DatabaseManager
+from industrial_data_system.core.storage import LocalStorageManager, StorageError
 
 # ---------------------------------------------------------------------------
 # Environment loading helpers
@@ -51,6 +51,8 @@ def _load_environment() -> None:
     # 1. Directory that contains the running script (useful in development).
     script_directory = Path(__file__).resolve().parent
     candidate_paths.append(script_directory / ".env")
+    candidate_paths.append(script_directory.parent / ".env")
+    candidate_paths.append(script_directory.parent.parent / ".env")
 
     # 2. When running from a PyInstaller bundle, assets live under ``_MEIPASS``.
     meipass_dir = getattr(sys, "_MEIPASS", None)

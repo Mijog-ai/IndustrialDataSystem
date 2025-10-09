@@ -8,7 +8,7 @@ block_cipher = None
 hiddenimports = ["dotenv"] + collect_submodules("sqlite3")
 
 a = Analysis(
-    ['app.py'],
+    ['main.py'],
     pathex=[],
     binaries=[],
     datas=[(".env", ".")],

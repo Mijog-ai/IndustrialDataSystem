@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterator, Optional
 
-from config import get_config
+from industrial_data_system.core.config import get_config
 
 _LOCK = threading.Lock()
 

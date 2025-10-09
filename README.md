@@ -22,7 +22,20 @@ metadata tracking—no cloud services are required.
   previews images and text-based files locally, and lets users copy or download
   artefacts without leaving the network.
 - **Environment-driven configuration** – Paths and storage limits are managed
-  through a `.env` file interpreted by `config.py`.
+  through a `.env` file interpreted by `industrial_data_system/core/config.py`.
+
+## Repository Layout
+
+The source code is organised into a Python package to separate the UI, core
+services, and command-line utilities:
+
+- `industrial_data_system/apps/` – PyQt5 desktop applications (upload and reader).
+- `industrial_data_system/core/` – Shared services including configuration,
+  database access, authentication, and storage helpers.
+- `industrial_data_system/cli/` – Administrative and migration scripts that can
+  be launched with `python -m industrial_data_system.cli.<module>`.
+- `templates/` and `static/` – Assets used by the optional Flask dashboard.
+- `main.py` – Lightweight launcher that lets operators open either desktop app.
 
 ## Prerequisites
 
@@ -89,22 +102,22 @@ metadata tracking—no cloud services are required.
 
 ## Migration and Test Utilities
 
-- **`migrate_auth.py`** – Imports existing JSON credential and upload history
+- **`industrial_data_system/cli/migrate_auth.py`** – Imports existing JSON credential and upload history
   files into the SQLite database while leaving timestamped backups.
-- **`migrate_data.py`** – Replays legacy upload history and optionally copies
+- **`industrial_data_system/cli/migrate_data.py`** – Replays legacy upload history and optionally copies
   files from an exported directory into the new shared-drive structure.
-- **`setup_test_data.py`** – Generates sample users, test types, and files for
+- **`industrial_data_system/cli/setup_test_data.py`** – Generates sample users, test types, and files for
   local testing.
 
 ## Administrative Helpers
 
-`admin_tools.py` provides several maintenance commands:
+`industrial_data_system/cli/admin.py` provides several maintenance commands:
 
 ```bash
-python admin_tools.py backup-db [--output PATH]
-python admin_tools.py restore-db PATH
-python admin_tools.py list-users
-python admin_tools.py storage-report
+python -m industrial_data_system.cli.admin backup-db [--output PATH]
+python -m industrial_data_system.cli.admin restore-db PATH
+python -m industrial_data_system.cli.admin list-users
+python -m industrial_data_system.cli.admin storage-report
 ```
 
 These commands create database backups, restore from snapshots, list users, and
