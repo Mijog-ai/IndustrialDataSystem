@@ -34,7 +34,9 @@ services, and command-line utilities:
   database access, authentication, and storage helpers.
 - `industrial_data_system/cli/` – Administrative and migration scripts that can
   be launched with `python -m industrial_data_system.cli.<module>`.
-- `templates/` and `static/` – Assets used by the optional Flask dashboard.
+
+Legacy Flask dashboard assets have been removed so the repository now focuses
+solely on the PyQt5 desktop tools and shared services.
 - `main.py` – Lightweight launcher that lets operators open either desktop app.
 
 ## Prerequisites
