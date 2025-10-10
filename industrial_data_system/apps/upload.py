@@ -1468,11 +1468,7 @@ class IndustrialDataApp(QMainWindow):
         self.session_state.clear()
         self.current_username = ""
         self._alert("You have been signed out.", QMessageBox.Information)
-        # Close the window so control returns to the application gateway.
-        # The gateway window is configured to reappear when child windows
-        # (like this upload app) are closed, which aligns with the desired
-        # post-logout navigation behaviour.
-        self.close()
+        self.show_login()
 
     def refresh_files(self) -> None:
         user = self.session_state.user
