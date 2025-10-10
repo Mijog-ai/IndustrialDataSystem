@@ -10,6 +10,9 @@ class StatisticsArea(QWidget):
         self.stats_table = QTableWidget()
         self.stats_table.setColumnCount(5)
         self.stats_table.setHorizontalHeaderLabels(["Statistic", "Max", "Mean", "Min", "Std"])
+        self.stats_table.setAlternatingRowColors(True)
+        self.stats_table.verticalHeader().setVisible(False)
+        self.stats_table.setObjectName("statistics-table")
         self.layout.addWidget(self.stats_table)
 
     def update_stats(self, df):

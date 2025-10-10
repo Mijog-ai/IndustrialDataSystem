@@ -1,10 +1,12 @@
 import logging
 import traceback
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QMessageBox, QCheckBox, QHBoxLayout, QLabel, QLineEdit, QPushButton
+from PyQt5.QtCore import QSize
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QMessageBox, QCheckBox, QHBoxLayout, QLineEdit, QPushButton
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from plotter_gui_component.utils.asc_utils import apply_smoothing
+from plotter_gui_component.theme import PlotterTheme
 import mplcursors
 import matplotlib.colors as mcolors
 import numpy as np
@@ -14,6 +16,7 @@ class PlotArea(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
         self.layout = QVBoxLayout(self)
+        self.setObjectName("plot-area")
         self.cursor = None
         self.show_cursor = True
         self.show_legend = True
@@ -30,6 +33,7 @@ class PlotArea(QWidget):
 
         # Add title input and buttons
         title_layout = QHBoxLayout()
+        title_layout.setSpacing(8)
         self.title_input = QLineEdit()
         self.title_input.setPlaceholderText("Enter plot title")
         self.set_title_button = QPushButton("Set Title")
@@ -44,8 +48,12 @@ class PlotArea(QWidget):
 
 
         self.figure = Figure(figsize=(5, 4), dpi=100)
+        self.figure.patch.set_facecolor(PlotterTheme.CHART_BG)
         self.canvas = FigureCanvas(self.figure)
+        self.canvas.setStyleSheet("background: transparent;")
         self.toolbar = NavigationToolbar(self.canvas, self)
+        self.toolbar.setIconSize(QSize(16, 16))
+        self.toolbar.setStyleSheet("QToolButton { padding: 4px; }")
 
         # Add checkboxes for cursor and legend toggle
         checkbox_layout = QHBoxLayout()
@@ -105,6 +113,7 @@ class PlotArea(QWidget):
             self.figure.clear()
 
             ax = self.figure.add_subplot(111)
+            ax.set_facecolor(PlotterTheme.CHART_BG)
             axes = [ax]
 
             # Generate a color map with distinct colors
@@ -168,8 +177,15 @@ class PlotArea(QWidget):
                 if self.show_legend:
                     new_ax.legend(loc='upper left')
 
-            ax.set_xlabel(x_column)
-            ax.set_title(title)
+            ax.set_xlabel(x_column, color=PlotterTheme.TEXT)
+            ax.set_title(title, color=PlotterTheme.TEXT)
+            ax.tick_params(axis='x', colors=PlotterTheme.TEXT)
+            ax.grid(color=PlotterTheme.BORDER_LIGHT, alpha=0.2)
+            for axis in axes:
+                for spine_name in ('bottom', 'top', 'left', 'right'):
+                    spine = axis.spines.get(spine_name)
+                    if spine is not None:
+                        spine.set_color(PlotterTheme.BORDER_LIGHT)
 
             # Add limit lines
             for line in limit_lines:
