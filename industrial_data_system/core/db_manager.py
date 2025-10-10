@@ -406,6 +406,37 @@ class DatabaseManager:
     def delete_upload(self, upload_id: int) -> None:
         self._execute("DELETE FROM uploads WHERE id = ?", (upload_id,))
 
+    def prune_missing_uploads(self, base_path: Path) -> int:
+        """Remove upload records that no longer have files on disk.
+
+        Parameters
+        ----------
+        base_path:
+            Root directory where uploaded files are stored.
+
+        Returns
+        -------
+        int
+            Number of records removed from the database.
+        """
+
+        base_path = Path(base_path)
+        if not base_path.exists():
+            return 0
+
+        removed = 0
+        for record in self.list_uploads():
+            file_path = record.file_path
+            candidate = Path(file_path) if file_path else None
+            if candidate and not candidate.is_absolute():
+                candidate = base_path / candidate
+
+            if not candidate or not candidate.exists():
+                self.delete_upload(record.id)
+                removed += 1
+
+        return removed
+
     def get_storage_usage(self) -> int:
         row = self._execute("SELECT COALESCE(SUM(file_size), 0) AS usage FROM uploads", fetchone=True)
         if row is None:
