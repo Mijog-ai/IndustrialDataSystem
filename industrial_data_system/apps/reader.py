@@ -5,7 +5,7 @@ import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional
 
 from PyQt5.QtCore import Qt, QUrl, pyqtSignal
 from PyQt5.QtGui import QDesktopServices, QFont, QPixmap
@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
     QPlainTextEdit,
     QSplitter,
     QStackedWidget,
+    QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -30,6 +31,12 @@ from PyQt5.QtWidgets import (
     QFormLayout,
 )
 
+from industrial_data_system.apps.tools import (
+    run_ai_data_study_tool,
+    run_analyzer_tool,
+    run_plotter_tool,
+    run_train_tool,
+)
 from industrial_data_system.apps.upload import IndustrialTheme
 from industrial_data_system.core.auth import LocalAuthStore, LocalUser
 from industrial_data_system.core.config import get_config
@@ -297,23 +304,63 @@ class ReaderDashboard(QWidget):
         preview_layout.setContentsMargins(12, 12, 12, 12)
         preview_layout.setSpacing(12)
 
+        content_layout = QHBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(24)
+
+        preview_content = QWidget()
+        preview_content_layout = QVBoxLayout(preview_content)
+        preview_content_layout.setContentsMargins(0, 0, 0, 0)
+        preview_content_layout.setSpacing(12)
+
         self.preview_title = QLabel("Select a file to preview")
         self.preview_title.setProperty("subheading", True)
-        preview_layout.addWidget(self.preview_title)
+        preview_content_layout.addWidget(self.preview_title)
 
         self.preview_message = QLabel()
         self.preview_message.setWordWrap(True)
-        preview_layout.addWidget(self.preview_message)
+        preview_content_layout.addWidget(self.preview_message)
 
         self.image_preview = QLabel()
         self.image_preview.setAlignment(Qt.AlignCenter)
         self.image_preview.hide()
-        preview_layout.addWidget(self.image_preview)
+        preview_content_layout.addWidget(self.image_preview)
 
         self.text_preview = QPlainTextEdit()
         self.text_preview.setReadOnly(True)
         self.text_preview.hide()
-        preview_layout.addWidget(self.text_preview, stretch=1)
+        preview_content_layout.addWidget(self.text_preview, stretch=1)
+
+        tools_container = QWidget()
+        tools_layout = QVBoxLayout(tools_container)
+        tools_layout.setContentsMargins(0, 0, 0, 0)
+        tools_layout.setSpacing(8)
+
+        tool_buttons: List[tuple[str, Callable[[], str]]] = [
+            ("Plotter", run_plotter_tool),
+            ("Analyzer", run_analyzer_tool),
+            ("AI Data Study", run_ai_data_study_tool),
+            ("Train", run_train_tool),
+        ]
+
+        for label, callback in tool_buttons:
+            button = QPushButton(label)
+            button.setProperty("secondary", True)
+            button.clicked.connect(
+                lambda _, name=label, runner=callback: self._launch_tool(name, runner)
+            )
+            tools_layout.addWidget(button)
+
+        tools_layout.addStretch()
+
+        content_layout.addWidget(preview_content, stretch=4)
+        content_layout.addWidget(tools_container, stretch=1)
+
+        preview_layout.addLayout(content_layout, stretch=1)
+
+        self.tool_tabs = QTabWidget()
+        self.tool_tabs.hide()
+        preview_layout.addWidget(self.tool_tabs, stretch=1)
 
         self.download_button = QPushButton("Download")
         self.download_button.setProperty("primary", True)
@@ -328,6 +375,7 @@ class ReaderDashboard(QWidget):
         self.tree.currentItemChanged.connect(self._handle_selection)
 
         self._current_resource: Optional[LocalResource] = None
+        self._tool_outputs: Dict[str, QPlainTextEdit] = {}
 
     def set_user_identity(self, display_name: str, email: str) -> None:
         if display_name:
@@ -397,6 +445,37 @@ class ReaderDashboard(QWidget):
         self._current_resource = resource
         self.download_button.setEnabled(True)
         self._preview_resource(resource)
+
+    def _launch_tool(self, title: str, runner: Callable[[], str]) -> None:
+        try:
+            output = runner()
+        except Exception as exc:
+            output = f"An error occurred while running {title}: {exc}"
+
+        if title in self._tool_outputs:
+            text_edit = self._tool_outputs[title]
+            text_edit.setPlainText(output)
+            container = text_edit.parentWidget()
+            index = self.tool_tabs.indexOf(container)
+            if index != -1:
+                self.tool_tabs.setCurrentIndex(index)
+            self.tool_tabs.show()
+            return
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+
+        text_edit = QPlainTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setPlainText(output)
+        layout.addWidget(text_edit)
+
+        self.tool_tabs.addTab(container, title)
+        self.tool_tabs.show()
+        self.tool_tabs.setCurrentWidget(container)
+        self._tool_outputs[title] = text_edit
 
     def _preview_resource(self, resource: LocalResource) -> None:
         self.image_preview.hide()
