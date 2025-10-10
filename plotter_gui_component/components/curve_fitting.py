@@ -97,8 +97,10 @@ class CurveFitting(QGroupBox):
     @staticmethod
     def calculate_r_squared(y_true, y_pred):
         ss_res = np.sum((y_true - y_pred) ** 2)
-        ss_tot = np.sum((y_true - np.mean(y_true))==2)
-        return 1-(ss_res/ss_tot)
+        ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+        if ss_tot == 0:
+            return 1.0
+        return 1 - (ss_res / ss_tot)
 
     def reset(self):
         self.fit_type.setCurrentIndex(0)

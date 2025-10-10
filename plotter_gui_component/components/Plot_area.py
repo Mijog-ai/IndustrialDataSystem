@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QMessageBox, QCheckBox, QHBoxL
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
-from utils.asc_utils import apply_smoothing
+from plotter_gui_component.utils.asc_utils import apply_smoothing
 import mplcursors
 import matplotlib.colors as mcolors
 import numpy as np

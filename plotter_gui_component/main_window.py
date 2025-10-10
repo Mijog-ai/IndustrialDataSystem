@@ -1,14 +1,19 @@
 from PyQt5.QtWidgets import QMainWindow, QHBoxLayout, QWidget, QFileDialog, QMessageBox, QAction
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent
-from gui.menu_bar import MenuBar
-from gui.tool_bar import ToolBar
-from gui.left_panel import LeftPanel
-from gui.right_panel import RightPanel
-from utils.asc_utils import load_and_process_asc_file, load_and_process_csv_file, load_and_process_tdms_file
+
+from plotter_gui_component.menu_bar import MenuBar
+from plotter_gui_component.tool_bar import ToolBar
+from plotter_gui_component.left_panel import LeftPanel
+from plotter_gui_component.right_panel import RightPanel
+from plotter_gui_component.utils.asc_utils import (
+    load_and_process_asc_file,
+    load_and_process_csv_file,
+    load_and_process_tdms_file,
+)
 import pandas as pd
 import logging
 import os
-from gui.components.session_manager import SessionManager
+from plotter_gui_component.components.session_manager import SessionManager
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -74,12 +79,16 @@ class MainWindow(QMainWindow):
 
 
 
-    def load_file(self, file_path=None):
+    def load_file(self, file_path=None, *, show_message=True, raise_on_error=False):
         print("load_file method called in MainWindow")
         logging.info("load_file method called in MainWindow")
         if file_path is None:
-            file_path, _ = QFileDialog.getOpenFileName(self, "Open File", "",
-                                                       "All Files (*);;ASC Files (*.asc);;CSV Files (*.csv);;TDMS Files (*.tdms)")
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Open File",
+                "",
+                "All Files (*);;ASC Files (*.asc);;CSV Files (*.csv);;TDMS Files (*.tdms)",
+            )
         if file_path:
             print(f"File selected: {file_path}")
             logging.info(f"File selected: {file_path}")
@@ -106,10 +115,14 @@ class MainWindow(QMainWindow):
                 self.current_file = file_path
                 self.tool_bar.update_file_name(self.current_file)
                 logging.info(f"File loaded successfully. Shape: {self.df.shape}")
-                QMessageBox.information(self, "Success", "File loaded successfully!")
+                if show_message:
+                    QMessageBox.information(self, "Success", "File loaded successfully!")
             except Exception as e:
                 logging.error(f"Error loading file: {str(e)}")
-                QMessageBox.critical(self, "Error", f"An error occurred while loading the file: {str(e)}")
+                if not raise_on_error:
+                    QMessageBox.critical(self, "Error", f"An error occurred while loading the file: {str(e)}")
+                if raise_on_error:
+                    raise
         else:
             logging.info("File loading cancelled by user")
 

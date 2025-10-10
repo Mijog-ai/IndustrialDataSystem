@@ -1,7 +1,10 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSplitter
-from gui.components.Plot_area import PlotArea
-from gui.components.statistics_area import StatisticsArea
 from PyQt5.QtCore import Qt
+
+from plotter_gui_component.components.Plot_area import PlotArea
+from plotter_gui_component.components.statistics_area import StatisticsArea
+
+
 class RightPanel(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
