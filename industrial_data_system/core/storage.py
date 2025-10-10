@@ -21,6 +21,7 @@ class StoredFile:
 
     absolute_path: Path
     relative_path: Path
+    pump_series: str
     test_type: str
     size_bytes: int
 
@@ -52,10 +53,26 @@ class LocalStorageManager:
             candidate = self.base_path / candidate
         return candidate
 
-    def ensure_folder_exists(self, test_type: str) -> Path:
+    def ensure_pump_series_exists(self, pump_series: str) -> Path:
+        if not pump_series:
+            raise StorageError("Pump series name is required.")
         if not self.ensure_drive_available():
             raise StorageError("Shared drive is not accessible.")
-        folder = self.base_path / "tests" / test_type
+        series_root = self.base_path / pump_series
+        tests_folder = series_root / "tests"
+        try:
+            tests_folder.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise StorageError(f"Unable to create folder for pump series '{pump_series}': {exc}") from exc
+        return tests_folder
+
+    def ensure_folder_exists(self, pump_series: str, test_type: str) -> Path:
+        if not self.ensure_drive_available():
+            raise StorageError("Shared drive is not accessible.")
+        if not test_type:
+            raise StorageError("Test type name is required.")
+        tests_folder = self.ensure_pump_series_exists(pump_series)
+        folder = tests_folder / test_type
         try:
             folder.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
@@ -106,7 +123,13 @@ class LocalStorageManager:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def upload_file(self, source_path: Path | str, test_type: str, filename: Optional[str] = None) -> StoredFile:
+    def upload_file(
+        self,
+        source_path: Path | str,
+        pump_series: str,
+        test_type: str,
+        filename: Optional[str] = None,
+    ) -> StoredFile:
         source = Path(source_path)
         if not source.is_file():
             raise StorageError(f"Source file '{source}' does not exist.")
@@ -115,7 +138,7 @@ class LocalStorageManager:
             raise StorageError("Shared drive is not accessible. Please reconnect and try again.")
 
         self._validate_extension(source.name if filename is None else filename)
-        destination_folder = self.ensure_folder_exists(test_type)
+        destination_folder = self.ensure_folder_exists(pump_series, test_type)
         destination_name = filename or source.name
         destination = destination_folder / destination_name
         destination = self._unique_destination(destination)
@@ -132,6 +155,7 @@ class LocalStorageManager:
         return StoredFile(
             absolute_path=destination,
             relative_path=relative_path,
+            pump_series=pump_series,
             test_type=test_type,
             size_bytes=file_size,
         )
@@ -145,30 +169,60 @@ class LocalStorageManager:
         except OSError as exc:
             raise StorageError(f"Unable to delete file '{target}': {exc}") from exc
 
-    def get_file_path(self, test_type: str, filename: str) -> Path:
-        folder = self.ensure_folder_exists(test_type)
+    def get_file_path(self, pump_series: str, test_type: str, filename: str) -> Path:
+        folder = self.ensure_folder_exists(pump_series, test_type)
         return folder / filename
 
-    def list_files(self, test_type: Optional[str] = None) -> List[StoredFile]:
+    def list_files(
+        self,
+        pump_series: Optional[str] = None,
+        test_type: Optional[str] = None,
+    ) -> List[StoredFile]:
         if not self.ensure_drive_available():
             return []
-        base = self.base_path / "tests"
-        if test_type:
-            base = base / test_type
-            if not base.exists():
-                return []
         stored: List[StoredFile] = []
-        for path in base.rglob("*"):
-            if path.is_file():
-                relative = path.relative_to(self.base_path)
-                stored.append(
-                    StoredFile(
-                        absolute_path=path,
-                        relative_path=relative,
-                        test_type=relative.parts[1] if len(relative.parts) > 1 else test_type or "",
-                        size_bytes=path.stat().st_size,
-                    )
-                )
+        series_dirs: List[Path]
+        if pump_series:
+            candidate = self.base_path / pump_series
+            if not candidate.exists():
+                normalized = pump_series.lower()
+                if normalized == "general":
+                    candidate = self.base_path / "General"
+                    if not candidate.exists():
+                        candidate = self.base_path / "tests"
+                elif pump_series == "tests":
+                    candidate = self.base_path / "tests"
+            series_dirs = [candidate] if candidate.exists() else []
+        else:
+            series_dirs = [child for child in self.base_path.iterdir() if child.is_dir()]
+
+        for series_dir in series_dirs:
+            current_series = series_dir.name
+            tests_dir = series_dir / "tests"
+            if series_dir.name == "tests":
+                current_series = "General"
+                tests_dir = series_dir
+            if not tests_dir.exists():
+                continue
+            target_dirs: List[Path]
+            if test_type:
+                candidate = tests_dir / test_type
+                target_dirs = [candidate] if candidate.exists() else []
+            else:
+                target_dirs = [child for child in tests_dir.iterdir() if child.is_dir()]
+            for target_dir in target_dirs:
+                for path in target_dir.rglob("*"):
+                    if path.is_file():
+                        relative = path.relative_to(self.base_path)
+                        stored.append(
+                            StoredFile(
+                                absolute_path=path,
+                                relative_path=relative,
+                                pump_series=current_series,
+                                test_type=target_dir.name,
+                                size_bytes=path.stat().st_size,
+                            )
+                        )
         return stored
 
     def get_file_url(self, file_path: Path | str) -> str:

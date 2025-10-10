@@ -9,6 +9,9 @@ from industrial_data_system.core.db_manager import DatabaseManager
 from industrial_data_system.core.storage import LocalStorageManager, StorageError
 
 
+DEFAULT_PUMP_SERIES = "Sample Series"
+
+
 def main() -> None:
     config = get_config()
     manager = DatabaseManager()
@@ -35,14 +38,16 @@ def main() -> None:
     base_dir = Path(__file__).resolve().parent / "sample_data"
     base_dir.mkdir(exist_ok=True)
 
+    manager.ensure_pump_series(DEFAULT_PUMP_SERIES, "Sample pump series for demonstration")
+
     for name, description in sample_types.items():
-        manager.ensure_test_type(name, description)
+        manager.ensure_test_type(name, description, pump_series=DEFAULT_PUMP_SERIES)
 
     for test_type, description in sample_types.items():
         sample_file = base_dir / f"{test_type.lower()}_sample.csv"
         sample_file.write_text("timestamp,value\n2024-01-01T00:00:00Z,42\n", encoding="utf-8")
         try:
-            stored = storage.upload_file(sample_file, test_type)
+            stored = storage.upload_file(sample_file, DEFAULT_PUMP_SERIES, test_type)
         except StorageError as exc:
             print(f"Failed to stage sample file for {test_type}: {exc}")
             continue
@@ -50,6 +55,7 @@ def main() -> None:
             user_id=user.id,
             filename=stored.absolute_path.name,
             file_path=str(stored.relative_path),
+            pump_series=DEFAULT_PUMP_SERIES,
             test_type=test_type,
             file_size=stored.size_bytes,
             description=description,

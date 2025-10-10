@@ -298,6 +298,67 @@ class IndustrialTheme:
         """
 
 
+class NewPumpSeriesDialog(QDialog):
+    """Dialog for creating a new pump series."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Create New Pump Series")
+        self.setMinimumWidth(400)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(20)
+        layout.setContentsMargins(24, 24, 24, 24)
+
+        title = QLabel("New Pump Series")
+        title.setProperty("subheading", True)
+        layout.addWidget(title)
+
+        desc = QLabel("Enter a name for the new pump series. A folder hierarchy will be created on the shared drive.")
+        desc.setProperty("caption", True)
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        input_label = QLabel("Pump Series Name")
+        input_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
+        layout.addWidget(input_label)
+
+        self.series_input = QLineEdit()
+        self.series_input.setPlaceholderText("e.g., Alpha Series, Beta Series")
+        layout.addWidget(self.series_input)
+
+        description_label = QLabel("Description (optional)")
+        description_label.setStyleSheet(
+            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
+        )
+        layout.addWidget(description_label)
+
+        self.description_input = QLineEdit()
+        self.description_input.setPlaceholderText("Short summary for this pump series")
+        layout.addWidget(self.description_input)
+
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+
+        for button in button_box.buttons():
+            if button_box.buttonRole(button) == QDialogButtonBox.AcceptRole:
+                button.setProperty("primary", True)
+            else:
+                button.setProperty("secondary", True)
+            button.setMinimumHeight(44)
+
+        layout.addWidget(button_box)
+
+    def get_pump_series(self) -> str:
+        return self.series_input.text().strip()
+
+    def get_description(self) -> str:
+        return self.description_input.text().strip()
+
+
 class NewTestTypeDialog(QDialog):
     """Dialog for creating a new test type."""
 
@@ -675,9 +736,10 @@ class DashboardPage(QWidget):
     """Modern dashboard with test type organization."""
 
     logout_requested = pyqtSignal()
-    upload_requested = pyqtSignal(list, str)  # file_path, test_type
+    upload_requested = pyqtSignal(list, str, str)  # file_paths, pump_series, test_type
     refresh_requested = pyqtSignal()
-    test_type_created = pyqtSignal(str, str)
+    pump_series_created = pyqtSignal(str, str)
+    test_type_created = pyqtSignal(str, str, str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -740,9 +802,29 @@ class DashboardPage(QWidget):
         upload_layout = QVBoxLayout(upload_card)
         upload_layout.setSpacing(16)
 
-        upload_title = QLabel("Test Type Selection")
+        upload_title = QLabel("Pump Series & Test Type")
         upload_title.setProperty("subheading", True)
         upload_layout.addWidget(upload_title)
+
+        # Pump series selector
+        pump_series_layout = QHBoxLayout()
+        pump_series_layout.setSpacing(12)
+
+        pump_series_label = QLabel("Pump Series:")
+        pump_series_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
+        pump_series_layout.addWidget(pump_series_label)
+
+        self.pump_series_combo = QComboBox()
+        self.pump_series_combo.setMinimumWidth(250)
+        self.pump_series_combo.currentIndexChanged.connect(self._handle_pump_series_changed)
+        pump_series_layout.addWidget(self.pump_series_combo, stretch=1)
+
+        new_series_button = QPushButton("+ New Pump Series")
+        new_series_button.setProperty("secondary", True)
+        new_series_button.clicked.connect(self._create_new_pump_series)
+        pump_series_layout.addWidget(new_series_button)
+
+        upload_layout.addLayout(pump_series_layout)
 
         # Test type selector
         test_type_layout = QHBoxLayout()
@@ -784,13 +866,20 @@ class DashboardPage(QWidget):
         files_header.setStyleSheet(f"padding: 20px 24px; border-bottom: 1px solid {IndustrialTheme.BORDER};")
         files_layout.addWidget(files_header)
 
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Filename", "Test Type", "Path", "Uploaded"])
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels([
+            "Filename",
+            "Pump Series",
+            "Test Type",
+            "Path",
+            "Uploaded",
+        ])
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -850,43 +939,111 @@ class DashboardPage(QWidget):
         scroll.setWidget(container)
         main_layout.addWidget(scroll)
 
-        self.test_types: List[str] = []
+        self.catalog: Dict[str, List[str]] = {}
+        self.pump_series_options: List[str] = []
 
-    def set_test_types(self, test_types: List[str]) -> None:
-        """Update the test type dropdown with available types."""
-        self.test_types = sorted(test_types)
+    def set_catalog(self, catalog: Dict[str, List[str]]) -> None:
+        """Update pump series and test type selections."""
+        previous_series = self.get_selected_pump_series()
+        self.catalog = {name: sorted(types) for name, types in catalog.items()}
+        self.pump_series_options = sorted(self.catalog.keys())
+        self.pump_series_combo.blockSignals(True)
+        self.pump_series_combo.clear()
+        if self.pump_series_options:
+            self.pump_series_combo.addItems(self.pump_series_options)
+            if previous_series in self.pump_series_options:
+                index = self.pump_series_combo.findText(previous_series)
+                if index >= 0:
+                    self.pump_series_combo.setCurrentIndex(index)
+        else:
+            self.pump_series_combo.addItem("No pump series available")
+        self.pump_series_combo.blockSignals(False)
+        self._populate_test_types(self.get_selected_pump_series())
+
+    def _populate_test_types(self, pump_series: Optional[str]) -> None:
         self.test_type_combo.clear()
-        if self.test_types:
-            self.test_type_combo.addItems(self.test_types)
+        if not pump_series or pump_series not in self.catalog:
+            self.test_type_combo.addItem("No test types available")
+            return
+        test_types = self.catalog.get(pump_series, [])
+        if test_types:
+            self.test_type_combo.addItems(test_types)
         else:
             self.test_type_combo.addItem("No test types available")
 
     def get_selected_test_type(self) -> Optional[str]:
         """Get the currently selected test type."""
-        if not self.test_types:
+        if not self.catalog:
             return None
-        return self.test_type_combo.currentText()
+        value = self.test_type_combo.currentText()
+        if value == "No test types available":
+            return None
+        return value
+
+    def get_selected_pump_series(self) -> Optional[str]:
+        if not self.pump_series_options:
+            return None
+        value = self.pump_series_combo.currentText()
+        if value == "No pump series available":
+            return None
+        return value
+
+    def _handle_pump_series_changed(self) -> None:
+        pump_series = self.get_selected_pump_series()
+        self._populate_test_types(pump_series)
 
     def _create_new_test_type(self) -> None:
         """Show dialog to create a new test type."""
+        pump_series = self.get_selected_pump_series()
+        if not pump_series:
+            QMessageBox.warning(
+                self,
+                "Industrial Data System",
+                "Please select or create a pump series before adding a test type.",
+            )
+            return
         dialog = NewTestTypeDialog(self)
         if dialog.exec_() == QDialog.Accepted:
             test_type = dialog.get_test_type()
             description = dialog.get_description()
             if test_type:
-                self.test_type_created.emit(test_type, description)
+                self.test_type_created.emit(pump_series, test_type, description)
                 # Add to combo box
-                if test_type not in self.test_types:
-                    self.test_types.append(test_type)
-                    self.test_types.sort()
-                    self.test_type_combo.clear()
-                    self.test_type_combo.addItems(self.test_types)
-                    # Select the new type
+                test_types = self.catalog.setdefault(pump_series, [])
+                if test_type not in test_types:
+                    test_types.append(test_type)
+                    test_types.sort()
+                    self._populate_test_types(pump_series)
                     index = self.test_type_combo.findText(test_type)
                     if index >= 0:
                         self.test_type_combo.setCurrentIndex(index)
                 else:
                     QMessageBox.information(self, "Industrial Data System", f"Test type '{test_type}' already exists.")
+
+    def _create_new_pump_series(self) -> None:
+        dialog = NewPumpSeriesDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            series_name = dialog.get_pump_series()
+            description = dialog.get_description()
+            if series_name:
+                if series_name in self.catalog:
+                    QMessageBox.information(
+                        self,
+                        "Industrial Data System",
+                        f"Pump series '{series_name}' already exists.",
+                    )
+                    return
+                self.pump_series_created.emit(series_name, description)
+                self.catalog[series_name] = []
+                self.pump_series_options = sorted(self.catalog.keys())
+                self.pump_series_combo.blockSignals(True)
+                self.pump_series_combo.clear()
+                self.pump_series_combo.addItems(self.pump_series_options)
+                index = self.pump_series_combo.findText(series_name)
+                if index >= 0:
+                    self.pump_series_combo.setCurrentIndex(index)
+                self.pump_series_combo.blockSignals(False)
+                self._populate_test_types(series_name)
 
     def set_user_identity(self, username: str, email: str) -> None:
         username = username.strip()
@@ -906,17 +1063,19 @@ class DashboardPage(QWidget):
         self.table.setRowCount(len(files))
         for row, file_record in enumerate(files):
             filename_item = QTableWidgetItem(file_record.get("filename", ""))
+            pump_series_item = QTableWidgetItem(file_record.get("pump_series", ""))
             test_type_item = QTableWidgetItem(file_record.get("test_type", ""))
             path_item = QTableWidgetItem(file_record.get("absolute_path") or file_record.get("file_path", ""))
             created_item = QTableWidgetItem(file_record.get("created_at", ""))
 
-            for item in (filename_item, test_type_item, path_item, created_item):
+            for item in (filename_item, pump_series_item, test_type_item, path_item, created_item):
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
 
             self.table.setItem(row, 0, filename_item)
-            self.table.setItem(row, 1, test_type_item)
-            self.table.setItem(row, 2, path_item)
-            self.table.setItem(row, 3, created_item)
+            self.table.setItem(row, 1, pump_series_item)
+            self.table.setItem(row, 2, test_type_item)
+            self.table.setItem(row, 3, path_item)
+            self.table.setItem(row, 4, created_item)
 
     def _get_selected_record(self) -> Optional[Dict[str, Any]]:
         selection = self.table.selectionModel().selectedRows()
@@ -1015,6 +1174,14 @@ class DashboardPage(QWidget):
         )
 
     def _select_file(self) -> None:
+        pump_series = self.get_selected_pump_series()
+        if not pump_series or pump_series == "No pump series available":
+            QMessageBox.warning(
+                self,
+                "Industrial Data System",
+                "Please select or create a pump series before uploading files.",
+            )
+            return
         test_type = self.get_selected_test_type()
         if not test_type or test_type == "No test types available":
             QMessageBox.warning(
@@ -1035,7 +1202,7 @@ class DashboardPage(QWidget):
             file_dialog_filter,
         )
         if file_paths:  # This is now a list
-            self.upload_requested.emit(file_paths, test_type)  # Send list instead of single path
+            self.upload_requested.emit(file_paths, pump_series, test_type)  # Send list instead of single path
 
     def display_csv_preview(self, headers: List[str], rows: List[List[str]]) -> None:
         if not headers:
@@ -1078,6 +1245,7 @@ class IndustrialDataApp(QMainWindow):
         self.history_store = UploadHistoryStore(self.db_manager)
         self.storage_manager = LocalStorageManager(config=CONFIG, database=self.db_manager)
         self.current_username: str = ""
+        self.default_pump_series = "General"
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -1100,6 +1268,7 @@ class IndustrialDataApp(QMainWindow):
         self.dashboard_page.logout_requested.connect(self.handle_logout)
         self.dashboard_page.upload_requested.connect(self.handle_upload)
         self.dashboard_page.refresh_requested.connect(self.refresh_files)
+        self.dashboard_page.pump_series_created.connect(self.handle_new_pump_series)
         self.dashboard_page.test_type_created.connect(self.handle_new_test_type)
 
         self.show_login()
@@ -1118,23 +1287,78 @@ class IndustrialDataApp(QMainWindow):
     def load_test_types(self) -> None:
         """Load available test types from the database and shared drive."""
         try:
-            records = self.db_manager.list_test_types()
-            test_types = {record.name for record in records}
-            tests_dir = CONFIG.files_base_path / "tests"
-            if tests_dir.exists():
-                for child in tests_dir.iterdir():
-                    if child.is_dir():
-                        test_types.add(child.name)
-            test_type_list = sorted(test_types)
-            self.dashboard_page.set_test_types(test_type_list)
-        except Exception as exc:
-            self.dashboard_page.set_test_types([])
+            catalog: Dict[str, set[str]] = {}
 
-    def handle_new_test_type(self, name: str, description: str) -> None:
+            def ensure_series(name: Optional[str]) -> set[str]:
+                series_name = (name or self.default_pump_series).strip() or self.default_pump_series
+                return catalog.setdefault(series_name, set())
+
+            # Existing pump series from database
+            for series_record in self.db_manager.list_pump_series():
+                ensure_series(series_record.name)
+
+            # Existing test types from database
+            for record in self.db_manager.list_test_types():
+                ensure_series(record.pump_series).add(record.name)
+
+            # Scan filesystem for additional pump series/test types
+            base_dir = CONFIG.files_base_path
+            if base_dir.exists():
+                legacy_tests_dir = base_dir / "tests"
+                if legacy_tests_dir.exists():
+                    legacy_bucket = ensure_series(self.default_pump_series)
+                    for child in legacy_tests_dir.iterdir():
+                        if child.is_dir():
+                            legacy_bucket.add(child.name)
+                for series_dir in base_dir.iterdir():
+                    if not series_dir.is_dir():
+                        continue
+                    if series_dir.name == "tests":
+                        continue
+                    series_bucket = ensure_series(series_dir.name)
+                    tests_dir = series_dir / "tests"
+                    if tests_dir.exists():
+                        for child in tests_dir.iterdir():
+                            if child.is_dir():
+                                series_bucket.add(child.name)
+
+            if not catalog:
+                ensure_series(self.default_pump_series)
+
+            normalized_catalog = {name: sorted(types) for name, types in catalog.items()}
+            self.dashboard_page.set_catalog(normalized_catalog)
+        except Exception:
+            self.dashboard_page.set_catalog({})
+
+    def handle_new_pump_series(self, name: str, description: str) -> None:
+        name = name.strip()
+        if not name:
+            self._alert("Pump series name is required.", QMessageBox.Warning)
+            return
         description_value = description.strip() or None
         try:
-            record = self.db_manager.ensure_test_type(name, description_value)
-            self.storage_manager.ensure_folder_exists(record.name)
+            record = self.db_manager.ensure_pump_series(name, description_value)
+            self.storage_manager.ensure_pump_series_exists(record.name)
+        except StorageError as exc:
+            self._alert(str(exc), QMessageBox.Warning)
+            return
+        except Exception as exc:
+            self._alert(f"Unable to create pump series: {exc}", QMessageBox.Critical)
+            return
+        self.load_test_types()
+        index = self.dashboard_page.pump_series_combo.findText(record.name)
+        if index >= 0:
+            self.dashboard_page.pump_series_combo.setCurrentIndex(index)
+
+    def handle_new_test_type(self, pump_series: str, name: str, description: str) -> None:
+        pump_series = pump_series.strip()
+        name = name.strip()
+        if not pump_series:
+            pump_series = self.default_pump_series
+        description_value = description.strip() or None
+        try:
+            record = self.db_manager.ensure_test_type(name, description_value, pump_series=pump_series)
+            self.storage_manager.ensure_folder_exists(pump_series, record.name)
         except StorageError as exc:
             self._alert(str(exc), QMessageBox.Warning)
             return
@@ -1142,6 +1366,9 @@ class IndustrialDataApp(QMainWindow):
             self._alert(f"Unable to create test type: {exc}", QMessageBox.Critical)
             return
         self.load_test_types()
+        series_index = self.dashboard_page.pump_series_combo.findText(pump_series)
+        if series_index >= 0:
+            self.dashboard_page.pump_series_combo.setCurrentIndex(series_index)
         index = self.dashboard_page.test_type_combo.findText(record.name)
         if index >= 0:
             self.dashboard_page.test_type_combo.setCurrentIndex(index)
@@ -1284,12 +1511,18 @@ class IndustrialDataApp(QMainWindow):
                 absolute_path = str(absolute_candidate)
             record["absolute_path"] = absolute_path
             record["base_path"] = str(CONFIG.files_base_path)
+            record["pump_series"] = record.get("pump_series") or self.default_pump_series
             records.append(record)
 
         self.dashboard_page.update_files(records)
         self.load_test_types()
 
-    def handle_upload(self, file_paths: str | List[str], test_type: str) -> None:
+    def handle_upload(
+        self,
+        file_paths: str | List[str],
+        pump_series: str,
+        test_type: str,
+    ) -> None:
         # Convert single file to list for uniform handling
         if isinstance(file_paths, str):
             file_paths = [file_paths]
@@ -1300,6 +1533,12 @@ class IndustrialDataApp(QMainWindow):
             self.show_login()
             return
 
+        pump_series = pump_series.strip()
+        if not pump_series:
+            self._alert("Please select a pump series.", QMessageBox.Warning)
+            return
+
+        test_type = test_type.strip()
         if not test_type:
             self._alert("Please select a test type.", QMessageBox.Warning)
             return
@@ -1329,7 +1568,7 @@ class IndustrialDataApp(QMainWindow):
                 self.dashboard_page.clear_csv_preview()
 
             try:
-                stored = self.storage_manager.upload_file(file_path, test_type)
+                stored = self.storage_manager.upload_file(file_path, pump_series, test_type)
             except StorageError as exc:
                 failed_uploads.append((file_path, str(exc)))
                 continue
@@ -1339,6 +1578,7 @@ class IndustrialDataApp(QMainWindow):
                     user_id=int(user.get("id")),
                     filename=os.path.basename(file_path),
                     file_path=str(stored.relative_path),
+                    pump_series=pump_series,
                     test_type=test_type,
                     file_size=stored.size_bytes,
                 )
@@ -1366,7 +1606,11 @@ class IndustrialDataApp(QMainWindow):
             self._alert(summary, QMessageBox.Information if successful_uploads else QMessageBox.Warning)
         elif successful_uploads:
             # Single file success message
-            stored_path = self.storage_manager.get_file_path(test_type, os.path.basename(successful_uploads[0]))
+            stored_path = self.storage_manager.get_file_path(
+                pump_series,
+                test_type,
+                os.path.basename(successful_uploads[0]),
+            )
             self._alert(
                 f"File uploaded to shared drive at: {stored_path}",
                 QMessageBox.Information,

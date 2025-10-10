@@ -12,6 +12,9 @@ from industrial_data_system.core.db_manager import DatabaseManager
 from industrial_data_system.core.storage import LocalStorageManager, StorageError
 
 
+DEFAULT_PUMP_SERIES = "General"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -51,6 +54,7 @@ def main() -> None:
 
     migrated = 0
     for record in records:
+        pump_series = record.get("pump_series") or DEFAULT_PUMP_SERIES
         test_type = record.get("test_type") or "General"
         filename = record.get("filename") or "unknown.dat"
         legacy_user_id = str(record.get("user_id") or "")
@@ -68,7 +72,7 @@ def main() -> None:
         stored_filename = filename
         if legacy_source:
             try:
-                stored = storage.upload_file(legacy_source, test_type, filename)
+                stored = storage.upload_file(legacy_source, pump_series, test_type, filename)
                 stored_path = str(stored.relative_path)
                 file_size = stored.size_bytes
                 stored_filename = stored.absolute_path.name
@@ -76,9 +80,14 @@ def main() -> None:
                 print(f"Failed to copy {legacy_source}: {exc}")
                 continue
         else:
-            stored_path = f"tests/{test_type}/{filename}"
+            stored_path = f"{pump_series}/tests/{test_type}/{filename}"
 
-        existing = manager.find_upload(user_id=user_id, filename=filename, test_type=test_type)
+        existing = manager.find_upload(
+            user_id=user_id,
+            filename=filename,
+            test_type=test_type,
+            pump_series=pump_series,
+        )
         if existing:
             manager.update_upload(
                 existing.id,
@@ -91,6 +100,7 @@ def main() -> None:
                 user_id=user_id,
                 filename=stored_filename,
                 file_path=stored_path,
+                pump_series=pump_series,
                 test_type=test_type,
                 file_size=file_size,
             )
