@@ -680,7 +680,7 @@ class DashboardPage(QWidget):
     """Modern dashboard with test type organization."""
 
     logout_requested = pyqtSignal()
-    upload_requested = pyqtSignal(str, str)  # file_path, test_type
+    upload_requested = pyqtSignal(list, str)  # file_path, test_type
     refresh_requested = pyqtSignal()
     test_type_created = pyqtSignal(str, str)
 
@@ -1028,16 +1028,18 @@ class DashboardPage(QWidget):
             )
             return
 
-        file_dialog_filter = "Data Files (*.csv *.xlsx *.xlsm *.xltx *.xltm);;"
-        file_dialog_filter += "CSV Files (*.csv);;Excel Files (*.xlsx *.xlsm *.xltx *.xltm)"
-        file_path, _ = QFileDialog.getOpenFileName(
+        file_dialog_filter = "Data Files (*.csv *.xlsx *.xlsm *.xltx *.xltm *.asc);;"
+        file_dialog_filter += "CSV Files (*.csv);;ASC Files (*.asc);;Excel Files (*.xlsx *.xlsm *.xltx *.xltm)"
+
+        # Changed from getOpenFileName to getOpenFileNames (plural)
+        file_paths, _ = QFileDialog.getOpenFileNames(  # <-- THIS IS THE KEY CHANGE
             self,
-            "Select File to Upload",
+            "Select Files to Upload",  # Updated text
             "",
             file_dialog_filter,
         )
-        if file_path:
-            self.upload_requested.emit(file_path, test_type)
+        if file_paths:  # This is now a list
+            self.upload_requested.emit(file_paths, test_type)  # Send list instead of single path
 
     def display_csv_preview(self, headers: List[str], rows: List[List[str]]) -> None:
         if not headers:
@@ -1287,7 +1289,11 @@ class IndustrialDataApp(QMainWindow):
         self.dashboard_page.update_files(records)
         self.load_test_types()
 
-    def handle_upload(self, file_path: str, test_type: str) -> None:
+    def handle_upload(self, file_paths: str | List[str], test_type: str) -> None:
+        # Convert single file to list for uniform handling
+        if isinstance(file_paths, str):
+            file_paths = [file_paths]
+
         user = self.session_state.user
         if not user:
             self._alert("Session expired. Please sign in again.", QMessageBox.Warning)
@@ -1298,72 +1304,108 @@ class IndustrialDataApp(QMainWindow):
             self._alert("Please select a test type.", QMessageBox.Warning)
             return
 
-        supported_extensions = {".csv", ".xlsx", ".xlsm", ".xltx", ".xltm"}
-        file_extension = Path(file_path).suffix.lower()
+        supported_extensions = {".csv", ".xlsx", ".xlsm", ".xltx", ".xltm", ".asc"}
 
-        if file_extension not in supported_extensions:
-            allowed = ", ".join(sorted(supported_extensions))
-            self._alert(
-                f"Only CSV or Excel files ({allowed}) can be uploaded.",
-                QMessageBox.Warning,
-            )
-            self.dashboard_page.clear_csv_preview()
-            return
+        successful_uploads = []
+        failed_uploads = []
 
-        preview_result = self._prepare_file_preview(file_path, file_extension)
-        if preview_result is None:
-            return
+        for file_path in file_paths:
+            file_extension = Path(file_path).suffix.lower()
 
-        headers, rows = preview_result
-        self.dashboard_page.display_csv_preview(headers, rows)
+            if file_extension not in supported_extensions:
+                allowed = ", ".join(sorted(supported_extensions))
+                failed_uploads.append((file_path, f"Unsupported file type. Allowed: {allowed}"))
+                continue
 
-        try:
-            stored = self.storage_manager.upload_file(file_path, test_type)
-        except StorageError as exc:
-            self._alert(str(exc), QMessageBox.Critical)
-            return
+            # Only show preview for single file
+            if len(file_paths) == 1:
+                preview_result = self._prepare_file_preview(file_path, file_extension)
+                if preview_result is None:
+                    failed_uploads.append((file_path, "Preview generation failed"))
+                    continue
+                headers, rows = preview_result
+                self.dashboard_page.display_csv_preview(headers, rows)
+            else:
+                self.dashboard_page.clear_csv_preview()
 
-        try:
-            self.history_store.add_record(
-                user_id=int(user.get("id")),
-                filename=os.path.basename(file_path),
-                file_path=str(stored.relative_path),
-                test_type=test_type,
-                file_size=stored.size_bytes,
-            )
-        except Exception as exc:
-            # Attempt to clean up the copied file if database write fails
             try:
-                self.storage_manager.delete_file(stored.absolute_path)
-            except StorageError:
-                pass
-            self._alert(f"Failed to record upload: {exc}", QMessageBox.Critical)
-            return
+                stored = self.storage_manager.upload_file(file_path, test_type)
+            except StorageError as exc:
+                failed_uploads.append((file_path, str(exc)))
+                continue
 
-        self._alert(
-            f"File uploaded to shared drive at: {stored.absolute_path}",
-            QMessageBox.Information,
-        )
-        self.refresh_files()
+            try:
+                self.history_store.add_record(
+                    user_id=int(user.get("id")),
+                    filename=os.path.basename(file_path),
+                    file_path=str(stored.relative_path),
+                    test_type=test_type,
+                    file_size=stored.size_bytes,
+                )
+                successful_uploads.append(file_path)
+            except Exception as exc:
+                # Attempt to clean up the copied file if database write fails
+                try:
+                    self.storage_manager.delete_file(stored.absolute_path)
+                except StorageError:
+                    pass
+                failed_uploads.append((file_path, f"Failed to record upload: {exc}"))
+                continue
+
+        # Show summary message
+        if len(file_paths) > 1:
+            summary = f"Upload Complete:\n"
+            summary += f"✓ Successfully uploaded: {len(successful_uploads)} files\n"
+            if failed_uploads:
+                summary += f"✗ Failed: {len(failed_uploads)} files\n\n"
+                summary += "Failed files:\n"
+                for fname, error in failed_uploads[:5]:  # Show first 5 failures
+                    summary += f"  - {Path(fname).name}: {error}\n"
+                if len(failed_uploads) > 5:
+                    summary += f"  ... and {len(failed_uploads) - 5} more\n"
+            self._alert(summary, QMessageBox.Information if successful_uploads else QMessageBox.Warning)
+        elif successful_uploads:
+            # Single file success message
+            stored_path = self.storage_manager.get_file_path(test_type, os.path.basename(successful_uploads[0]))
+            self._alert(
+                f"File uploaded to shared drive at: {stored_path}",
+                QMessageBox.Information,
+            )
+        elif failed_uploads:
+            # Single file failure
+            self._alert(failed_uploads[0][1], QMessageBox.Critical)
+
+        if successful_uploads:
+            self.refresh_files()
 
     @staticmethod
     def _is_valid_email(email: str) -> bool:
         return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email))
 
     def _prepare_file_preview(
-        self, file_path: str, file_extension: str
+            self, file_path: str, file_extension: str
     ) -> Optional[tuple[List[str], List[List[str]]]]:
         rows: List[List[str]] = []
-        if file_extension == ".csv":
+        if file_extension == ".csv" or file_extension == ".asc":
             try:
-                with open(file_path, newline="", encoding="utf-8") as file:
-                    reader = csv.reader(file)
-                    rows = list(reader)
+                # Try UTF-8 first, fall back to latin-1 or cp1252
+                encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+                for encoding in encodings:
+                    try:
+                        with open(file_path, newline="", encoding=encoding) as file:
+                            reader = csv.reader(file)
+                            rows = list(reader)
+                        break  # Success, exit loop
+                    except UnicodeDecodeError:
+                        if encoding == encodings[-1]:  # Last encoding failed
+                            raise
+                        continue  # Try next encoding
             except Exception as exc:
-                self._alert(f"Unable to read CSV file: {exc}", QMessageBox.Critical)
+                self._alert(f"Unable to read file: {exc}", QMessageBox.Critical)
                 self.dashboard_page.clear_csv_preview()
                 return None
         else:
+
             try:
                 from openpyxl import load_workbook
             except ImportError:

@@ -75,7 +75,7 @@ class LocalStorageManager:
             counter += 1
 
     def _validate_extension(self, filename: str) -> None:
-        allowed = {".csv", ".xlsx", ".xlsm", ".xltx", ".xltm"}
+        allowed = {".csv", ".xlsx", ".xlsm", ".xltx", ".xltm", ".asc"}  # Added .asc
         if Path(filename).suffix.lower() not in allowed:
             raise StorageError(
                 f"Unsupported file extension for '{filename}'. Allowed types: {', '.join(sorted(allowed))}."
