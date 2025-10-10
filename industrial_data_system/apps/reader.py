@@ -607,13 +607,16 @@ class ReaderApp(QMainWindow):
             self.show_login()
             return
 
-        if not self.storage_manager.base_path.exists():
+        base_path = self.storage_manager.base_path
+        if not base_path.exists():
             QMessageBox.critical(
                 self,
                 "Shared Drive Error",
                 "The shared drive is not accessible. Please check your connection.",
             )
             return
+
+        self.db_manager.prune_missing_uploads(base_path)
 
         try:
             resources = _collect_resources(self.db_manager, self.storage_manager)

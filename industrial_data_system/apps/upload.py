@@ -1271,6 +1271,10 @@ class IndustrialDataApp(QMainWindow):
             self.show_login()
             return
 
+        base_path = self.storage_manager.base_path
+        if base_path.exists():
+            self.db_manager.prune_missing_uploads(base_path)
+
         records = []
         for record in self.history_store.get_records_for_user(int(user_id)):
             relative_path = record.get("file_path")
