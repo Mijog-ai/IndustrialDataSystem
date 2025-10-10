@@ -9,9 +9,9 @@ metadata tracking—no cloud services are required.
 
 ## Features
 
-- **Shared drive storage** – Files are organised under `files/tests/<test_type>`
+- **Shared drive storage** – Files are organised under `<pump_series>/tests/<test_type>`
   on a configurable network share. The application gracefully handles drive
-  availability checks and name collisions.
+  availability checks, pump series hierarchies, and name collisions.
 - **SQLite-backed authentication** – Uploaders and readers share a single
   credential store managed through `DatabaseManager`. Passwords are hashed with
   per-user salts.
@@ -83,8 +83,9 @@ services, and command-line utilities:
 
 1. Sign up or sign in using the Upload tab. Accounts are stored in the SQLite
    database—passwords remain local.
-2. Choose a test type from the dashboard. Create new test types to generate the
-   matching folder structure on the shared drive.
+2. Choose a pump series and then a test type from the dashboard. Create new
+   pump series or test types to generate the matching folder structure on the
+   shared drive.
 3. Select a CSV or Excel file. The preview panel displays up to the first 100
    rows before uploading.
 4. On upload, the file is copied to the shared drive, metadata is recorded in

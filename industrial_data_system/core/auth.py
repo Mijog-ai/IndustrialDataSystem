@@ -128,19 +128,32 @@ class UploadHistoryStore:
         user_id: int,
         filename: str,
         file_path: str,
+        pump_series: Optional[str] = None,
         test_type: str,
         file_size: Optional[int] = None,
         mime_type: Optional[str] = None,
         description: Optional[str] = None,
     ) -> UploadRecord:
-        test_type_record = self.manager.ensure_test_type(test_type, description)
+        pump_series_value = pump_series.strip() if pump_series else None
+        pump_series_record = (
+            self.manager.ensure_pump_series(pump_series_value)
+            if pump_series_value
+            else None
+        )
+        test_type_record = self.manager.ensure_test_type(
+            test_type,
+            description,
+            pump_series=pump_series_value,
+        )
         return self.manager.create_upload(
             user_id=user_id,
             filename=filename,
             file_path=file_path,
+            pump_series=pump_series_value,
             test_type=test_type,
             file_size=file_size,
             mime_type=mime_type,
+            pump_series_id=pump_series_record.id if pump_series_record else None,
             test_type_id=test_type_record.id if test_type_record else None,
         )
 
@@ -153,12 +166,14 @@ class UploadHistoryStore:
         *,
         user_id: Optional[int] = None,
         test_type: Optional[str] = None,
+        pump_series: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         records = self.manager.list_uploads(
             user_id=user_id,
             test_type=test_type,
+            pump_series=pump_series,
             start_date=start_date,
             end_date=end_date,
         )
@@ -170,10 +185,12 @@ class UploadHistoryStore:
             "user_id": record.user_id,
             "filename": record.filename,
             "file_path": record.file_path,
+            "pump_series": record.pump_series,
             "test_type": record.test_type,
             "file_size": record.file_size,
             "mime_type": record.mime_type,
             "created_at": record.created_at,
+            "pump_series_id": record.pump_series_id,
             "test_type_id": record.test_type_id,
         }
 

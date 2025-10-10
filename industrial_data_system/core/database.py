@@ -52,11 +52,20 @@ class SQLiteDatabase:
                     created_at TEXT DEFAULT (datetime('now'))
                 );
 
-                CREATE TABLE IF NOT EXISTS test_types (
+                CREATE TABLE IF NOT EXISTS pump_series (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT UNIQUE NOT NULL,
                     description TEXT,
                     created_at TEXT DEFAULT (datetime('now'))
+                );
+
+                CREATE TABLE IF NOT EXISTS test_types (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    pump_series TEXT,
+                    pump_series_id INTEGER REFERENCES pump_series(id) ON DELETE SET NULL
                 );
 
                 CREATE TABLE IF NOT EXISTS uploads (
@@ -64,14 +73,29 @@ class SQLiteDatabase:
                     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                     filename TEXT NOT NULL,
                     file_path TEXT NOT NULL,
+                    pump_series TEXT,
                     test_type TEXT NOT NULL,
                     file_size INTEGER,
                     mime_type TEXT,
                     created_at TEXT DEFAULT (datetime('now')),
+                    pump_series_id INTEGER REFERENCES pump_series(id) ON DELETE SET NULL,
                     test_type_id INTEGER REFERENCES test_types(id) ON DELETE SET NULL
                 );
                 """
             )
+            cursor = connection.cursor()
+            for statement in (
+                "ALTER TABLE test_types ADD COLUMN pump_series TEXT",
+                "ALTER TABLE test_types ADD COLUMN pump_series_id INTEGER REFERENCES pump_series(id) ON DELETE SET NULL",
+                "ALTER TABLE uploads ADD COLUMN pump_series TEXT",
+                "ALTER TABLE uploads ADD COLUMN pump_series_id INTEGER REFERENCES pump_series(id) ON DELETE SET NULL",
+            ):
+                try:
+                    cursor.execute(statement)
+                except sqlite3.OperationalError as exc:
+                    if "duplicate column name" not in str(exc).lower():
+                        raise
+            cursor.close()
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
