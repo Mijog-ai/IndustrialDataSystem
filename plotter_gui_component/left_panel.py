@@ -15,6 +15,9 @@ class LeftPanel(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
         self.layout = QVBoxLayout(self)
+        self.setObjectName("control-panel")
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(12)
         self.setup_ui()
 
     def setup_ui(self):

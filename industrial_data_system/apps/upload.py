@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import io
 import os
 import re
 import sys
@@ -1634,16 +1635,40 @@ class IndustrialDataApp(QMainWindow):
             try:
                 # Try UTF-8 first, fall back to latin-1 or cp1252
                 encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+                raw_text = ""
                 for encoding in encodings:
                     try:
-                        with open(file_path, newline="", encoding=encoding) as file:
-                            reader = csv.reader(file)
-                            rows = list(reader)
+                        with open(file_path, encoding=encoding) as file:
+                            raw_text = file.read()
                         break  # Success, exit loop
                     except UnicodeDecodeError:
-                        if encoding == encodings[-1]:  # Last encoding failed
+                        if encoding == encodings[-1]:
                             raise
                         continue  # Try next encoding
+
+                if not raw_text.strip():
+                    rows = []
+                else:
+                    # ``ASC`` exports frequently contain leading metadata lines.
+                    # Keep only rows that look tabular before running the CSV
+                    # sniffer so the preview focuses on the structured data.
+                    candidate_lines: List[str] = []
+                    for line in raw_text.splitlines():
+                        if not line.strip():
+                            continue
+                        # Identify common delimiters
+                        if any(delimiter in line for delimiter in ("\t", ";", ",", "|")):
+                            candidate_lines.append(line)
+
+                    sample_text = "\n".join(candidate_lines[:40]) or raw_text[:4096]
+
+                    try:
+                        dialect = csv.Sniffer().sniff(sample_text, delimiters=[",", ";", "\t", "|"])
+                    except csv.Error:
+                        dialect = csv.excel_tab if file_extension == ".asc" else csv.excel
+
+                    reader = csv.reader(io.StringIO("\n".join(candidate_lines) if candidate_lines else raw_text), dialect)
+                    rows = [row for row in reader if any(cell.strip() for cell in row)]
             except Exception as exc:
                 self._alert(f"Unable to read file: {exc}", QMessageBox.Critical)
                 self.dashboard_page.clear_csv_preview()

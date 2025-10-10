@@ -1,10 +1,22 @@
-from PyQt5.QtWidgets import QMainWindow, QHBoxLayout, QWidget, QFileDialog, QMessageBox, QAction
+from PyQt5.QtWidgets import (
+    QAction,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QMainWindow,
+    QMessageBox,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
+)
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent
 
 from plotter_gui_component.menu_bar import MenuBar
 from plotter_gui_component.tool_bar import ToolBar
 from plotter_gui_component.left_panel import LeftPanel
 from plotter_gui_component.right_panel import RightPanel
+from plotter_gui_component.theme import PlotterTheme
 from plotter_gui_component.utils.asc_utils import (
     load_and_process_asc_file,
     load_and_process_csv_file,
@@ -18,12 +30,27 @@ from plotter_gui_component.components.session_manager import SessionManager
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.setObjectName("plotter-window")
         self.setWindowTitle("Inline Analytical tool")
         self.setGeometry(100, 100, 1600, 900)
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
-        self.layout = QHBoxLayout(self.central_widget)
+        self.outer_layout = QVBoxLayout(self.central_widget)
+        self.outer_layout.setContentsMargins(24, 24, 24, 24)
+        self.outer_layout.setSpacing(18)
+
+        self.surface = QFrame()
+        self.surface.setObjectName("plotter-surface")
+        self.surface_layout = QHBoxLayout(self.surface)
+        self.surface_layout.setContentsMargins(18, 18, 18, 18)
+        self.surface_layout.setSpacing(18)
+
+        self.splitter = QSplitter(Qt.Horizontal)
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.setHandleWidth(2)
+        self.surface_layout.addWidget(self.splitter)
+        self.outer_layout.addWidget(self.surface)
 
         self.df = None
         self.original_df = None
@@ -54,14 +81,23 @@ class MainWindow(QMainWindow):
         self.left_panel = LeftPanel(self)
         self.right_panel = RightPanel(self)
 
-        self.layout.addWidget(self.left_panel, 1)
-        self.layout.addWidget(self.right_panel, 4)
+        self.left_panel.setObjectName("plotter-panel")
+        self.right_panel.setObjectName("plotter-panel")
+
+        self.splitter.addWidget(self.left_panel)
+        self.splitter.addWidget(self.right_panel)
+        self.splitter.setStretchFactor(0, 1)
+        self.splitter.setStretchFactor(1, 3)
+
+        PlotterTheme.apply(self)
 
     def clear_all_data(self):
         self.df = None
         self.original_df = None
         self.filtered_df = None
         self.unsaved_changes = False
+        if hasattr(self, "right_panel"):
+            self.right_panel.clear_preview()
 
     def reset_ui(self):
         # Reset LeftPanel
@@ -75,6 +111,7 @@ class MainWindow(QMainWindow):
         # Reset RightPanel
         self.right_panel.plot_area.clear_plot()
         self.right_panel.statistics_area.clear_stats()
+        self.right_panel.clear_preview()
 
 
 
@@ -182,6 +219,7 @@ class MainWindow(QMainWindow):
             self.left_panel.axis_selection.update_options(columns)
             self.left_panel.data_filter.update_columns(columns)
             self.right_panel.statistics_area.update_stats(self.filtered_df)
+            self.right_panel.update_preview(self.df)
         else:
             logging.warning("DataFrame is None or empty after loading")
 
@@ -294,6 +332,7 @@ class MainWindow(QMainWindow):
 
             # Applying statistics update over the applied filter
             self.update_statistics()
+            self.right_panel.update_preview(self.filtered_df)
 
             self.update_plot(update_filter=False)
             QMessageBox.information(self, "Filter Applied", "Data filter applied successfully")
@@ -334,6 +373,7 @@ class MainWindow(QMainWindow):
                 self.right_panel.plot_area.plot_data(self.filtered_df, x_column, y_columns, smoothing_params,
                                                      limit_lines)
                 self.update_statistics()
+                self.right_panel.update_preview(self.filtered_df)
                 self.unsaved_changes = True
 
             except Exception as e:
@@ -343,6 +383,7 @@ class MainWindow(QMainWindow):
 
         else:
             logging.warning("No data available to plot")
+            self.right_panel.clear_preview()
 
 
 
