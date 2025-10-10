@@ -1,5 +1,7 @@
 :root {
-  font-size: clamp(14px, 1vw + 12px, 18px);
+  --base-font-size: clamp(14px, 1vw + 12px, 18px);
+  --font-scale: 100;
+  font-size: calc(var(--base-font-size) * var(--font-scale) / 100);
 }
 
 body {
@@ -48,4 +50,32 @@ small {
 
 .card {
   box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05);
+}
+
+.display-controls {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 1030;
+  width: min(260px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.display-controls__toggle {
+  align-self: flex-end;
+}
+
+.display-controls__panel {
+  background-color: #fff;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 0.75rem 2rem rgba(33, 37, 41, 0.15);
+}
+
+.display-controls__value {
+  font-size: 0.875rem;
+  color: #6c757d;
+  text-align: right;
 }
