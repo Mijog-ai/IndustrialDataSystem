@@ -337,8 +337,8 @@ class ReaderDashboard(QWidget):
         tools_layout.setSpacing(8)
 
         tool_buttons: List[tuple[str, Callable[..., Optional[str]], bool]] = [
+            ("Data Processor", run_analyzer_tool, False),
             ("Plotter", run_plotter_tool, True),
-            ("Analyzer", run_analyzer_tool, False),
             ("AI Data Study", run_ai_data_study_tool, False),
             ("Train", run_train_tool, False),
         ]
@@ -449,10 +449,10 @@ class ReaderDashboard(QWidget):
         self._preview_resource(resource)
 
     def _launch_tool(
-        self,
-        title: str,
-        runner: Callable[..., Optional[str]],
-        requires_resource: bool = False,
+            self,
+            title: str,
+            runner: Callable[..., Optional[str]],
+            requires_resource: bool = False,
     ) -> None:
         path: Optional[Path] = None
         if requires_resource:
@@ -467,7 +467,11 @@ class ReaderDashboard(QWidget):
         try:
             if requires_resource:
                 assert path is not None
-                output = runner(path)
+                # Pass self as parent for plotter to close with main window
+                if title == "Plotter":
+                    output = runner(path, self)
+                else:
+                    output = runner(path)
             else:
                 output = runner()
         except Exception as exc:

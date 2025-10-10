@@ -186,6 +186,12 @@ class QuickPlotterWindow(QMainWindow):
     @staticmethod
     def _read_file(path: Path) -> pd.DataFrame:
         ext = path.suffix.lower()
+
+        # Handle Parquet files (highest priority - processed data)
+        if ext == ".parquet":
+            return pd.read_parquet(path, engine='pyarrow')
+
+        # Handle other formats
         if ext == ".asc":
             return load_and_process_asc_file(str(path))
         if ext == ".csv":
@@ -343,4 +349,3 @@ def run(file_path: Path | str) -> None:
     window.raise_()
     window.activateWindow()
     _open_windows.append(window)
-
