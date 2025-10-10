@@ -1,13 +1,13 @@
 # left_panel.py
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit
-from gui.components.axis_selection import AxisSelection
-from gui.components.smoothing_options import SmoothingOptions
-from gui.components.limit_lines import LimitLines
-from gui.components.data_filter import DataFilter
-from gui.components.curve_fitting import CurveFitting
-from gui.components.comment_box import CommentBox
-import logging
-from PyQt5.QtCore import pyqtSignal, QObject
+from PyQt5.QtWidgets import QWidget, QVBoxLayout
+
+from plotter_gui_component.components.axis_selection import AxisSelection
+from plotter_gui_component.components.smoothing_options import SmoothingOptions
+from plotter_gui_component.components.limit_lines import LimitLines
+from plotter_gui_component.components.data_filter import DataFilter
+from plotter_gui_component.components.curve_fitting import CurveFitting
+from plotter_gui_component.components.comment_box import CommentBox
+from PyQt5.QtCore import pyqtSignal
 
 class LeftPanel(QWidget):
     title_changed = pyqtSignal(str)
@@ -50,6 +50,25 @@ class LeftPanel(QWidget):
     def update_options(self, columns):
         self.axis_selection.update_options(columns)
         self.data_filter.update_columns(columns)
+
+    def _plot_area(self):
+        parent = self.parent()
+        if parent and hasattr(parent, "right_panel"):
+            return getattr(parent.right_panel, "plot_area", None)
+        return None
+
+    def get_plot_title(self):
+        plot_area = self._plot_area()
+        if plot_area is not None:
+            return getattr(plot_area, "current_title", "")
+        return ""
+
+    def set_plot_title(self, title):
+        plot_area = self._plot_area()
+        if plot_area is not None:
+            plot_area.title_input.setText(title)
+            plot_area.current_title = title
+            plot_area.update_plot()
 
 
 
