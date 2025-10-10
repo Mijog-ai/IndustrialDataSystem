@@ -1,5 +1,6 @@
 # tool_bar.py
 import logging
+import os
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtWidgets import QAction, QLabel, QStyle, QToolBar
 
