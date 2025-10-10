@@ -336,18 +336,20 @@ class ReaderDashboard(QWidget):
         tools_layout.setContentsMargins(0, 0, 0, 0)
         tools_layout.setSpacing(8)
 
-        tool_buttons: List[tuple[str, Callable[[], str]]] = [
-            ("Plotter", run_plotter_tool),
-            ("Analyzer", run_analyzer_tool),
-            ("AI Data Study", run_ai_data_study_tool),
-            ("Train", run_train_tool),
+        tool_buttons: List[tuple[str, Callable[..., Optional[str]], bool]] = [
+            ("Plotter", run_plotter_tool, True),
+            ("Analyzer", run_analyzer_tool, False),
+            ("AI Data Study", run_ai_data_study_tool, False),
+            ("Train", run_train_tool, False),
         ]
 
-        for label, callback in tool_buttons:
+        for label, callback, requires_resource in tool_buttons:
             button = QPushButton(label)
             button.setProperty("secondary", True)
             button.clicked.connect(
-                lambda _, name=label, runner=callback: self._launch_tool(name, runner)
+                lambda _, name=label, runner=callback, needs_resource=requires_resource: self._launch_tool(
+                    name, runner, needs_resource
+                )
             )
             tools_layout.addWidget(button)
 
@@ -446,11 +448,33 @@ class ReaderDashboard(QWidget):
         self.download_button.setEnabled(True)
         self._preview_resource(resource)
 
-    def _launch_tool(self, title: str, runner: Callable[[], str]) -> None:
+    def _launch_tool(
+        self,
+        title: str,
+        runner: Callable[..., Optional[str]],
+        requires_resource: bool = False,
+    ) -> None:
+        path: Optional[Path] = None
+        if requires_resource:
+            if not self._current_resource:
+                QMessageBox.information(
+                    self,
+                    f"{title} Tool",
+                    "Please select a file before launching this tool.",
+                )
+                return
+            path = self._current_resource.absolute_path
         try:
-            output = runner()
+            if requires_resource:
+                assert path is not None
+                output = runner(path)
+            else:
+                output = runner()
         except Exception as exc:
             output = f"An error occurred while running {title}: {exc}"
+
+        if output is None:
+            return
 
         if title in self._tool_outputs:
             text_edit = self._tool_outputs[title]
