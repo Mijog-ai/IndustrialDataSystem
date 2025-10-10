@@ -24,7 +24,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
-from plotter_gui_component.utils.asc_utils import (
+from industrial_data_system.utils.asc_utils import (
     load_and_process_asc_file,
     load_and_process_csv_file,
     load_and_process_tdms_file,

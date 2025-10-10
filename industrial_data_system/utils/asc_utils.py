@@ -108,16 +108,3 @@ def load_and_process_tdms_file(file_name):
     # Create DataFrame
     df = pd.DataFrame(data_dict)
     return df
-
-def apply_smoothing(data, method='savgol', window_length=21, poly_order=3, sigma=2):
-    if window_length >= len(data):
-        window_length = len(data) - 1
-    if window_length % 2 == 0:
-        window_length -= 1
-
-    if method == 'mean_line':
-        return data.rolling(window=window_length, center=True).mean()
-    elif method == 'savitzky-golay':
-        return savgol_filter(data, window_length, poly_order)
-    elif method == 'gaussian_filter':
-        return gaussian_filter1d(data, sigma=sigma)
