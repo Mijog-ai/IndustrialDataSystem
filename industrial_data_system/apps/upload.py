@@ -149,10 +149,7 @@ class IndustrialTheme:
                 font-size: 14px;
             }}
             
-            QLineEdit:focus {{
-                border: 2px solid {IndustrialTheme.BORDER_FOCUS};
-                outline: none;
-            }}
+            
             
             QLineEdit:disabled {{
                 background-color: {IndustrialTheme.SURFACE_DARK};
@@ -169,9 +166,7 @@ class IndustrialTheme:
                 min-height: 44px;
             }}
             
-            QComboBox:focus {{
-                border: 2px solid {IndustrialTheme.BORDER_FOCUS};
-            }}
+           
             
             QComboBox::drop-down {{
                 border: none;
@@ -799,6 +794,7 @@ class DashboardPage(QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setFocusPolicy(Qt.NoFocus)
         files_layout.addWidget(self.table)
 
         actions_layout = QHBoxLayout()
