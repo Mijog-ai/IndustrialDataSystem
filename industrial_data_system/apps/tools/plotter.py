@@ -35,6 +35,36 @@ from industrial_data_system.utils.asc_utils import (
 
 __all__ = ["run"]
 
+class StatisticsArea(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.layout = QVBoxLayout(self)
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.stats_table = QTableWidget()
+        self.stats_table.setColumnCount(5)
+        self.stats_table.setHorizontalHeaderLabels(["Column", "Max", "Mean", "Min", "Std"])
+        self.layout.addWidget(self.stats_table)
+
+    def update_stats(self, df):
+        if df is not None and not df.empty:
+            stats = df.describe().transpose()
+            self.stats_table.setRowCount(len(stats))
+            for i, (index, row) in enumerate(stats.iterrows()):
+                self.stats_table.setItem(i, 0, QTableWidgetItem(str(index)))
+                self.stats_table.setItem(i, 1, QTableWidgetItem(f"{row['max']:.4g}"))
+                self.stats_table.setItem(i, 2, QTableWidgetItem(f"{row['mean']:.4g}"))
+                self.stats_table.setItem(i, 3, QTableWidgetItem(f"{row['min']:.4g}"))
+                self.stats_table.setItem(i, 4, QTableWidgetItem(f"{row['std']:.4g}"))
+            self.stats_table.resizeColumnsToContents()
+        else:
+            self.clear_stats()
+
+    def clear_stats(self):
+        self.stats_table.setRowCount(0)
+
+
 
 class QuickPlotterWindow(QMainWindow):
     """Streamlined window that renders a simple plot for the selected file."""
@@ -149,8 +179,23 @@ class QuickPlotterWindow(QMainWindow):
         self.toolbar = NavigationToolbar(self.canvas, self)
         self.toolbar.setStyleSheet("background: #FFFFFF; border: none;")
 
-        layout.addWidget(self.toolbar)
-        layout.addWidget(self.canvas, stretch=1)
+        # --- Plot and Statistics Area side by side ---
+        plot_stats_container = QWidget()
+        plot_stats_layout = QHBoxLayout(plot_stats_container)
+        plot_stats_layout.setContentsMargins(0, 0, 0, 0)
+        plot_stats_layout.setSpacing(12)
+
+        # Left: Plot area (narrower width)
+        plot_area = QVBoxLayout()
+        plot_area.addWidget(self.toolbar)
+        plot_area.addWidget(self.canvas, stretch=1)
+        plot_stats_layout.addLayout(plot_area, 2)  # give plot less width (2 parts)
+
+        # Right: Statistics area
+        self.stats_area = StatisticsArea(self)
+        plot_stats_layout.addWidget(self.stats_area, 1)  # smaller width (1 part)
+
+        layout.addWidget(plot_stats_container, stretch=1)
 
         buttons_container = QWidget()
         buttons_layout = QHBoxLayout(buttons_container)
@@ -375,6 +420,11 @@ class QuickPlotterWindow(QMainWindow):
 
         self.figure.tight_layout()
         self.canvas.draw_idle()
+        try:
+            stats_df = df[y_columns].select_dtypes(include=[np.number])
+            self.stats_area.update_stats(stats_df)
+        except Exception:
+            self.stats_area.clear_stats()
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         try:
