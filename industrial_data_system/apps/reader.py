@@ -338,7 +338,7 @@ class ReaderDashboard(QWidget):
         tool_buttons: List[tuple[str, Callable[..., Optional[str]], bool]] = [
 
             ("Plotter", run_plotter_tool, True),
-            ("AI Data Study", run_ai_data_study_tool, False),
+            ("AI Data Lab", run_ai_data_study_tool, False),
             ("Train", run_train_tool, False),
         ]
 
