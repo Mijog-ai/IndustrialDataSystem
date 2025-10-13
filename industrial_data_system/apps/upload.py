@@ -789,11 +789,6 @@ class DashboardPage(QWidget):
         refresh_button.clicked.connect(self.refresh_requested.emit)
         action_layout.addWidget(refresh_button)
 
-        logout_button = QPushButton("Sign Out")
-        logout_button.setProperty("danger", True)
-        logout_button.clicked.connect(self.logout_requested)
-        action_layout.addWidget(logout_button)
-
         header_layout.addLayout(action_layout)
         layout.addLayout(header_layout)
 
@@ -1275,8 +1270,8 @@ class IndustrialDataApp(QMainWindow):
         self.show_login()
 
     def show_login(self, email: str = "") -> None:
-        self.stack.setCurrentWidget(self.login_page)
-        self.login_page.show_login(email)
+        gateway_user = self._ensure_gateway_user()
+        self._set_logged_in_user(gateway_user)
 
     def show_forgot_password(self) -> None:
         self.stack.setCurrentWidget(self.forgot_page)
@@ -1284,6 +1279,70 @@ class IndustrialDataApp(QMainWindow):
     def show_dashboard(self) -> None:
         self.stack.setCurrentWidget(self.dashboard_page)
         self.load_test_types()
+
+    def _ensure_gateway_user(self) -> LocalUser:
+        """Create or retrieve the shared gateway account for upload access."""
+
+        default_email = os.getenv("IDS_GATEWAY_USER_EMAIL") or "gateway@local"
+        default_username = os.getenv("IDS_GATEWAY_USERNAME") or "gateway"
+        default_password = os.getenv("IDS_GATEWAY_PASSWORD") or "gateway"
+        default_display_name = os.getenv("IDS_GATEWAY_DISPLAY_NAME") or "Gateway Access"
+
+        record = self.db_manager.get_user_by_email(default_email)
+        if record is None and default_username:
+            record = self.db_manager.get_user_by_username(default_username)
+
+        if record is not None:
+            metadata = dict(record.metadata or {})
+            if default_username and "username" not in metadata and record.username:
+                metadata["username"] = record.username
+            if default_username and "username_normalized" not in metadata and record.username:
+                metadata["username_normalized"] = record.username.lower()
+            if "display_name" not in metadata:
+                metadata["display_name"] = default_display_name
+            if metadata != record.metadata:
+                self.db_manager.update_user(record.id, metadata=metadata)
+                refreshed = self.db_manager.get_user_by_id(record.id)
+                if refreshed is not None:
+                    record = refreshed
+            return LocalUser(
+                id=record.id,
+                email=record.email,
+                username=record.username,
+                password_hash=record.password_hash,
+                salt=record.salt,
+                metadata=record.metadata,
+                created_at=record.created_at,
+            )
+
+        metadata = {
+            "display_name": default_display_name,
+            "username": default_username,
+            "username_normalized": default_username.lower() if default_username else default_username,
+        }
+
+        try:
+            return self.auth_store.create_user(
+                email=default_email,
+                password=default_password,
+                username=default_username,
+                metadata=metadata,
+            )
+        except ValueError:
+            fallback = self.db_manager.get_user_by_email(default_email)
+            if fallback is None and default_username:
+                fallback = self.db_manager.get_user_by_username(default_username)
+            if fallback is None:
+                raise
+            return LocalUser(
+                id=fallback.id,
+                email=fallback.email,
+                username=fallback.username,
+                password_hash=fallback.password_hash,
+                salt=fallback.salt,
+                metadata=fallback.metadata,
+                created_at=fallback.created_at,
+            )
 
     def load_test_types(self) -> None:
         """Load available test types from the database and shared drive."""
@@ -1474,7 +1533,10 @@ class IndustrialDataApp(QMainWindow):
     def refresh_files(self) -> None:
         user = self.session_state.user
         if not user:
-            self._alert("Session expired. Please sign in again.", QMessageBox.Warning)
+            self._alert(
+                "Gateway session was reset. Restoring access...",
+                QMessageBox.Information,
+            )
             self.show_login()
             return
 
@@ -1530,7 +1592,10 @@ class IndustrialDataApp(QMainWindow):
 
         user = self.session_state.user
         if not user:
-            self._alert("Session expired. Please sign in again.", QMessageBox.Warning)
+            self._alert(
+                "Gateway session was reset. Restoring access...",
+                QMessageBox.Information,
+            )
             self.show_login()
             return
 
