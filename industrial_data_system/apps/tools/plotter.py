@@ -324,9 +324,15 @@ class QuickPlotterWindow(QMainWindow):
 
 _open_windows: List[QuickPlotterWindow] = []
 
+from typing import List, Optional
 
-def run(file_path: Path | str) -> None:
-    """Launch the quick plotter window for the provided file path."""
+def run(file_path: Path | str, parent: Optional[QWidget] = None) -> None:
+    """Launch the quick plotter window for the provided file path.
+
+    Args:
+        file_path: Path to the file to plot
+        parent: Optional parent widget (used to manage window lifecycle)
+    """
 
     path = Path(file_path)
     if not path.exists():
