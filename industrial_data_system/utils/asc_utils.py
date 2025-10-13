@@ -6,6 +6,9 @@ from nptdms import TdmsFile
 import logging
 import io
 import chardet
+# Add this import at the top (after existing imports)
+from pathlib import Path
+from typing import Optional
 
 import re
 
@@ -108,3 +111,25 @@ def load_and_process_tdms_file(file_name):
     # Create DataFrame
     df = pd.DataFrame(data_dict)
     return df
+
+
+# Add this new function at the end of the file
+def convert_asc_to_parquet(asc_path: Path, parquet_path: Optional[Path] = None) -> Path:
+    """Convert an ASC file to Parquet format.
+
+    Args:
+        asc_path: Path to the ASC file
+        parquet_path: Optional output path. If None, uses same name with .parquet extension
+
+    Returns:
+        Path to the created parquet file
+    """
+    if parquet_path is None:
+        parquet_path = asc_path.with_suffix('.parquet')
+
+    df = load_and_process_asc_file(str(asc_path))
+    df.to_parquet(parquet_path, engine='pyarrow', compression='snappy', index=False)
+
+    logging.info(f"Converted {asc_path.name} to {parquet_path.name}")
+    return parquet_path
+

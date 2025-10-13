@@ -10,6 +10,14 @@ from typing import List, Optional
 from industrial_data_system.core.config import AppConfig, get_config
 from industrial_data_system.core.db_manager import DatabaseManager
 
+# Add after existing imports
+import logging
+
+from industrial_data_system.utils.asc_utils import convert_asc_to_parquet
+
+# Add logger after imports
+logger = logging.getLogger(__name__)
+
 
 class StorageError(RuntimeError):
     """Raised when file operations cannot be completed."""
@@ -124,11 +132,11 @@ class LocalStorageManager:
     # Public API
     # ------------------------------------------------------------------
     def upload_file(
-        self,
-        source_path: Path | str,
-        pump_series: str,
-        test_type: str,
-        filename: Optional[str] = None,
+            self,
+            source_path: Path | str,
+            pump_series: str,
+            test_type: str,
+            filename: Optional[str] = None,
     ) -> StoredFile:
         source = Path(source_path)
         if not source.is_file():
@@ -150,6 +158,15 @@ class LocalStorageManager:
             shutil.copy2(source, destination)
         except OSError as exc:
             raise StorageError(f"Failed to copy file to shared drive: {exc}") from exc
+
+        # NEW: Convert ASC to Parquet after successful upload
+        if source.suffix.lower() == '.asc':
+            try:
+                parquet_path = convert_asc_to_parquet(destination)
+                logger.info(f"Created parquet conversion: {parquet_path.name}")
+            except Exception as e:
+                logger.warning(f"Failed to convert ASC to parquet: {e}")
+                # Continue - original file was still copied successfully
 
         relative_path = destination.relative_to(self.base_path)
         return StoredFile(

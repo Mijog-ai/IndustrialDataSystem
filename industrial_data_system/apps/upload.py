@@ -1043,13 +1043,10 @@ class DashboardPage(QWidget):
 
     def set_user_identity(self, username: str, email: str) -> None:
         username = username.strip()
-        email = email.strip()
+        # email = email.strip()
         if username:
-            self.welcome_label.setText(f"Welcome, {username}")
-            self.subtitle_label.setText(email if email else "Manage your industrial test data")
-        elif email:
-            self.welcome_label.setText(f"Welcome, {email}")
-            self.subtitle_label.setText("Manage your industrial test data")
+            self.welcome_label.setText(f"Welcome")
+
         else:
             self.welcome_label.setText("Dashboard")
             self.subtitle_label.setText("Manage your industrial test data")
@@ -1575,10 +1572,14 @@ class IndustrialDataApp(QMainWindow):
                 test_type,
                 os.path.basename(successful_uploads[0]),
             )
-            self._alert(
-                f"File uploaded to shared drive at: {stored_path}",
-                QMessageBox.Information,
-            )
+            message = f"File uploaded to shared drive at:\n{stored_path}"
+
+            # Add note about parquet conversion for ASC files
+            if Path(successful_uploads[0]).suffix.lower() == '.asc':
+                parquet_path = stored_path.with_suffix('.parquet')
+                message += f"\n\n✓ ASC file converted to Parquet format:\n{parquet_path}"
+
+            self._alert(message, QMessageBox.Information)
         elif failed_uploads:
             # Single file failure
             self._alert(failed_uploads[0][1], QMessageBox.Critical)
