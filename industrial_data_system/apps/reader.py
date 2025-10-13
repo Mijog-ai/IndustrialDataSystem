@@ -544,6 +544,24 @@ class ReaderDashboard(QWidget):
             self._show_message("Text preview")
             return
 
+        # Add parquet preview (replaces ASC preview)
+        if suffix == ".parquet":
+            try:
+                import pandas as pd
+                df = pd.read_parquet(path, engine='pyarrow')
+                preview_text = f"Parquet File Preview\n\n"
+                preview_text += f"Shape: {df.shape[0]} rows × {df.shape[1]} columns\n"
+                preview_text += f"Columns: {', '.join(df.columns.tolist())}\n\n"
+                preview_text += "First 10 rows:\n"
+                preview_text += df.head(10).to_string()
+            except Exception as exc:
+                self._show_message(f"Unable to read parquet file: {exc}")
+                return
+            self.text_preview.setPlainText(preview_text)
+            self.text_preview.show()
+            self._show_message("Parquet file preview")
+            return
+
         self._show_message("Preview is not available. Use Download to open the file.")
 
     def _show_message(self, message: str) -> None:
@@ -578,7 +596,7 @@ class ReaderDashboard(QWidget):
 
 
 def _collect_resources(
-    manager: DatabaseManager, storage: LocalStorageManager
+        manager: DatabaseManager, storage: LocalStorageManager
 ) -> List[LocalResource]:
     resources: List[LocalResource] = []
     for record in manager.list_uploads():
@@ -587,6 +605,19 @@ def _collect_resources(
             continue
         relative_path = Path(file_path)
         absolute_path = storage.base_path / relative_path
+
+        # Check if a parquet version exists
+        if absolute_path.suffix.lower() == '.asc':
+            parquet_path = absolute_path.with_suffix('.parquet')
+            if parquet_path.exists():
+                # Use parquet instead of ASC
+                absolute_path = parquet_path
+                relative_path = parquet_path.relative_to(storage.base_path)
+
+        # Skip ASC files if they don't have parquet equivalents
+        if absolute_path.suffix.lower() == '.asc':
+            continue
+
         resources.append(
             LocalResource(
                 name=absolute_path.name,
@@ -599,7 +630,6 @@ def _collect_resources(
         )
     resources.sort(key=lambda res: (res.test_type.lower(), res.relative_path.parts))
     return resources
-
 
 class ReaderApp(QMainWindow):
     """Main window that orchestrates authentication and browsing."""

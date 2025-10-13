@@ -191,9 +191,6 @@ class QuickPlotterWindow(QMainWindow):
         if ext == ".parquet":
             return pd.read_parquet(path, engine='pyarrow')
 
-        # Handle other formats
-        if ext == ".asc":
-            return load_and_process_asc_file(str(path))
         if ext == ".csv":
             return load_and_process_csv_file(str(path))
         if ext == ".tdms":

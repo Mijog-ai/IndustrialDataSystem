@@ -137,6 +137,7 @@ class LocalStorageManager:
             pump_series: str,
             test_type: str,
             filename: Optional[str] = None,
+            user_id: Optional[int] = None,  # Add this parameter
     ) -> StoredFile:
         source = Path(source_path)
         if not source.is_file():
@@ -160,17 +161,27 @@ class LocalStorageManager:
             raise StorageError(f"Failed to copy file to shared drive: {exc}") from exc
 
         # NEW: Convert ASC to Parquet after successful upload
+        final_destination = destination
         if source.suffix.lower() == '.asc':
             try:
                 parquet_path = convert_asc_to_parquet(destination)
                 logger.info(f"Created parquet conversion: {parquet_path.name}")
+
+                # Update to use parquet file as the primary file
+                final_destination = parquet_path
+                file_size = parquet_path.stat().st_size
+
+                # Optionally delete the original ASC file to save space
+                # destination.unlink()
+                # logger.info(f"Removed original ASC file: {destination.name}")
+
             except Exception as e:
                 logger.warning(f"Failed to convert ASC to parquet: {e}")
                 # Continue - original file was still copied successfully
 
-        relative_path = destination.relative_to(self.base_path)
+        relative_path = final_destination.relative_to(self.base_path)
         return StoredFile(
-            absolute_path=destination,
+            absolute_path=final_destination,
             relative_path=relative_path,
             pump_series=pump_series,
             test_type=test_type,
