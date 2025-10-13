@@ -33,7 +33,6 @@ from PyQt5.QtWidgets import (
 
 from industrial_data_system.apps.tools import (
     run_ai_data_study_tool,
-    run_analyzer_tool,
     run_plotter_tool,
     run_train_tool,
 )
@@ -337,7 +336,7 @@ class ReaderDashboard(QWidget):
         tools_layout.setSpacing(8)
 
         tool_buttons: List[tuple[str, Callable[..., Optional[str]], bool]] = [
-            ("Data Processor", run_analyzer_tool, False),
+
             ("Plotter", run_plotter_tool, True),
             ("AI Data Study", run_ai_data_study_tool, False),
             ("Train", run_train_tool, False),
