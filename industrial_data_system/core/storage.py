@@ -14,6 +14,7 @@ from industrial_data_system.core.db_manager import DatabaseManager
 import logging
 
 from industrial_data_system.utils.asc_utils import convert_asc_to_parquet
+from industrial_data_system.core.model_manager import AutoencoderModelManager, ModelTrainingError
 
 # Add logger after imports
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ class LocalStorageManager:
         self.base_path = self.config.files_base_path
         self.config.ensure_directories()
         self._last_drive_state: bool = self.base_path.exists()
+        self._model_manager = AutoencoderModelManager(logger=logger)
 
     # ------------------------------------------------------------------
     # Utility helpers
@@ -180,6 +182,25 @@ class LocalStorageManager:
                 # Continue - original file was still copied successfully
 
         relative_path = final_destination.relative_to(self.base_path)
+
+        try:
+            self._model_manager.handle_new_dataset(
+                final_destination,
+                pump_series=pump_series,
+                test_type=test_type,
+            )
+        except ModelTrainingError as exc:
+            logger.warning(
+                "Autoencoder training skipped for %s/%s: %s", pump_series, test_type, exc
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.exception(
+                "Unexpected error while training autoencoder for %s/%s: %s",
+                pump_series,
+                test_type,
+                exc,
+            )
+
         return StoredFile(
             absolute_path=final_destination,
             relative_path=relative_path,
