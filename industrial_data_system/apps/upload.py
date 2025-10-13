@@ -1243,42 +1243,18 @@ class IndustrialDataApp(QMainWindow):
         self.current_username: str = ""
         self.default_pump_series = "General"
 
-        self.stack = QStackedWidget()
-        self.setCentralWidget(self.stack)
-
-        self.login_page = LoginPage()
-        self.forgot_page = ForgotPasswordPage()
         self.dashboard_page = DashboardPage()
-
-        self.stack.addWidget(self.login_page)
-        self.stack.addWidget(self.forgot_page)
-        self.stack.addWidget(self.dashboard_page)
-
-        self.login_page.login_requested.connect(self.handle_login)
-        self.login_page.signup_requested.connect(self.handle_signup)
-        self.login_page.forgot_password_requested.connect(self.show_forgot_password)
-
-        self.forgot_page.reset_requested.connect(self.handle_password_reset)
-        self.forgot_page.back_requested.connect(self.show_login)
-
-        self.dashboard_page.logout_requested.connect(self.handle_logout)
+        self.setCentralWidget(self.dashboard_page)
         self.dashboard_page.upload_requested.connect(self.handle_upload)
         self.dashboard_page.refresh_requested.connect(self.refresh_files)
         self.dashboard_page.pump_series_created.connect(self.handle_new_pump_series)
         self.dashboard_page.test_type_created.connect(self.handle_new_test_type)
 
-        self.show_login()
+        self._initialize_gateway_session()
 
-    def show_login(self, email: str = "") -> None:
+    def _initialize_gateway_session(self) -> None:
         gateway_user = self._ensure_gateway_user()
         self._set_logged_in_user(gateway_user)
-
-    def show_forgot_password(self) -> None:
-        self.stack.setCurrentWidget(self.forgot_page)
-
-    def show_dashboard(self) -> None:
-        self.stack.setCurrentWidget(self.dashboard_page)
-        self.load_test_types()
 
     def _ensure_gateway_user(self) -> LocalUser:
         """Create or retrieve the shared gateway account for upload access."""
@@ -1433,19 +1409,6 @@ class IndustrialDataApp(QMainWindow):
         if index >= 0:
             self.dashboard_page.test_type_combo.setCurrentIndex(index)
 
-    def handle_login(self, identifier: str, password: str) -> None:
-        identifier = identifier.strip()
-        if not identifier or not password:
-            self._alert("Username/Email and password are required.", QMessageBox.Warning)
-            return
-
-        user = self.auth_store.authenticate(identifier, password)
-        if not user:
-            self._alert("Invalid credentials. Please try again.", QMessageBox.Warning)
-            return
-
-        self._set_logged_in_user(user)
-
     def _set_logged_in_user(self, user: LocalUser) -> None:
         session_payload = {
             "id": user.id,
@@ -1463,72 +1426,7 @@ class IndustrialDataApp(QMainWindow):
         self.dashboard_page.set_user_identity(
             self.current_username, session_payload.get("email", "")
         )
-        self.show_dashboard()
         self.refresh_files()
-
-    def handle_signup(self, email: str, username: str, password: str) -> None:
-        email = email.strip().lower()
-        username = username.strip()
-        if not email or not username or not password:
-            self._alert("All signup fields are required.", QMessageBox.Warning)
-            return
-
-        if len(username) > 6 or len(password) > 6:
-            self._alert(
-                "Username and password must be 6 characters or fewer.",
-                QMessageBox.Warning,
-            )
-            return
-
-        if not self._is_valid_email(email):
-            self._alert("Enter a valid email address.", QMessageBox.Warning)
-            return
-
-        normalized_username = username.lower()
-
-        metadata = {
-            "username": username,
-            "username_normalized": normalized_username,
-        }
-
-        try:
-            user = self.auth_store.create_user(
-                email=email,
-                password=password,
-                username=normalized_username,
-                metadata=metadata,
-            )
-        except ValueError as exc:
-            self._alert(str(exc), QMessageBox.Warning)
-            return
-
-        self._alert(
-            "Signup successful! You're now signed in.",
-            QMessageBox.Information,
-        )
-        self._set_logged_in_user(user)
-
-    def handle_password_reset(self, email: str) -> None:
-        if not email:
-            self._alert("Email is required to reset the password.", QMessageBox.Warning)
-            return
-
-        user_exists = any(user.email == email.strip().lower() for user in self.auth_store.list_users())
-        if not user_exists:
-            self._alert("No account was found with that email.", QMessageBox.Warning)
-            return
-
-        self._alert(
-            "Password resets must be handled by an administrator for local accounts.",
-            QMessageBox.Information,
-        )
-        self.show_login(email)
-
-    def handle_logout(self) -> None:
-        self.session_state.clear()
-        self.current_username = ""
-        self._alert("You have been signed out.", QMessageBox.Information)
-        self.show_login()
 
     def refresh_files(self) -> None:
         user = self.session_state.user
@@ -1537,7 +1435,7 @@ class IndustrialDataApp(QMainWindow):
                 "Gateway session was reset. Restoring access...",
                 QMessageBox.Information,
             )
-            self.show_login()
+            self._initialize_gateway_session()
             return
 
         metadata = user.get("metadata") or {}
@@ -1558,7 +1456,7 @@ class IndustrialDataApp(QMainWindow):
         user_id = user.get("id")
         if user_id is None:
             self._alert("Session error: missing user identifier.", QMessageBox.Warning)
-            self.show_login()
+            self._initialize_gateway_session()
             return
 
         base_path = self.storage_manager.base_path
@@ -1596,7 +1494,7 @@ class IndustrialDataApp(QMainWindow):
                 "Gateway session was reset. Restoring access...",
                 QMessageBox.Information,
             )
-            self.show_login()
+            self._initialize_gateway_session()
             return
 
         pump_series = pump_series.strip()
