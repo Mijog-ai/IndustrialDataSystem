@@ -150,16 +150,3 @@ For a full end-to-end verification, exercise the upload and reader workflows
 against a real shared drive to confirm connectivity, preview rendering, and the
 database migration scripts.
 
-## Troubleshooting
-
-- **Shared drive unavailable** – Both applications surface warnings if the
-  configured drive cannot be reached. Verify network connectivity and that the
-  UNC/mount path in `.env` is correct.
-- **Storage limit reached** – The upload workflow enforces the `STORAGE_LIMIT_MB`
-  quota. Use the admin storage report or archive older files before retrying.
-- **Database locked** – SQLite may briefly lock during concurrent operations;
-  retry after a moment. The database manager includes backoff logic to minimise
-  interruptions.
-
-For detailed setup instructions (including operating system-specific steps for
-mounting the shared drive), consult [`SETUP.md`](SETUP.md).
