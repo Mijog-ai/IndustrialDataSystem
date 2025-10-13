@@ -659,7 +659,7 @@ class ReaderApp(QMainWindow):
         self.dashboard.refresh_requested.connect(self.refresh_resources)
         self.dashboard.download_button.clicked.connect(self.dashboard.download_current)
 
-        self.show_login()
+        # self.show_login()
 
     # ------------------------------------------------------------------
     # Navigation helpers
