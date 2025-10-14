@@ -1,15 +1,6 @@
-"""GUI applications for the Industrial Data System."""
+"""High-level application entry points for Industrial Data System user interfaces."""
 
-__all__ = ["IndustrialDataApp", "IndustrialTheme", "ReaderApp"]
+from industrial_data_system.apps.desktop.reader import ReaderApp
+from industrial_data_system.apps.desktop.uploader import IndustrialDataApp, IndustrialTheme
 
-
-def __getattr__(name: str):
-    if name == "ReaderApp":
-        from .reader import ReaderApp  # noqa: F401
-
-        return ReaderApp
-    if name in {"IndustrialDataApp", "IndustrialTheme"}:
-        from .upload import IndustrialDataApp, IndustrialTheme  # noqa: F401
-
-        return {"IndustrialDataApp": IndustrialDataApp, "IndustrialTheme": IndustrialTheme}[name]
-    raise AttributeError(f"module 'industrial_data_system.apps' has no attribute '{name}'")
+__all__ = ["ReaderApp", "IndustrialDataApp", "IndustrialTheme"]

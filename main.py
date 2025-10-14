@@ -15,8 +15,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from industrial_data_system.apps.reader import ReaderApp
-from industrial_data_system.apps.upload import IndustrialDataApp, IndustrialTheme
+from industrial_data_system.apps import IndustrialDataApp, IndustrialTheme, ReaderApp
 
 
 class GatewayWindow(QMainWindow):

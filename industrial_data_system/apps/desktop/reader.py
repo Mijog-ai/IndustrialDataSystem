@@ -31,12 +31,12 @@ from PyQt5.QtWidgets import (
     QFormLayout,
 )
 
-from industrial_data_system.apps.tools import (
-    run_ai_data_study_tool,
-    run_plotter_tool,
-    run_train_tool,
+from industrial_data_system.ai.toolkit import (
+    run_ai_data_study,
+    run_plotter,
+    run_training_simulation,
 )
-from industrial_data_system.apps.upload import IndustrialTheme
+from industrial_data_system.apps.desktop.uploader import IndustrialTheme
 from industrial_data_system.core.auth import LocalAuthStore, LocalUser
 from industrial_data_system.core.config import get_config
 from industrial_data_system.core.db_manager import DatabaseManager
@@ -337,9 +337,9 @@ class ReaderDashboard(QWidget):
 
         tool_buttons: List[tuple[str, Callable[..., Optional[str]], bool]] = [
 
-            ("Plotter", run_plotter_tool, True),
-            ("AI Data Lab", run_ai_data_study_tool, False),
-            ("Train", run_train_tool, False),
+            ("Plotter", run_plotter, True),
+            ("AI Data Lab", run_ai_data_study, False),
+            ("Train", run_training_simulation, False),
         ]
 
         for label, callback, requires_resource in tool_buttons:
