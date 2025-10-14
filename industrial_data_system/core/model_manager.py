@@ -144,7 +144,7 @@ class AutoencoderModelManager:
 
         self._root = self.config.shared_drive_path
         self._files_root = self.config.files_base_path
-        self._models_root = self._root / "models"
+        self._models_root = self.config.shared_drive_path / "models"
         for directory in (self._root, self._files_root, self._models_root):
             directory.mkdir(parents=True, exist_ok=True)
 
@@ -162,7 +162,10 @@ class AutoencoderModelManager:
             raise ModelTrainingError(f"Dataset '{dataset_path}' does not exist.")
 
         file_type = self._resolve_file_type(dataset_path)
-        stored_dataset = self._store_dataset(dataset_path, pump_series, test_type, file_type)
+
+        # Don't store dataset again - it's already stored by LocalStorageManager
+        # Just use the path that was passed in
+        stored_dataset = dataset_path
 
         numeric_chunks = list(self._load_numeric_chunks(stored_dataset, file_type))
         if not numeric_chunks:
@@ -181,10 +184,32 @@ class AutoencoderModelManager:
         model: Autoencoder
         base_file_count = 0
         version = 1
+
+        # Check if existing model exists and is accessible
         if existing_record and existing_record.input_dim == input_dim:
-            model = self._load_model(existing_record.model_path, input_dim)
-            version = existing_record.version + 1
-            base_file_count = existing_record.file_count
+            model_path = Path(existing_record.model_path)
+            if model_path.exists():
+                try:
+                    model = self._load_model(str(model_path), input_dim)
+                    version = existing_record.version + 1
+                    base_file_count = existing_record.file_count
+                except Exception as exc:
+                    self.logger.warning(
+                        "Failed to load existing model from %s: %s. Creating new model.",
+                        model_path,
+                        exc,
+                    )
+                    model = Autoencoder(input_dim)
+                    version = (existing_record.version + 1) if existing_record else 1
+                    base_file_count = existing_record.file_count if existing_record else 0
+            else:
+                self.logger.warning(
+                    "Model file not found at %s. Creating new model.",
+                    model_path,
+                )
+                model = Autoencoder(input_dim)
+                version = (existing_record.version + 1) if existing_record else 1
+                base_file_count = existing_record.file_count if existing_record else 0
         else:
             if existing_record and existing_record.input_dim != input_dim:
                 self.logger.warning(
@@ -247,28 +272,10 @@ class AutoencoderModelManager:
             )
         return self.SUPPORTED_EXTENSIONS[extension]
 
-    def _files_directory(self, pump_series: str, test_type: str, file_type: str) -> Path:
-        destination = self._files_root / pump_series / test_type / file_type
-        destination.mkdir(parents=True, exist_ok=True)
-        return destination
-
     def _models_directory(self, pump_series: str, test_type: str, file_type: str) -> Path:
-        destination = self._models_root / pump_series / test_type / file_type
+        # Match the structure: models/pump_series/tests/test_type/file_type
+        destination = self._models_root / pump_series / "tests" / test_type / file_type
         destination.mkdir(parents=True, exist_ok=True)
-        return destination
-
-    def _store_dataset(
-        self,
-        dataset_path: Path,
-        pump_series: str,
-        test_type: str,
-        file_type: str,
-    ) -> Path:
-        target_dir = self._files_directory(pump_series, test_type, file_type)
-        destination = target_dir / dataset_path.name
-        if destination.exists():
-            destination = self._unique_path(destination)
-        shutil.copy2(dataset_path, destination)
         return destination
 
     def _unique_path(self, base_path: Path) -> Path:
