@@ -66,8 +66,8 @@ def test_initial_training_persists_files(isolated_config, tmp_path):
 
     metadata = trainer.handle_new_dataset(dataset, pump_series="P100", test_type="performance")
 
-    models_dir = config.shared_drive_path / "industrialDATA" / "models" / "P100" / "performance" / "csv"
-    files_dir = config.shared_drive_path / "industrialDATA" / "files" / "P100" / "performance" / "csv"
+    models_dir = config.shared_drive_path / "models" / "P100" / "performance" / "csv"
+    files_dir = config.files_base_path / "P100" / "performance" / "csv"
 
     assert (models_dir / "model.pkl").exists()
     assert (models_dir / "scaler.pkl").exists()
