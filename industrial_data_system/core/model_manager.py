@@ -142,8 +142,8 @@ class AutoencoderModelManager:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
 
-        self._root = self.config.shared_drive_path / "industrialDATA"
-        self._files_root = self._root / "files"
+        self._root = self.config.shared_drive_path
+        self._files_root = self.config.files_base_path
         self._models_root = self._root / "models"
         for directory in (self._root, self._files_root, self._models_root):
             directory.mkdir(parents=True, exist_ok=True)
