@@ -81,6 +81,33 @@ class SQLiteDatabase:
                     pump_series_id INTEGER REFERENCES pump_series(id) ON DELETE SET NULL,
                     test_type_id INTEGER REFERENCES test_types(id) ON DELETE SET NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS dataset_files (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pump_series TEXT NOT NULL,
+                    test_type TEXT NOT NULL,
+                    file_type TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    file_size INTEGER,
+                    checksum TEXT,
+                    processed_at TEXT DEFAULT (datetime('now'))
+                );
+
+                CREATE TABLE IF NOT EXISTS model_registry (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pump_series TEXT NOT NULL,
+                    test_type TEXT NOT NULL,
+                    file_type TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    model_path TEXT NOT NULL,
+                    scaler_path TEXT,
+                    metadata_path TEXT,
+                    trained_at TEXT DEFAULT (datetime('now')),
+                    file_count INTEGER DEFAULT 0,
+                    input_dim INTEGER NOT NULL,
+                    metrics TEXT DEFAULT '{}',
+                    UNIQUE(pump_series, test_type, file_type, version)
+                );
                 """
             )
             cursor = connection.cursor()

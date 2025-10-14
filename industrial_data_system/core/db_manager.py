@@ -56,6 +56,34 @@ class PumpSeriesRecord:
     created_at: str
 
 
+@dataclass
+class DatasetFileRecord:
+    id: int
+    pump_series: str
+    test_type: str
+    file_type: str
+    file_path: str
+    file_size: Optional[int]
+    checksum: Optional[str]
+    processed_at: str
+
+
+@dataclass
+class ModelRegistryRecord:
+    id: int
+    pump_series: str
+    test_type: str
+    file_type: str
+    version: int
+    model_path: str
+    scaler_path: Optional[str]
+    metadata_path: Optional[str]
+    trained_at: str
+    file_count: int
+    input_dim: int
+    metrics: Dict[str, Any]
+
+
 class DatabaseManager:
     """High-level interface for all database operations."""
 
@@ -171,6 +199,138 @@ class DatabaseManager:
             description=row["description"],
             created_at=row["created_at"],
         )
+
+    def _row_to_dataset_file(self, row: sqlite3.Row) -> DatasetFileRecord:
+        return DatasetFileRecord(
+            id=row["id"],
+            pump_series=row["pump_series"],
+            test_type=row["test_type"],
+            file_type=row["file_type"],
+            file_path=row["file_path"],
+            file_size=row["file_size"],
+            checksum=row["checksum"],
+            processed_at=row["processed_at"],
+        )
+
+    def _row_to_model_registry(self, row: sqlite3.Row) -> ModelRegistryRecord:
+        metrics_raw = row["metrics"] if "metrics" in row.keys() else row["metrics"]
+        if isinstance(metrics_raw, (bytes, bytearray)):
+            metrics_raw = metrics_raw.decode("utf-8")
+        try:
+            metrics = json.loads(metrics_raw) if metrics_raw else {}
+        except json.JSONDecodeError:
+            metrics = {}
+
+        return ModelRegistryRecord(
+            id=row["id"],
+            pump_series=row["pump_series"],
+            test_type=row["test_type"],
+            file_type=row["file_type"],
+            version=row["version"],
+            model_path=row["model_path"],
+            scaler_path=row["scaler_path"],
+            metadata_path=row["metadata_path"],
+            trained_at=row["trained_at"],
+            file_count=row["file_count"],
+            input_dim=row["input_dim"],
+            metrics=metrics,
+        )
+
+    # ------------------------------------------------------------------
+    # Dataset/model registry operations
+    # ------------------------------------------------------------------
+    def register_dataset_file(
+        self,
+        *,
+        pump_series: str,
+        test_type: str,
+        file_type: str,
+        file_path: str,
+        file_size: Optional[int] = None,
+        checksum: Optional[str] = None,
+    ) -> DatasetFileRecord:
+        with self.transaction() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                INSERT INTO dataset_files (pump_series, test_type, file_type, file_path, file_size, checksum)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (pump_series, test_type, file_type, file_path, file_size, checksum),
+            )
+            dataset_id = cursor.lastrowid
+            cursor.execute("SELECT * FROM dataset_files WHERE id = ?", (dataset_id,))
+            row = cursor.fetchone()
+            cursor.close()
+        if row is None:  # pragma: no cover - defensive
+            raise RuntimeError("Failed to persist dataset file metadata")
+        return self._row_to_dataset_file(row)
+
+    def get_latest_model_record(
+        self,
+        pump_series: str,
+        test_type: str,
+        file_type: str,
+    ) -> Optional[ModelRegistryRecord]:
+        row = self._execute(
+            """
+            SELECT * FROM model_registry
+            WHERE pump_series = ? AND test_type = ? AND file_type = ?
+            ORDER BY version DESC
+            LIMIT 1
+            """,
+            (pump_series, test_type, file_type),
+            fetchone=True,
+        )
+        if row is None:
+            return None
+        return self._row_to_model_registry(row)
+
+    def record_model_version(
+        self,
+        *,
+        pump_series: str,
+        test_type: str,
+        file_type: str,
+        version: int,
+        model_path: str,
+        scaler_path: Optional[str],
+        metadata_path: Optional[str],
+        file_count: int,
+        input_dim: int,
+        metrics: Optional[Dict[str, Any]] = None,
+    ) -> ModelRegistryRecord:
+        metrics_json = json.dumps(metrics or {})
+        with self.transaction() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                INSERT INTO model_registry (
+                    pump_series, test_type, file_type, version, model_path, scaler_path, metadata_path,
+                    file_count, input_dim, metrics
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    pump_series,
+                    test_type,
+                    file_type,
+                    version,
+                    model_path,
+                    scaler_path,
+                    metadata_path,
+                    file_count,
+                    input_dim,
+                    metrics_json,
+                ),
+            )
+            record_id = cursor.lastrowid
+            cursor.execute("SELECT * FROM model_registry WHERE id = ?", (record_id,))
+            row = cursor.fetchone()
+            cursor.close()
+        if row is None:  # pragma: no cover - defensive
+            raise RuntimeError("Failed to persist model registry entry")
+        return self._row_to_model_registry(row)
 
     # ------------------------------------------------------------------
     # User operations
