@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import (
     QWidget,
     QDialog,
     QDialogButtonBox,
-    QFormLayout,
+    QFormLayout, QTableWidgetItem, QTableWidget,
 )
 
 from industrial_data_system.ai.toolkit import (
@@ -330,6 +330,10 @@ class ReaderDashboard(QWidget):
         self.text_preview.hide()
         preview_content_layout.addWidget(self.text_preview, stretch=1)
 
+        self.table_preview = QTableWidget()
+        self.table_preview.hide()
+        preview_content_layout.addWidget(self.table_preview)
+
         tools_container = QWidget()
         tools_layout = QVBoxLayout(tools_container)
         tools_layout.setContentsMargins(0, 0, 0, 0)
@@ -392,6 +396,24 @@ class ReaderDashboard(QWidget):
         self.text_preview.hide()
         self.download_button.setEnabled(False)
         self._current_resource = None
+
+    def _show_table(self, df):
+        self.table_preview.clear()
+        self.table_preview.setRowCount(df.shape[0])
+        self.table_preview.setColumnCount(df.shape[1])
+        self.table_preview.setHorizontalHeaderLabels(df.columns.astype(str).tolist())
+
+        # Fill table cells
+        for row in range(df.shape[0]):
+            for col in range(df.shape[1]):
+                item = QTableWidgetItem(str(df.iat[row, col]))
+                self.table_preview.setItem(row, col, item)
+
+        self.table_preview.resizeColumnsToContents()
+        self.table_preview.show()
+        self.text_preview.hide()
+        self.image_preview.hide()
+
 
     def populate(self, resources: Iterable[LocalResource]) -> None:
         self.clear()
@@ -548,17 +570,26 @@ class ReaderDashboard(QWidget):
             try:
                 import pandas as pd
                 df = pd.read_parquet(path, engine='pyarrow')
-                preview_text = f"Parquet File Preview\n\n"
-                preview_text += f"Shape: {df.shape[0]} rows × {df.shape[1]} columns\n"
-                preview_text += f"Columns: {', '.join(df.columns.tolist())}\n\n"
-                preview_text += "First 10 rows:\n"
-                preview_text += df.head(10).to_string()
             except Exception as exc:
                 self._show_message(f"Unable to read parquet file: {exc}")
                 return
-            self.text_preview.setPlainText(preview_text)
-            self.text_preview.show()
-            self._show_message("Parquet file preview")
+
+            # Show first 300 rows as a table
+            self._show_table(df.head(300))
+            self._show_message("Parquet Table Preview")
+            return
+
+        # CSV or ASC → show as table
+        if suffix in {".csv", ".asc"}:
+            try:
+                import pandas as pd
+                df = pd.read_csv(path)
+            except Exception as exc:
+                self._show_message(f"Unable to read table file: {exc}")
+                return
+
+            self._show_table(df.head(300))
+            self._show_message("Table Preview")
             return
 
         self._show_message("Preview is not available. Use Download to open the file.")
