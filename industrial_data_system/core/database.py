@@ -108,7 +108,17 @@ class SQLiteDatabase:
                     metrics TEXT DEFAULT '{}',
                     UNIQUE(pump_series, test_type, file_type, version)
                 );
-                """
+                 -- Add these indexes at the end:
+                CREATE INDEX IF NOT EXISTS idx_uploads_user_id ON uploads(user_id);
+                CREATE INDEX IF NOT EXISTS idx_uploads_test_type ON uploads(test_type);
+                CREATE INDEX IF NOT EXISTS idx_uploads_pump_series ON uploads(pump_series);
+                CREATE INDEX IF NOT EXISTS idx_uploads_created_at ON uploads(created_at);
+                CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users(LOWER(email));
+                CREATE INDEX IF NOT EXISTS idx_users_username_lower ON users(LOWER(username));
+                CREATE INDEX IF NOT EXISTS idx_test_types_name ON test_types(name);
+                CREATE INDEX IF NOT EXISTS idx_pump_series_name ON pump_series(name);
+            """
+
             )
             cursor = connection.cursor()
             for statement in (

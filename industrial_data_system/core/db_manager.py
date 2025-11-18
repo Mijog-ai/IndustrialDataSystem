@@ -8,6 +8,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
+import time
+from typing import Dict, Tuple, Any, Optional
 
 from industrial_data_system.core.database import SQLiteDatabase, get_database
 
@@ -87,10 +89,86 @@ class ModelRegistryRecord:
 class DatabaseManager:
     """High-level interface for all database operations."""
 
-    def __init__(self, database: Optional[SQLiteDatabase] = None, *, max_retries: int = 5) -> None:
+    def __init__(self, database: Optional[SQLiteDatabase] = None, *, max_retries: int = 5):
         self.database = database or get_database()
         self.database.initialise()
         self.max_retries = max_retries
+
+        # Add cache
+        self._cache: Dict[str, Tuple[Any, float]] = {}
+        self._cache_ttl = 60  # 60 seconds cache
+
+    def _get_from_cache(self, key: str) -> Optional[Any]:
+        """Get cached result if still valid"""
+        if key in self._cache:
+            result, timestamp = self._cache[key]
+            if time.time() - timestamp < self._cache_ttl:
+                return result
+            else:
+                # Remove expired entry
+                del self._cache[key]
+        return None
+
+    def _add_to_cache(self, key: str, value: Any):
+        """Add result to cache"""
+        self._cache[key] = (value, time.time())
+
+    def list_uploads(
+            self,
+            *,
+            user_id: Optional[int] = None,
+            test_type: Optional[str] = None,
+            pump_series: Optional[str] = None,
+            start_date: Optional[str] = None,
+            end_date: Optional[str] = None,
+    ) -> List[UploadRecord]:
+        # Create cache key
+        cache_key = f"uploads_{user_id}_{test_type}_{pump_series}_{start_date}_{end_date}"
+
+        # Check cache first
+        cached = self._get_from_cache(cache_key)
+        if cached is not None:
+            return cached
+
+        # Execute query (existing code)
+        query = "SELECT * FROM uploads WHERE 1=1"
+        params: List[Any] = []
+        if user_id is not None:
+            query += " AND user_id = ?"
+            params.append(user_id)
+        if test_type:
+            query += " AND test_type = ?"
+            params.append(test_type)
+        if pump_series:
+            query += " AND pump_series = ?"
+            params.append(pump_series)
+        if start_date:
+            query += " AND datetime(created_at) >= datetime(?)"
+            params.append(start_date)
+        if end_date:
+            query += " AND datetime(created_at) <= datetime(?)"
+            params.append(end_date)
+        query += " ORDER BY datetime(created_at) DESC"
+        rows = self._execute(query, params, fetchall=True)
+
+        if not rows:
+            result = []
+        else:
+            result = [self._row_to_upload(row) for row in rows]
+
+        # Cache the result
+        self._add_to_cache(cache_key, result)
+
+        return result
+
+    def clear_cache(self):
+        """Clear all cached queries (call after insert/update/delete)"""
+        self._cache.clear()
+
+
+    def delete_upload(self, upload_id: int) -> None:
+        self._execute("DELETE FROM uploads WHERE id = ?", (upload_id,))
+        self.clear_cache()  # Clear cache after modification
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -618,17 +696,17 @@ class DatabaseManager:
     # Uploads
     # ------------------------------------------------------------------
     def create_upload(
-        self,
-        *,
-        user_id: int,
-        filename: str,
-        file_path: str,
-        pump_series: Optional[str],
-        test_type: str,
-        file_size: Optional[int],
-        mime_type: Optional[str],
-        pump_series_id: Optional[int],
-        test_type_id: Optional[int],
+            self,
+            *,
+            user_id: int,
+            filename: str,
+            file_path: str,
+            pump_series: Optional[str],
+            test_type: str,
+            file_size: Optional[int],
+            mime_type: Optional[str],
+            pump_series_id: Optional[int],
+            test_type_id: Optional[int],
     ) -> UploadRecord:
         self._execute(
             """
@@ -668,6 +746,11 @@ class DatabaseManager:
             fetchone=True,
         )
         assert row is not None
+
+        # Clear cache after creating new upload
+        if hasattr(self, '_cache'):
+            self._cache.clear()
+
         return self._row_to_upload(row)
 
     def find_upload(
@@ -727,40 +810,6 @@ class DatabaseManager:
         query = "UPDATE uploads SET " + ", ".join(fields) + " WHERE id = ?"
         self._execute(query, params)
 
-    def list_uploads(
-        self,
-        *,
-        user_id: Optional[int] = None,
-        test_type: Optional[str] = None,
-        pump_series: Optional[str] = None,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-    ) -> List[UploadRecord]:
-        query = "SELECT * FROM uploads WHERE 1=1"
-        params: List[Any] = []
-        if user_id is not None:
-            query += " AND user_id = ?"
-            params.append(user_id)
-        if test_type:
-            query += " AND test_type = ?"
-            params.append(test_type)
-        if pump_series:
-            query += " AND pump_series = ?"
-            params.append(pump_series)
-        if start_date:
-            query += " AND datetime(created_at) >= datetime(?)"
-            params.append(start_date)
-        if end_date:
-            query += " AND datetime(created_at) <= datetime(?)"
-            params.append(end_date)
-        query += " ORDER BY datetime(created_at) DESC"
-        rows = self._execute(query, params, fetchall=True)
-        if not rows:
-            return []
-        return [self._row_to_upload(row) for row in rows]
-
-    def delete_upload(self, upload_id: int) -> None:
-        self._execute("DELETE FROM uploads WHERE id = ?", (upload_id,))
 
     def prune_missing_uploads(self, base_path: Path) -> int:
         """Remove upload records that no longer have files on disk.

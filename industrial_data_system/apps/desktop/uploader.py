@@ -9,6 +9,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from industrial_data_system.core.constants import MAX_PREVIEW_ROWS, SUPPORTED_EXTENSIONS
 
 from dotenv import load_dotenv
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QUrl
@@ -32,12 +33,14 @@ from PyQt5.QtWidgets import (
     QScrollArea,
     QComboBox,
     QDialog,
-    QDialogButtonBox,
+    QDialogButtonBox, QProgressDialog,
 )
 from industrial_data_system.core.auth import LocalAuthStore, LocalUser, UploadHistoryStore
 from industrial_data_system.core.config import get_config
 from industrial_data_system.core.db_manager import DatabaseManager
 from industrial_data_system.core.storage import LocalStorageManager, StorageError
+from industrial_data_system.core.workers import FileUploadWorker
+
 
 # ---------------------------------------------------------------------------
 # Environment loading helpers
@@ -745,6 +748,12 @@ class DashboardPage(QWidget):
     def __init__(self) -> None:
         super().__init__()
 
+        # Add pagination variables
+        self.current_page = 0
+        self.page_size = 50
+        self.total_records = 0
+        self.all_file_records = []
+
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -935,6 +944,23 @@ class DashboardPage(QWidget):
         scroll.setWidget(container)
         main_layout.addWidget(scroll)
 
+        # Add pagination controls after table
+        pagination_layout = QHBoxLayout()
+
+        self.prev_button = QPushButton("← Previous")
+        self.prev_button.setProperty("secondary", True)
+        self.prev_button.clicked.connect(self._load_previous_page)
+        pagination_layout.addWidget(self.prev_button)
+
+        self.page_label = QLabel("Page 1 of 1")
+        self.page_label.setAlignment(Qt.AlignCenter)
+        pagination_layout.addWidget(self.page_label)
+
+        self.next_button = QPushButton("Next →")
+        self.next_button.setProperty("secondary", True)
+        self.next_button.clicked.connect(self._load_next_page)
+        pagination_layout.addWidget(self.next_button)
+
         self.catalog: Dict[str, List[str]] = {}
         self.pump_series_options: List[str] = []
 
@@ -1051,10 +1077,44 @@ class DashboardPage(QWidget):
             self.welcome_label.setText("Dashboard")
             self.subtitle_label.setText("Manage your industrial test data")
 
+    # def update_files(self, files: List[Dict[str, Any]]) -> None:
+    #     self.file_records = files
+    #     self.table.setRowCount(len(files))
+    #     for row, file_record in enumerate(files):
+    #         filename_item = QTableWidgetItem(file_record.get("filename", ""))
+    #         pump_series_item = QTableWidgetItem(file_record.get("pump_series", ""))
+    #         test_type_item = QTableWidgetItem(file_record.get("test_type", ""))
+    #         path_item = QTableWidgetItem(file_record.get("absolute_path") or file_record.get("file_path", ""))
+    #         created_item = QTableWidgetItem(file_record.get("created_at", ""))
+    #
+    #         for item in (filename_item, pump_series_item, test_type_item, path_item, created_item):
+    #             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+    #
+    #         self.table.setItem(row, 0, filename_item)
+    #         self.table.setItem(row, 1, pump_series_item)
+    #         self.table.setItem(row, 2, test_type_item)
+    #         self.table.setItem(row, 3, path_item)
+    #         self.table.setItem(row, 4, created_item)
+
     def update_files(self, files: List[Dict[str, Any]]) -> None:
-        self.file_records = files
-        self.table.setRowCount(len(files))
-        for row, file_record in enumerate(files):
+        """Update with pagination"""
+        self.all_file_records = files
+        self.total_records = len(files)
+        self.current_page = 0
+
+        self._display_current_page()
+
+
+    def _display_current_page(self):
+        """Display only the current page of results"""
+        start = self.current_page * self.page_size
+        end = start + self.page_size
+
+        page_records = self.all_file_records[start:end]
+
+        # Update table with only current page
+        self.table.setRowCount(len(page_records))
+        for row, file_record in enumerate(page_records):
             filename_item = QTableWidgetItem(file_record.get("filename", ""))
             pump_series_item = QTableWidgetItem(file_record.get("pump_series", ""))
             test_type_item = QTableWidgetItem(file_record.get("test_type", ""))
@@ -1070,13 +1130,24 @@ class DashboardPage(QWidget):
             self.table.setItem(row, 3, path_item)
             self.table.setItem(row, 4, created_item)
 
+        # Update pagination controls
+        total_pages = (self.total_records + self.page_size - 1) // self.page_size
+        self.page_label.setText(f"Page {self.current_page + 1} of {total_pages}")
+
+        self.prev_button.setEnabled(self.current_page > 0)
+        self.next_button.setEnabled(self.current_page < total_pages - 1)
+
     def _get_selected_record(self) -> Optional[Dict[str, Any]]:
+        """Get selected record (adjusted for pagination)"""
         selection = self.table.selectionModel().selectedRows()
         if not selection:
             return None
         row = selection[0].row()
-        if 0 <= row < len(self.file_records):
-            return self.file_records[row]
+
+        # Adjust for pagination
+        actual_index = self.current_page * self.page_size + row
+        if 0 <= actual_index < len(self.all_file_records):
+            return self.all_file_records[actual_index]
         return None
 
     def _open_selected_file(self) -> None:
@@ -1133,6 +1204,19 @@ class DashboardPage(QWidget):
                 path = Path(base_path) / path
         QApplication.clipboard().setText(str(path))
         QMessageBox.information(self, "Industrial Data System", "File path copied to clipboard.")
+
+    def _load_next_page(self):
+        """Load next page"""
+        total_pages = (self.total_records + self.page_size - 1) // self.page_size
+        if self.current_page < total_pages - 1:
+            self.current_page += 1
+            self._display_current_page()
+
+    def _load_previous_page(self):
+        """Load previous page"""
+        if self.current_page > 0:
+            self.current_page -= 1
+            self._display_current_page()
 
     def _show_selected_properties(self) -> None:
         record = self._get_selected_record()
@@ -1221,6 +1305,7 @@ class DashboardPage(QWidget):
         self.csv_table.setRowCount(0)
         self.csv_table.setColumnCount(0)
         self.csv_card.hide()
+
 
 
 class IndustrialDataApp(QMainWindow):
@@ -1587,9 +1672,58 @@ class IndustrialDataApp(QMainWindow):
         if successful_uploads:
             self.refresh_files()
 
+            # Create progress dialog
+            self.progress_dialog = QProgressDialog(
+                "Uploading files...", "Cancel", 0, 100, self
+            )
+            self.progress_dialog.setWindowModality(Qt.WindowModal)
+            self.progress_dialog.show()
+
+            # Create worker
+            self.upload_worker = FileUploadWorker(
+                file_paths,
+                pump_series,
+                test_type,
+                self.storage_manager,
+                self.history_store,
+                self.session_state.user['id']
+            )
+
+            # Connect signals
+            self.upload_worker.progress.connect(self._update_upload_progress)
+            self.upload_worker.finished.connect(self._upload_finished)
+            self.upload_worker.error.connect(self._upload_error)
+
+            # Start upload in background
+            self.upload_worker.start()
+
     @staticmethod
     def _is_valid_email(email: str) -> bool:
         return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email))
+
+    def _update_upload_progress(self, percentage: int, filename: str):
+        """Update progress dialog"""
+        self.progress_dialog.setValue(percentage)
+        self.progress_dialog.setLabelText(f"Uploading: {filename}")
+
+    def _upload_finished(self, successful, failed):
+        """Handle upload completion"""
+        self.progress_dialog.close()
+
+        # Show summary
+        if successful:
+            message = f"Successfully uploaded {len(successful)} file(s)"
+            if failed:
+                message += f"\nFailed: {len(failed)} file(s)"
+            self._alert(message, QMessageBox.Information)
+
+        # Refresh UI
+        self.refresh_files()
+
+    def _upload_error(self, error_message):
+        """Handle upload error"""
+        self.progress_dialog.close()
+        self._alert(error_message, QMessageBox.Critical)
 
     def _prepare_file_preview(
             self, file_path: str, file_extension: str
@@ -1661,7 +1795,8 @@ class IndustrialDataApp(QMainWindow):
                         "" if cell is None else str(cell)
                         for cell in row
                     ])
-                    if len(rows) >= 101:
+                    if len(rows) >= MAX_PREVIEW_ROWS + 1:
+                        rows = rows[:MAX_PREVIEW_ROWS + 1]
                         break
             except Exception as exc:
                 self._alert(
