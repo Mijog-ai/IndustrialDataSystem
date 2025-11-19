@@ -33,7 +33,7 @@ from PyQt5.QtWidgets import (
     QScrollArea,
     QComboBox,
     QDialog,
-    QDialogButtonBox, QProgressDialog,
+    QDialogButtonBox, QProgressDialog, QCheckBox,
 )
 from industrial_data_system.core.auth import LocalAuthStore, LocalUser, UploadHistoryStore
 from industrial_data_system.core.config import get_config
@@ -737,13 +737,15 @@ class ForgotPasswordPage(QWidget):
 
 
 class DashboardPage(QWidget):
-    """Modern dashboard with test type organization."""
+    """Modern dashboard with test type organization and file selection."""
 
     logout_requested = pyqtSignal()
     upload_requested = pyqtSignal(list, str, str)  # file_paths, pump_series, test_type
     refresh_requested = pyqtSignal()
     pump_series_created = pyqtSignal(str, str)
     test_type_created = pyqtSignal(str, str, str)
+    files_deleted = pyqtSignal(list)  # List of file IDs to delete
+    files_moved = pyqtSignal(list, str, str)  # List of file IDs, new pump series, new test type
 
     def __init__(self) -> None:
         super().__init__()
@@ -753,6 +755,8 @@ class DashboardPage(QWidget):
         self.page_size = 50
         self.total_records = 0
         self.all_file_records = []
+        self.checkboxes = []  # Track all checkboxes
+
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -866,13 +870,33 @@ class DashboardPage(QWidget):
         files_layout.setContentsMargins(0, 0, 0, 0)
         files_layout.setSpacing(0)
 
+        # Header with select all checkbox
+        files_header_widget = QWidget()
+        files_header_layout = QHBoxLayout(files_header_widget)
+        files_header_layout.setContentsMargins(24, 16, 24, 16)
+        files_header_layout.setSpacing(12)
+
+        self.select_all_checkbox = QCheckBox()
+        self.select_all_checkbox.stateChanged.connect(self._handle_select_all)
+        files_header_layout.addWidget(self.select_all_checkbox)
+
         files_header = QLabel("Uploaded Files")
         files_header.setProperty("subheading", True)
-        files_header.setStyleSheet(f"padding: 20px 24px; border-bottom: 1px solid {IndustrialTheme.BORDER};")
-        files_layout.addWidget(files_header)
+        files_header_layout.addWidget(files_header)
 
-        self.table = QTableWidget(0, 5)
+        files_header_layout.addStretch()
+
+        self.selection_count_label = QLabel("0 selected")
+        self.selection_count_label.setProperty("caption", True)
+        files_header_layout.addWidget(self.selection_count_label)
+
+        files_header_widget.setStyleSheet(f"border-bottom: 1px solid {IndustrialTheme.BORDER};")
+        files_layout.addWidget(files_header_widget)
+
+        # Table with checkbox column (now 6 columns instead of 5)
+        self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels([
+            "",  # Checkbox column
             "Filename",
             "Pump Series",
             "Test Type",
@@ -880,21 +904,40 @@ class DashboardPage(QWidget):
             "Uploaded",
         ])
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.Fixed)
+        header.resizeSection(0, 50)  # Fixed width for checkbox column
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.Stretch)
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.Stretch)
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setFocusPolicy(Qt.NoFocus)
         files_layout.addWidget(self.table)
 
+        # Action buttons with bulk operations
         actions_layout = QHBoxLayout()
         actions_layout.setContentsMargins(16, 12, 16, 16)
         actions_layout.setSpacing(12)
 
+        # Bulk action buttons (only enabled when items selected)
+        self.bulk_delete_button = QPushButton("Delete Selected")
+        self.bulk_delete_button.setProperty("danger", True)
+        self.bulk_delete_button.clicked.connect(self._bulk_delete_files)
+        self.bulk_delete_button.setEnabled(False)
+        actions_layout.addWidget(self.bulk_delete_button)
+
+        self.bulk_move_button = QPushButton("Move Selected")
+        self.bulk_move_button.setProperty("secondary", True)
+        self.bulk_move_button.clicked.connect(self._bulk_move_files)
+        self.bulk_move_button.setEnabled(False)
+        actions_layout.addWidget(self.bulk_move_button)
+
+        actions_layout.addWidget(QLabel("|"))  # Separator
+
+        # Individual file actions
         self.open_file_button = QPushButton("Open File")
         self.open_file_button.setProperty("secondary", True)
         self.open_file_button.clicked.connect(self._open_selected_file)
@@ -1306,6 +1349,238 @@ class DashboardPage(QWidget):
         self.csv_table.setColumnCount(0)
         self.csv_card.hide()
 
+    def _handle_select_all(self, state):
+        """Handle select all checkbox state change"""
+        is_checked = state == Qt.Checked
+        for checkbox in self.checkboxes:
+            if checkbox is not None:
+                checkbox.blockSignals(True)
+                checkbox.setChecked(is_checked)
+                checkbox.blockSignals(False)
+        self._update_selection_count()
+
+    def _handle_checkbox_change(self):
+        """Handle individual checkbox state change"""
+        self._update_selection_count()
+
+        # Update select all checkbox state
+        checked_count = sum(1 for cb in self.checkboxes if cb and cb.isChecked())
+        total_count = len(self.checkboxes)
+
+        self.select_all_checkbox.blockSignals(True)
+        if checked_count == 0:
+            self.select_all_checkbox.setCheckState(Qt.Unchecked)
+        elif checked_count == total_count:
+            self.select_all_checkbox.setCheckState(Qt.Checked)
+        else:
+            self.select_all_checkbox.setCheckState(Qt.PartiallyChecked)
+        self.select_all_checkbox.blockSignals(False)
+
+    def _update_selection_count(self):
+        """Update the selection count label and enable/disable bulk action buttons"""
+        checked_count = sum(1 for cb in self.checkboxes if cb and cb.isChecked())
+        self.selection_count_label.setText(f"{checked_count} selected")
+
+        # Enable/disable bulk action buttons
+        has_selection = checked_count > 0
+        self.bulk_delete_button.setEnabled(has_selection)
+        self.bulk_move_button.setEnabled(has_selection)
+
+    def _get_checked_records(self) -> List[Dict[str, Any]]:
+        """Get all records that have their checkbox checked"""
+        checked_records = []
+        for i, checkbox in enumerate(self.checkboxes):
+            if checkbox and checkbox.isChecked():
+                actual_index = self.current_page * self.page_size + i
+                if 0 <= actual_index < len(self.all_file_records):
+                    checked_records.append(self.all_file_records[actual_index])
+        return checked_records
+
+    def _bulk_delete_files(self):
+        """Delete all selected files"""
+        checked_records = self._get_checked_records()
+        if not checked_records:
+            QMessageBox.information(self, "Industrial Data System", "No files selected.")
+            return
+
+        # Confirm deletion
+        reply = QMessageBox.question(
+            self,
+            "Confirm Deletion",
+            f"Are you sure you want to delete {len(checked_records)} file(s)?\n\n"
+            "This action cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            file_ids = [record.get("id") for record in checked_records if record.get("id")]
+            self.files_deleted.emit(file_ids)
+
+    def _bulk_move_files(self):
+        """Move all selected files to a new pump series/test type"""
+        checked_records = self._get_checked_records()
+        if not checked_records:
+            QMessageBox.information(self, "Industrial Data System", "No files selected.")
+            return
+
+        # Create dialog for selecting new location
+        dialog = BulkMoveDialog(self, self.catalog)
+        if dialog.exec_() == QDialog.Accepted:
+            new_pump_series = dialog.get_pump_series()
+            new_test_type = dialog.get_test_type()
+
+            if new_pump_series and new_test_type:
+                file_ids = [record.get("id") for record in checked_records if record.get("id")]
+                self.files_moved.emit(file_ids, new_pump_series, new_test_type)
+
+    # ============ MODIFIED METHOD FOR DISPLAYING FILES ============
+
+    def _display_current_page(self):
+        """Display only the current page of results with checkboxes"""
+        start = self.current_page * self.page_size
+        end = start + self.page_size
+
+        page_records = self.all_file_records[start:end]
+
+        # Clear old checkboxes
+        self.checkboxes = []
+
+        # Update table with only current page
+        self.table.setRowCount(len(page_records))
+        for row, file_record in enumerate(page_records):
+            # Create checkbox widget
+            checkbox = QCheckBox()
+            checkbox.stateChanged.connect(self._handle_checkbox_change)
+            self.checkboxes.append(checkbox)
+
+            # Center the checkbox in the cell
+            checkbox_widget = QWidget()
+            checkbox_layout = QHBoxLayout(checkbox_widget)
+            checkbox_layout.addWidget(checkbox)
+            checkbox_layout.setAlignment(Qt.AlignCenter)
+            checkbox_layout.setContentsMargins(0, 0, 0, 0)
+            self.table.setCellWidget(row, 0, checkbox_widget)
+
+            # Add file data to remaining columns
+            filename_item = QTableWidgetItem(file_record.get("filename", ""))
+            pump_series_item = QTableWidgetItem(file_record.get("pump_series", ""))
+            test_type_item = QTableWidgetItem(file_record.get("test_type", ""))
+            path_item = QTableWidgetItem(file_record.get("absolute_path") or file_record.get("file_path", ""))
+            created_item = QTableWidgetItem(file_record.get("created_at", ""))
+
+            for item in (filename_item, pump_series_item, test_type_item, path_item, created_item):
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+            self.table.setItem(row, 1, filename_item)
+            self.table.setItem(row, 2, pump_series_item)
+            self.table.setItem(row, 3, test_type_item)
+            self.table.setItem(row, 4, path_item)
+            self.table.setItem(row, 5, created_item)
+
+        # Update pagination controls
+        total_pages = (self.total_records + self.page_size - 1) // self.page_size
+        self.page_label.setText(f"Page {self.current_page + 1} of {total_pages}")
+
+        self.prev_button.setEnabled(self.current_page > 0)
+        self.next_button.setEnabled(self.current_page < total_pages - 1)
+
+        # Reset selection count
+        self._update_selection_count()
+
+    def _get_selected_record(self) -> Optional[Dict[str, Any]]:
+        """Get selected record (adjusted for pagination) - now uses first checked item or table selection"""
+        # First check if any checkboxes are checked
+        for i, checkbox in enumerate(self.checkboxes):
+            if checkbox and checkbox.isChecked():
+                actual_index = self.current_page * self.page_size + i
+                if 0 <= actual_index < len(self.all_file_records):
+                    return self.all_file_records[actual_index]
+
+        # Fall back to table row selection
+        selection = self.table.selectionModel().selectedRows()
+        if not selection:
+            return None
+        row = selection[0].row()
+
+        # Adjust for pagination
+        actual_index = self.current_page * self.page_size + row
+        if 0 <= actual_index < len(self.all_file_records):
+            return self.all_file_records[actual_index]
+        return None
+
+# ============ NEW DIALOG FOR BULK MOVE ============
+
+class BulkMoveDialog(QDialog):
+    """Dialog for moving files to a new pump series/test type."""
+
+    def __init__(self, parent=None, catalog=None):
+        super().__init__(parent)
+        self.catalog = catalog or {}
+        self.setWindowTitle("Move Files")
+        self.setMinimumWidth(400)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(20)
+        layout.setContentsMargins(24, 24, 24, 24)
+
+        title = QLabel("Move Selected Files")
+        title.setProperty("subheading", True)
+        layout.addWidget(title)
+
+        desc = QLabel("Select the destination pump series and test type for the selected files.")
+        desc.setProperty("caption", True)
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        # Pump series selector
+        pump_label = QLabel("Destination Pump Series")
+        pump_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
+        layout.addWidget(pump_label)
+
+        self.pump_combo = QComboBox()
+        self.pump_combo.addItems(sorted(self.catalog.keys()))
+        self.pump_combo.currentIndexChanged.connect(self._update_test_types)
+        layout.addWidget(self.pump_combo)
+
+        # Test type selector
+        test_label = QLabel("Destination Test Type")
+        test_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
+        layout.addWidget(test_label)
+
+        self.test_combo = QComboBox()
+        layout.addWidget(self.test_combo)
+
+        # Initialize test types
+        self._update_test_types()
+
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+
+        for button in button_box.buttons():
+            if button_box.buttonRole(button) == QDialogButtonBox.AcceptRole:
+                button.setProperty("primary", True)
+            else:
+                button.setProperty("secondary", True)
+            button.setMinimumHeight(44)
+
+        layout.addWidget(button_box)
+
+    def _update_test_types(self):
+        """Update test type combo based on selected pump series"""
+        self.test_combo.clear()
+        pump_series = self.pump_combo.currentText()
+        if pump_series in self.catalog:
+            self.test_combo.addItems(self.catalog[pump_series])
+
+    def get_pump_series(self) -> str:
+        return self.pump_combo.currentText().strip()
+
+    def get_test_type(self) -> str:
+        return self.test_combo.currentText().strip()
 
 
 class IndustrialDataApp(QMainWindow):
