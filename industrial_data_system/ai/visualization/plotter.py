@@ -44,6 +44,7 @@ class StatisticsArea(QWidget):
     def setup_ui(self):
         self.stats_table = QTableWidget()
         self.stats_table.setColumnCount(5)
+        self.stats_table.setMinimumHeight(400)
         self.stats_table.setHorizontalHeaderLabels(["Column", "Max", "Mean", "Min", "Std"])
         self.layout.addWidget(self.stats_table)
 
