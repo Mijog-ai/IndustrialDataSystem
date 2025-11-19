@@ -129,6 +129,20 @@ class SQLiteDatabase:
                 
                 CREATE INDEX IF NOT EXISTS idx_login_attempts_email ON login_attempts(email);
                 CREATE INDEX IF NOT EXISTS idx_login_attempts_attempted_at ON login_attempts(attempted_at);
+                
+                CREATE TABLE IF NOT EXISTS security_audit_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    event_type TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    ip_address TEXT,
+                    success INTEGER NOT NULL,
+                    created_at TEXT DEFAULT (datetime('now'))
+                );
+                
+                CREATE INDEX IF NOT EXISTS idx_security_audit_user ON security_audit_log(user_id);
+                CREATE INDEX IF NOT EXISTS idx_security_audit_event ON security_audit_log(event_type);
+                CREATE INDEX IF NOT EXISTS idx_security_audit_created ON security_audit_log(created_at);
             """
 
             )

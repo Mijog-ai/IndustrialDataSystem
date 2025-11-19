@@ -881,6 +881,24 @@ class DatabaseManager:
             (email,),
         )
 
+    def log_security_event(
+            self,
+            user_id: Optional[int],
+            event_type: str,
+            description: str,
+            ip_address: Optional[str] = None,
+            success: bool = True,
+    ) -> None:
+        """Log security-related events for audit trail."""
+        self._execute(
+            """
+            INSERT INTO security_audit_log 
+            (user_id, event_type, description, ip_address, success)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (user_id, event_type, description, ip_address, 1 if success else 0),
+        )
+
 
 __all__ = [
     "DatabaseManager",

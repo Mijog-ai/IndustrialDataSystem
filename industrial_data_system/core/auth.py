@@ -6,7 +6,7 @@ import secrets
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
+from datetime import datetime, timedelta
 from industrial_data_system.core.db_manager import (
     DatabaseManager,
     UploadRecord,
@@ -16,6 +16,46 @@ from industrial_data_system.core.db_manager import (
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+
+
+class SessionManager:
+    """Manage user sessions with timeout and expiry tracking."""
+
+    def __init__(self, timeout_minutes: int = 30):
+        self.timeout_minutes = timeout_minutes
+        self._sessions: Dict[int, datetime] = {}  # user_id -> last_activity
+
+    def create_session(self, user_id: int) -> None:
+        """Create a new session for user."""
+        self._sessions[user_id] = datetime.now()
+
+    def update_activity(self, user_id: int) -> None:
+        """Update last activity timestamp."""
+        if user_id in self._sessions:
+            self._sessions[user_id] = datetime.now()
+
+    def is_session_valid(self, user_id: int) -> bool:
+        """Check if session is still valid (not timed out)."""
+        if user_id not in self._sessions:
+            return False
+
+        last_activity = self._sessions[user_id]
+        timeout = timedelta(minutes=self.timeout_minutes)
+        return datetime.now() - last_activity < timeout
+
+    def invalidate_session(self, user_id: int) -> None:
+        """Remove session (logout)."""
+        self._sessions.pop(user_id, None)
+
+    def get_remaining_time(self, user_id: int) -> Optional[int]:
+        """Get remaining session time in minutes."""
+        if user_id not in self._sessions:
+            return None
+
+        last_activity = self._sessions[user_id]
+        timeout = timedelta(minutes=self.timeout_minutes)
+        remaining = timeout - (datetime.now() - last_activity)
+        return max(0, int(remaining.total_seconds() / 60))
 
 def validate_password_strength(password: str) -> tuple[bool, str]:
     """Validate password meets minimum security requirements.

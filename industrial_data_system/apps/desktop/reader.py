@@ -1,4 +1,5 @@
 """Standalone reader application for browsing shared-drive assets."""
+
 from __future__ import annotations
 
 import os
@@ -8,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional
 
-from PyQt5.QtCore import Qt, QUrl, pyqtSignal
+from PyQt5.QtCore import Qt, QUrl, pyqtSignal, QTimer
 from PyQt5.QtGui import QDesktopServices, QFont, QPixmap
 from PyQt5.QtWidgets import (
     QApplication,
@@ -29,7 +30,11 @@ from PyQt5.QtWidgets import (
     QWidget,
     QDialog,
     QDialogButtonBox,
-    QFormLayout, QTableWidgetItem, QTableWidget, QFrame, QScrollArea,
+    QFormLayout,
+    QTableWidgetItem,
+    QTableWidget,
+    QFrame,
+    QScrollArea,
 )
 
 from industrial_data_system.ai.toolkit import (
@@ -38,7 +43,7 @@ from industrial_data_system.ai.toolkit import (
     run_training_simulation,
 )
 from industrial_data_system.apps.desktop.uploader import IndustrialTheme
-from industrial_data_system.core.auth import LocalAuthStore, LocalUser
+from industrial_data_system.core.auth import LocalAuthStore, LocalUser, SessionManager
 from industrial_data_system.core.config import get_config
 from industrial_data_system.core.db_manager import DatabaseManager
 from industrial_data_system.core.storage import LocalStorageManager
@@ -291,6 +296,7 @@ class ReaderSignupDialog(QDialog):
     def get_result(self) -> Optional[Dict[str, str]]:
         return self._result
 
+
 class ReaderDashboard(QWidget):
     """Dashboard that renders shared-drive folders and file previews."""
 
@@ -375,7 +381,6 @@ class ReaderDashboard(QWidget):
         tools_layout.setSpacing(8)
 
         tool_buttons: List[tuple[str, Callable[..., Optional[str]], bool]] = [
-
             ("Plotter", run_plotter, True),
             ("AI Data Lab", run_ai_data_study, False),
             ("Train", run_training_simulation, False),
@@ -466,7 +471,6 @@ class ReaderDashboard(QWidget):
         # Force minimum size
         self.table_preview.setMinimumHeight(400)
 
-
     def populate(self, resources: Iterable[LocalResource]) -> None:
         self.clear()
         folders: Dict[str, QTreeWidgetItem] = {}
@@ -502,7 +506,9 @@ class ReaderDashboard(QWidget):
         if self.tree.topLevelItemCount() == 0:
             self._show_message("No files were found on the shared drive.")
 
-    def _handle_selection(self, current: Optional[QTreeWidgetItem], _: Optional[QTreeWidgetItem]) -> None:
+    def _handle_selection(
+        self, current: Optional[QTreeWidgetItem], _: Optional[QTreeWidgetItem]
+    ) -> None:
         if not current:
             self._current_resource = None
             self.download_button.setEnabled(False)
@@ -522,10 +528,10 @@ class ReaderDashboard(QWidget):
         self._preview_resource(resource)
 
     def _launch_tool(
-            self,
-            title: str,
-            runner: Callable[..., Optional[str]],
-            requires_resource: bool = False,
+        self,
+        title: str,
+        runner: Callable[..., Optional[str]],
+        requires_resource: bool = False,
     ) -> None:
         path: Optional[Path] = None
         if requires_resource:
@@ -621,7 +627,8 @@ class ReaderDashboard(QWidget):
         if suffix == ".parquet":
             try:
                 import pandas as pd
-                df = pd.read_parquet(path, engine='pyarrow')
+
+                df = pd.read_parquet(path, engine="pyarrow")
             except Exception as exc:
                 self._show_message(f"Unable to read parquet file: {exc}")
                 return
@@ -635,6 +642,7 @@ class ReaderDashboard(QWidget):
         if suffix in {".csv", ".asc"}:
             try:
                 import pandas as pd
+
                 df = pd.read_csv(path)
             except Exception as exc:
                 self._show_message(f"Unable to read table file: {exc}")
@@ -678,7 +686,7 @@ class ReaderDashboard(QWidget):
 
 
 def _collect_resources(
-        manager: DatabaseManager, storage: LocalStorageManager
+    manager: DatabaseManager, storage: LocalStorageManager
 ) -> List[LocalResource]:
     resources: List[LocalResource] = []
     for record in manager.list_uploads():
@@ -689,15 +697,15 @@ def _collect_resources(
         absolute_path = storage.base_path / relative_path
 
         # Check if a parquet version exists
-        if absolute_path.suffix.lower() == '.asc':
-            parquet_path = absolute_path.with_suffix('.parquet')
+        if absolute_path.suffix.lower() == ".asc":
+            parquet_path = absolute_path.with_suffix(".parquet")
             if parquet_path.exists():
                 # Use parquet instead of ASC
                 absolute_path = parquet_path
                 relative_path = parquet_path.relative_to(storage.base_path)
 
         # Skip ASC files if they don't have parquet equivalents
-        if absolute_path.suffix.lower() == '.asc':
+        if absolute_path.suffix.lower() == ".asc":
             continue
 
         resources.append(
@@ -713,6 +721,7 @@ def _collect_resources(
     resources.sort(key=lambda res: (res.test_type.lower(), res.relative_path.parts))
     return resources
 
+
 class ReaderApp(QMainWindow):
     """Main window that orchestrates authentication and browsing."""
 
@@ -723,9 +732,18 @@ class ReaderApp(QMainWindow):
 
         self.config = get_config()
         self.db_manager = DatabaseManager()
-        self.storage_manager = LocalStorageManager(config=self.config, database=self.db_manager)
+        self.storage_manager = LocalStorageManager(
+            config=self.config, database=self.db_manager
+        )
         self.auth_store = LocalAuthStore(self.db_manager)
         self.current_user: Optional[LocalUser] = None
+
+        self.session_manager = SessionManager(timeout_minutes=30)
+
+        # Add session timeout checker
+        self.session_timer = QTimer(self)
+        self.session_timer.timeout.connect(self._check_session_timeout)
+        self.session_timer.start(60000)  # Check every minu
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -752,7 +770,9 @@ class ReaderApp(QMainWindow):
 
     def handle_login(self, email: str, password: str, security_code: str) -> None:
         if not email or not password or not security_code:
-            self.login_page.show_error("Email, password, and security code are required.")
+            self.login_page.show_error(
+                "Email, password, and security code are required."
+            )
             return
 
         try:
@@ -775,6 +795,13 @@ class ReaderApp(QMainWindow):
 
         user = self.auth_store.authenticate(email, password)
         if not user:
+            # Log failed login
+            self.db_manager.log_security_event(
+                user_id=None,
+                event_type="LOGIN_FAILED",
+                description=f"Failed login attempt for email: {email}",
+                success=False,
+            )
             remaining_attempts = 5 - failed_count - 1
             if remaining_attempts > 0:
                 self.login_page.show_error(
@@ -785,6 +812,17 @@ class ReaderApp(QMainWindow):
                     "Invalid email or password. Account will be locked after next failed attempt."
                 )
             return
+
+            # Log successful login
+        self.db_manager.log_security_event(
+            user_id=user.id,
+            event_type="LOGIN_SUCCESS",
+            description=f"Successful login for user: {email}",
+            success=True,
+        )
+
+        self.session_manager.create_session(user.id)
+        self.current_user = user
 
         role = user.metadata.get("role")
         if role and role != "reader":
@@ -830,6 +868,8 @@ class ReaderApp(QMainWindow):
         self.login_page.email_input.setText(result["email"])
 
     def handle_logout(self) -> None:
+        if self.current_user:
+            self.session_manager.invalidate_session(self.current_user.id)
         self.current_user = None
         self.show_login()
 
@@ -866,6 +906,30 @@ class ReaderApp(QMainWindow):
         )
         self.dashboard.set_user_identity(display_name, self.current_user.email)
         self.dashboard.populate(resources)
+
+    def _check_session_timeout(self) -> None:
+        """Check if current session has timed out."""
+        if not self.current_user:
+            return
+
+        user_id = self.current_user.id
+        if not self.session_manager.is_session_valid(user_id):
+            self._handle_session_timeout()
+        else:
+            # Update activity on any interaction
+            self.session_manager.update_activity(user_id)
+
+    def _handle_session_timeout(self) -> None:
+        """Handle session timeout - force logout."""
+        if self.current_user:
+            self.session_manager.invalidate_session(self.current_user.id)
+
+        QMessageBox.information(
+            self,
+            "Session Expired",
+            "Your session has expired due to inactivity. Please sign in again.",
+        )
+        self.handle_logout()
 
 
 def main() -> None:
