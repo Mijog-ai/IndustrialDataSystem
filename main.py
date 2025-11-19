@@ -18,6 +18,13 @@ from PyQt5.QtWidgets import (
 from industrial_data_system.apps import IndustrialDataApp, IndustrialTheme, ReaderApp
 
 
+# Enable High DPI scaling for different screen resolutions
+if hasattr(Qt, 'AA_EnableHighDpiScaling'):
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+
+
 class GatewayWindow(QMainWindow):
     """Simple landing window that lets the operator choose an app."""
 

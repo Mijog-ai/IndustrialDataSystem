@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import (
     QWidget,
     QDialog,
     QDialogButtonBox,
-    QFormLayout, QTableWidgetItem, QTableWidget,
+    QFormLayout, QTableWidgetItem, QTableWidget, QFrame, QScrollArea,
 )
 
 from industrial_data_system.ai.toolkit import (
@@ -94,9 +94,17 @@ class ReaderLoginPage(QWidget):
     def __init__(self) -> None:
         super().__init__()
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(80, 120, 80, 120)
-        layout.setSpacing(24)
+        # Use scroll area for better responsiveness
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(20, 20, 20, 20)  # Reduced from 80, 120, 80, 120
+        layout.setSpacing(16)  # Reduced from 24
+        layout.setAlignment(Qt.AlignCenter)
 
         title = QLabel("Reader Portal")
         title.setProperty("heading", True)
@@ -163,6 +171,12 @@ class ReaderLoginPage(QWidget):
 
         layout.addWidget(form_container, alignment=Qt.AlignCenter)
         layout.addStretch()
+
+        scroll.setWidget(container)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
 
     def _emit_login(self) -> None:
         self.error_label.hide()
