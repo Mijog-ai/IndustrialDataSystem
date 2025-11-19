@@ -299,6 +299,23 @@ class IndustrialTheme:
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
             }}
+            QCheckBox::indicator {{
+                width: 18px;
+                height: 18px;
+                border: 2px solid #000000;
+                border-radius: 3px;
+                background-color: {IndustrialTheme.SURFACE};
+            }}
+            
+            QCheckBox::indicator:hover {{
+                border-color: #000000;
+                background-color: {IndustrialTheme.SURFACE_DARK};
+            }}
+            
+            QCheckBox::indicator:checked {{
+                background-color: #000000;
+                border-color: #000000;
+            }}
         """
 
 
@@ -912,6 +929,7 @@ class DashboardPage(QWidget):
         header.setSectionResizeMode(4, QHeaderView.Stretch)
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(50)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setFocusPolicy(Qt.NoFocus)
@@ -1451,6 +1469,8 @@ class DashboardPage(QWidget):
         for row, file_record in enumerate(page_records):
             # Create checkbox widget
             checkbox = QCheckBox()
+            checkbox.setMinimumSize(10, 10)  # Add minimum size
+            checkbox.setMaximumSize(10, 10)  # Add maximum size to prevent stretching
             checkbox.stateChanged.connect(self._handle_checkbox_change)
             self.checkboxes.append(checkbox)
 
@@ -1461,6 +1481,7 @@ class DashboardPage(QWidget):
             checkbox_layout.setAlignment(Qt.AlignCenter)
             checkbox_layout.setContentsMargins(0, 0, 0, 0)
             self.table.setCellWidget(row, 0, checkbox_widget)
+
 
             # Add file data to remaining columns
             filename_item = QTableWidgetItem(file_record.get("filename", ""))

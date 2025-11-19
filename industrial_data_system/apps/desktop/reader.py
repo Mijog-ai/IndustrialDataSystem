@@ -1,6 +1,7 @@
 """Standalone reader application for browsing shared-drive assets."""
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from dataclasses import dataclass
@@ -42,7 +43,23 @@ from industrial_data_system.core.config import get_config
 from industrial_data_system.core.db_manager import DatabaseManager
 from industrial_data_system.core.storage import LocalStorageManager
 
-READER_SECURITY_CODE = "123321"
+
+def get_reader_security_code() -> str:
+    """Get the reader security code from environment variable.
+
+    Returns:
+        str: The security code from IDS_READER_SECURITY_CODE environment variable.
+
+    Raises:
+        RuntimeError: If the environment variable is not set.
+    """
+    code = os.getenv("IDS_READER_SECURITY_CODE")
+    if not code:
+        raise RuntimeError(
+            "IDS_READER_SECURITY_CODE environment variable is not set. "
+            "Please set it in your .env file or system environment."
+        )
+    return code.strip()
 
 
 @dataclass
@@ -168,8 +185,6 @@ class ReaderLoginPage(QWidget):
         self.error_label.hide()
 
 
-
-
 class ReaderSignupDialog(QDialog):
     """Dialog for creating reader accounts."""
 
@@ -235,8 +250,13 @@ class ReaderSignupDialog(QDialog):
             self._show_error("Passwords do not match.")
             return
 
-        if security_code != READER_SECURITY_CODE:
-            self._show_error("Invalid security code.")
+        try:
+            expected_code = get_reader_security_code()
+            if security_code != expected_code:
+                self._show_error("Invalid security code.")
+                return
+        except RuntimeError as exc:
+            self._show_error(f"Configuration error: {exc}")
             return
 
         self._result = {
@@ -690,12 +710,6 @@ class ReaderApp(QMainWindow):
         self.dashboard.refresh_requested.connect(self.refresh_resources)
         self.dashboard.download_button.clicked.connect(self.dashboard.download_current)
 
-        # self.show_login()
-
-    # ------------------------------------------------------------------
-    # Navigation helpers
-    # ------------------------------------------------------------------
-
     def show_login(self) -> None:
         self.login_page.reset_fields()
         self.stack.setCurrentWidget(self.login_page)
@@ -704,17 +718,18 @@ class ReaderApp(QMainWindow):
     def show_dashboard(self) -> None:
         self.stack.setCurrentWidget(self.dashboard)
 
-    # ------------------------------------------------------------------
-    # Authentication
-    # ------------------------------------------------------------------
-
     def handle_login(self, email: str, password: str, security_code: str) -> None:
         if not email or not password or not security_code:
             self.login_page.show_error("Email, password, and security code are required.")
             return
 
-        if security_code != READER_SECURITY_CODE:
-            self.login_page.show_error("Invalid security code.")
+        try:
+            expected_code = get_reader_security_code()
+            if security_code != expected_code:
+                self.login_page.show_error("Invalid security code.")
+                return
+        except RuntimeError as exc:
+            self.login_page.show_error(f"Configuration error: {exc}")
             return
 
         user = self.auth_store.authenticate(email, password)
