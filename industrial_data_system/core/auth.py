@@ -17,6 +17,26 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def validate_password_strength(password: str) -> tuple[bool, str]:
+    """Validate password meets minimum security requirements.
+
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    if len(password) < 4:
+        return False, "Password must be at least 8 characters long."
+
+    if not any(c.isupper() for c in password):
+        return False, "Password must contain at least one uppercase letter."
+
+    if not any(c.islower() for c in password):
+        return False, "Password must contain at least one lowercase letter."
+
+    if not any(c.isdigit() for c in password):
+        return False, "Password must contain at least one number."
+
+    return True, ""
+
 def default_data_path(filename: str) -> Path:
     """Return a path inside the legacy shared data directory."""
 
@@ -67,14 +87,20 @@ class LocalAuthStore:
     # Public API
     # ------------------------------------------------------------------
     def create_user(
-        self,
-        email: str,
-        password: str,
-        *,
-        username: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+            self,
+            email: str,
+            password: str,
+            *,
+            username: Optional[str] = None,
+            metadata: Optional[Dict[str, Any]] = None,
     ) -> LocalUser:
         email = email.strip().lower()
+
+        # ADD THIS PASSWORD VALIDATION
+        is_valid, error_msg = validate_password_strength(password)
+        if not is_valid:
+            raise ValueError(error_msg)
+
         if self.manager.get_user_by_email(email):
             raise ValueError("An account with that email already exists.")
 
@@ -97,6 +123,14 @@ class LocalAuthStore:
 
     def authenticate(self, identifier: str, password: str) -> Optional[LocalUser]:
         identifier = identifier.strip()
+
+        # Check for account lockout
+        failed_attempts = self.manager.get_failed_login_count(identifier, minutes=15)
+        if failed_attempts >= 5:
+            # Record this failed attempt
+            self.manager.record_login_attempt(identifier, success=False)
+            return None  # Account is locked
+
         record: Optional[UserRecord]
         if "@" in identifier:
             record = self.manager.get_user_by_email(identifier)
@@ -104,13 +138,22 @@ class LocalAuthStore:
             record = self.manager.get_user_by_username(identifier)
             if record is None:
                 record = self.manager.get_user_by_email(identifier)
+
         if not record:
+            # Record failed attempt for non-existent user
+            self.manager.record_login_attempt(identifier, success=False)
             return None
 
         expected = self._hash_password(password, record.salt)
         if secrets.compare_digest(expected, record.password_hash):
+            # SUCCESS - clear failed attempts
+            self.manager.clear_login_attempts(record.email)
+            self.manager.record_login_attempt(record.email, success=True)
             return self._user_from_record(record)
-        return None
+        else:
+            # FAILURE - record failed attempt
+            self.manager.record_login_attempt(record.email, success=False)
+            return None
 
     def list_users(self) -> List[LocalUser]:
         return [self._user_from_record(record) for record in self.manager.list_users()]

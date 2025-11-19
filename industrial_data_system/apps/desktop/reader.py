@@ -366,7 +366,8 @@ class ReaderDashboard(QWidget):
 
         self.table_preview = QTableWidget()
         self.table_preview.hide()
-        preview_content_layout.addWidget(self.table_preview)
+        self.table_preview.setMinimumHeight(400)  # ADD THIS LINE
+        preview_content_layout.addWidget(self.table_preview, stretch=1)  # ADD stretch=1
 
         tools_container = QWidget()
         tools_layout = QVBoxLayout(tools_container)
@@ -433,20 +434,37 @@ class ReaderDashboard(QWidget):
 
     def _show_table(self, df):
         self.table_preview.clear()
-        self.table_preview.setRowCount(df.shape[0])
-        self.table_preview.setColumnCount(df.shape[1])
-        self.table_preview.setHorizontalHeaderLabels(df.columns.astype(str).tolist())
+
+        # Include index as first column
+        df_with_index = df.reset_index()
+
+        self.table_preview.setRowCount(df_with_index.shape[0])
+        self.table_preview.setColumnCount(df_with_index.shape[1])
+
+        # Set headers
+        headers = df_with_index.columns.astype(str).tolist()
+        self.table_preview.setHorizontalHeaderLabels(headers)
 
         # Fill table cells
-        for row in range(df.shape[0]):
-            for col in range(df.shape[1]):
-                item = QTableWidgetItem(str(df.iat[row, col]))
+        for row in range(df_with_index.shape[0]):
+            for col in range(df_with_index.shape[1]):
+                item = QTableWidgetItem(str(df_with_index.iat[row, col]))
                 self.table_preview.setItem(row, col, item)
 
+        # Auto-resize columns
         self.table_preview.resizeColumnsToContents()
+        self.table_preview.setColumnWidth(0, 60)  # Index column
+
+        # IMPORTANT: Resize rows to content
+        self.table_preview.resizeRowsToContents()
+
+        # Show table and hide others
         self.table_preview.show()
         self.text_preview.hide()
         self.image_preview.hide()
+
+        # Force minimum size
+        self.table_preview.setMinimumHeight(400)
 
 
     def populate(self, resources: Iterable[LocalResource]) -> None:
@@ -746,10 +764,28 @@ class ReaderApp(QMainWindow):
             self.login_page.show_error(f"Configuration error: {exc}")
             return
 
+        # CHECK FOR ACCOUNT LOCKOUT FIRST
+        failed_count = self.db_manager.get_failed_login_count(email, minutes=15)
+        if failed_count >= 5:
+            self.login_page.show_error(
+                "Account temporarily locked due to multiple failed login attempts. "
+                "Please try again in 15 minutes."
+            )
+            return
+
         user = self.auth_store.authenticate(email, password)
         if not user:
-            self.login_page.show_error("Invalid email or password.")
+            remaining_attempts = 5 - failed_count - 1
+            if remaining_attempts > 0:
+                self.login_page.show_error(
+                    f"Invalid email or password. {remaining_attempts} attempts remaining."
+                )
+            else:
+                self.login_page.show_error(
+                    "Invalid email or password. Account will be locked after next failed attempt."
+                )
             return
+
         role = user.metadata.get("role")
         if role and role != "reader":
             self.login_page.show_error("This account does not have reader access.")

@@ -848,6 +848,39 @@ class DatabaseManager:
             return 0
         return int(row[0])
 
+    def record_login_attempt(
+            self,
+            email: str,
+            success: bool,
+            ip_address: Optional[str] = None,
+    ) -> None:
+        """Record a login attempt."""
+        self._execute(
+            "INSERT INTO login_attempts (email, success, ip_address) VALUES (?, ?, ?)",
+            (email.lower(), 1 if success else 0, ip_address),
+        )
+
+    def get_failed_login_count(self, email: str, minutes: int = 15) -> int:
+        """Get count of failed login attempts in the last N minutes."""
+        row = self._execute(
+            """
+            SELECT COUNT(*) as count FROM login_attempts
+            WHERE lower(email) = lower(?)
+            AND success = 0
+            AND datetime(attempted_at) > datetime('now', '-' || ? || ' minutes')
+            """,
+            (email, minutes),
+            fetchone=True,
+        )
+        return int(row[0]) if row else 0
+
+    def clear_login_attempts(self, email: str) -> None:
+        """Clear login attempts for an email after successful login."""
+        self._execute(
+            "DELETE FROM login_attempts WHERE lower(email) = lower(?)",
+            (email,),
+        )
+
 
 __all__ = [
     "DatabaseManager",

@@ -117,6 +117,18 @@ class SQLiteDatabase:
                 CREATE INDEX IF NOT EXISTS idx_users_username_lower ON users(LOWER(username));
                 CREATE INDEX IF NOT EXISTS idx_test_types_name ON test_types(name);
                 CREATE INDEX IF NOT EXISTS idx_pump_series_name ON pump_series(name);
+                
+                CREATE TABLE IF NOT EXISTS login_attempts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT NOT NULL,
+                    success INTEGER NOT NULL,
+                    ip_address TEXT,
+                    attempted_at TEXT DEFAULT (datetime('now')),
+                    FOREIGN KEY (email) REFERENCES users(email) ON DELETE CASCADE
+                );
+                
+                CREATE INDEX IF NOT EXISTS idx_login_attempts_email ON login_attempts(email);
+                CREATE INDEX IF NOT EXISTS idx_login_attempts_attempted_at ON login_attempts(attempted_at);
             """
 
             )
