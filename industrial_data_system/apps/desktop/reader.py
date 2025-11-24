@@ -38,9 +38,9 @@ from PyQt5.QtWidgets import (
 )
 
 from industrial_data_system.ai.toolkit import (
-    run_ai_data_study,
+    # run_ai_data_study,
     run_plotter,
-    run_training_simulation,
+    # run_training_simulation,
 )
 from industrial_data_system.apps.desktop.uploader import IndustrialTheme
 from industrial_data_system.core.auth import LocalAuthStore, LocalUser, SessionManager
@@ -382,8 +382,8 @@ class ReaderDashboard(QWidget):
 
         tool_buttons: List[tuple[str, Callable[..., Optional[str]], bool]] = [
             ("Plotter", run_plotter, True),
-            ("AI Data Lab", run_ai_data_study, False),
-            ("Train", run_training_simulation, False),
+            # ("AI Data Lab", run_ai_data_study, False),
+            # ("Train", run_training_simulation, False),
         ]
 
         for label, callback, requires_resource in tool_buttons:

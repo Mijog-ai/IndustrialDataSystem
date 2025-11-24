@@ -42,7 +42,7 @@ solely on the PyQt5 desktop tools and shared services.
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.12+
 - Access to the shared drive defined in your `.env`
 - Optional: PyInstaller for packaging the applications
 
