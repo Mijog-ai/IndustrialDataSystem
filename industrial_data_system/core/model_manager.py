@@ -191,9 +191,18 @@ class EnhancedModelManager:
         test_folder = self._get_test_folder(pump_series, test_type)
 
         # Load or create scaler
-        scaler, _ = self._load_or_create_scaler(test_folder, file_type)
+        scaler, scaler_existed = self._load_or_create_scaler(test_folder, file_type)
         data_chunks = []
         for chunk in numeric_chunks:
+            # Check if existing scaler has incompatible feature count
+            if scaler_existed and hasattr(scaler, 'n_features_in_'):
+                if scaler.n_features_in_ != chunk.shape[1]:
+                    self.logger.warning(
+                        f"Feature count changed from {scaler.n_features_in_} to {chunk.shape[1]} "
+                        f"for {pump_series}/{test_type} - creating new scaler"
+                    )
+                    scaler = StandardScaler()
+                    scaler_existed = False
             scaler.partial_fit(chunk)
             data_chunks.append(chunk)
 
