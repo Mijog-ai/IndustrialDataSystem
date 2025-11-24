@@ -103,6 +103,18 @@ def load_and_process_asc_file(file_name):
         max_columns = len(header)
         data = [row for row in data if len(row) == max_columns]
 
+        # Find indices of valid columns (non-empty names)
+        valid_indices = []
+        for i, item in enumerate(header):
+            if item.strip():  # Only keep columns with non-empty names
+                valid_indices.append(i)
+            else:
+                logger.info(f"Filtering out column at index {i} with empty name")
+
+        # Filter header and data to only include valid columns
+        header = [header[i] for i in valid_indices]
+        data = [[row[i] for i in valid_indices] for row in data]
+
         # CRITICAL: Rename duplicate columns systematically
         # This ensures the same file always produces the same column names
         new_header = []
