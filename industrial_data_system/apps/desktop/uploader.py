@@ -46,7 +46,6 @@ from industrial_data_system.core.auth import (
 from industrial_data_system.core.config import get_config
 from industrial_data_system.core.db_manager import DatabaseManager
 from industrial_data_system.core.storage import LocalStorageManager, StorageError
-from industrial_data_system.core.workers import FileUploadWorker
 
 
 # ---------------------------------------------------------------------------
@@ -2103,58 +2102,9 @@ class IndustrialDataApp(QMainWindow):
         if successful_uploads:
             self.refresh_files()
 
-            # Create progress dialog
-            self.progress_dialog = QProgressDialog(
-                "Uploading files...", "Cancel", 0, 100, self
-            )
-            self.progress_dialog.setWindowModality(Qt.WindowModal)
-            self.progress_dialog.show()
-
-            # Create worker
-            self.upload_worker = FileUploadWorker(
-                file_paths,
-                pump_series,
-                test_type,
-                self.storage_manager,
-                self.history_store,
-                self.session_state.user["id"],
-            )
-
-            # Connect signals
-            self.upload_worker.progress.connect(self._update_upload_progress)
-            self.upload_worker.finished.connect(self._upload_finished)
-            self.upload_worker.error.connect(self._upload_error)
-
-            # Start upload in background
-            self.upload_worker.start()
-
     @staticmethod
     def _is_valid_email(email: str) -> bool:
         return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email))
-
-    def _update_upload_progress(self, percentage: int, filename: str):
-        """Update progress dialog"""
-        self.progress_dialog.setValue(percentage)
-        self.progress_dialog.setLabelText(f"Uploading: {filename}")
-
-    def _upload_finished(self, successful, failed):
-        """Handle upload completion"""
-        self.progress_dialog.close()
-
-        # Show summary
-        if successful:
-            message = f"Successfully uploaded {len(successful)} file(s)"
-            if failed:
-                message += f"\nFailed: {len(failed)} file(s)"
-            self._alert(message, QMessageBox.Information)
-
-        # Refresh UI
-        self.refresh_files()
-
-    def _upload_error(self, error_message):
-        """Handle upload error"""
-        self.progress_dialog.close()
-        self._alert(error_message, QMessageBox.Critical)
 
     def _prepare_file_preview(
         self, file_path: str, file_extension: str
@@ -2258,6 +2208,35 @@ class IndustrialDataApp(QMainWindow):
 
         headers = [str(value) for value in rows[0]] if rows else []
         data_rows = [[str(value) for value in row] for row in rows[1:101]]
+
+        # Remove empty columns - keep only columns that have data
+        if headers and data_rows:
+            num_cols = len(headers)
+            non_empty_col_indices = []
+
+            for col_idx in range(num_cols):
+                # Check if header is non-empty
+                header_has_content = headers[col_idx].strip() != ""
+
+                # Check if any data cell in this column has content
+                col_has_data = any(
+                    row[col_idx].strip() != ""
+                    for row in data_rows
+                    if col_idx < len(row)
+                )
+
+                # Keep column if header or any data cell has content
+                if header_has_content or col_has_data:
+                    non_empty_col_indices.append(col_idx)
+
+            # Filter headers and data rows to keep only non-empty columns
+            if non_empty_col_indices:
+                headers = [headers[i] for i in non_empty_col_indices]
+                data_rows = [
+                    [row[i] if i < len(row) else "" for i in non_empty_col_indices]
+                    for row in data_rows
+                ]
+
         return headers, data_rows
 
     def _alert(self, message: str, icon: QMessageBox.Icon) -> None:
