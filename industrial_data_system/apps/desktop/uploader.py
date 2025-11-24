@@ -797,6 +797,7 @@ class DashboardPage(QWidget):
     files_moved = pyqtSignal(
         list, str, str
     )  # List of file IDs, new pump series, new test type
+    selection_changed = pyqtSignal()  # Signal when pump series or test type changes
 
     def __init__(self) -> None:
         super().__init__()
@@ -901,6 +902,7 @@ class DashboardPage(QWidget):
 
         self.test_type_combo = QComboBox()
         self.test_type_combo.setMinimumWidth(250)
+        self.test_type_combo.currentIndexChanged.connect(self._handle_test_type_changed)
         test_type_layout.addWidget(self.test_type_combo, stretch=1)
 
         new_type_button = QPushButton("+ New Test Type")
@@ -1119,6 +1121,11 @@ class DashboardPage(QWidget):
     def _handle_pump_series_changed(self) -> None:
         pump_series = self.get_selected_pump_series()
         self._populate_test_types(pump_series)
+        self.selection_changed.emit()
+
+    def _handle_test_type_changed(self) -> None:
+        """Handle test type selection change."""
+        self.selection_changed.emit()
 
     def _create_new_test_type(self) -> None:
         """Show dialog to create a new test type."""
@@ -1734,6 +1741,8 @@ class IndustrialDataApp(QMainWindow):
         self.dashboard_page.refresh_requested.connect(self.refresh_files)
         self.dashboard_page.pump_series_created.connect(self.handle_new_pump_series)
         self.dashboard_page.test_type_created.connect(self.handle_new_test_type)
+        self.dashboard_page.files_deleted.connect(self.handle_delete_files)
+        self.dashboard_page.selection_changed.connect(self.refresh_files)
 
         self._initialize_gateway_session()
 
@@ -1908,6 +1917,51 @@ class IndustrialDataApp(QMainWindow):
         if index >= 0:
             self.dashboard_page.test_type_combo.setCurrentIndex(index)
 
+    def handle_delete_files(self, file_ids: List[int]) -> None:
+        """Handle deletion of files from storage and database."""
+        if not file_ids:
+            return
+
+        deleted_count = 0
+        failed_count = 0
+
+        for file_id in file_ids:
+            try:
+                # Get the file record from database to get the file path
+                upload_record = self.db_manager.get_upload_by_id(file_id)
+                if upload_record:
+                    # Delete from storage if path exists
+                    file_path = upload_record.get("file_path")
+                    if file_path:
+                        absolute_path = CONFIG.files_base_path / Path(file_path)
+                        if absolute_path.exists():
+                            try:
+                                self.storage_manager.delete_file(absolute_path)
+                            except StorageError:
+                                # Continue even if file doesn't exist or can't be deleted
+                                pass
+
+                # Delete from database
+                self.db_manager.delete_upload(file_id)
+                deleted_count += 1
+            except Exception:
+                failed_count += 1
+
+        # Show result message
+        if deleted_count > 0:
+            message = f"Successfully deleted {deleted_count} file(s)."
+            if failed_count > 0:
+                message += f"\nFailed to delete {failed_count} file(s)."
+            self._alert(message, QMessageBox.Information)
+        elif failed_count > 0:
+            self._alert(
+                f"Failed to delete {failed_count} file(s).",
+                QMessageBox.Warning
+            )
+
+        # Refresh the file list
+        self.refresh_files()
+
     def _set_logged_in_user(self, user: LocalUser) -> None:
         session_payload = {
             "id": user.id,
@@ -1962,6 +2016,10 @@ class IndustrialDataApp(QMainWindow):
         if base_path.exists():
             self.db_manager.prune_missing_uploads(base_path)
 
+        # Get selected pump series and test type for filtering
+        selected_pump_series = self.dashboard_page.get_selected_pump_series()
+        selected_test_type = self.dashboard_page.get_selected_test_type()
+
         records = []
         for record in self.history_store.get_records_for_user(int(user_id)):
             relative_path = record.get("file_path")
@@ -1976,6 +2034,17 @@ class IndustrialDataApp(QMainWindow):
             record["pump_series"] = (
                 record.get("pump_series") or self.default_pump_series
             )
+
+            # Filter by selected pump series and test type
+            record_pump_series = record.get("pump_series")
+            record_test_type = record.get("test_type")
+
+            # Only include records that match the selected filters
+            if selected_pump_series and record_pump_series != selected_pump_series:
+                continue
+            if selected_test_type and record_test_type != selected_test_type:
+                continue
+
             records.append(record)
 
         self.dashboard_page.update_files(records)
