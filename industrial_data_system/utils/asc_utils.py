@@ -11,54 +11,6 @@ import chardet
 logger = logging.getLogger(__name__)
 
 
-def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """Clean DataFrame by removing unwanted columns.
-
-    Removes columns that:
-    - Have empty or whitespace-only names
-    - Are entirely zero
-    - Are entirely NaN/empty
-
-    Args:
-        df: Input DataFrame
-
-    Returns:
-        Cleaned DataFrame with bad columns removed
-    """
-    original_cols = len(df.columns)
-    cols_to_drop = []
-
-    for col in df.columns:
-        # Check for empty/whitespace column names
-        if not col or (isinstance(col, str) and col.strip() == ''):
-            cols_to_drop.append(col)
-            logger.info(f"Removing column with empty name: '{col}'")
-            continue
-
-        # Check if column is all NaN
-        if df[col].isna().all():
-            cols_to_drop.append(col)
-            logger.info(f"Removing column '{col}': all NaN values")
-            continue
-
-        # Check if column is all zeros (after converting to numeric)
-        col_numeric = pd.to_numeric(df[col], errors='coerce')
-        if (col_numeric == 0).all() or col_numeric.isna().all():
-            cols_to_drop.append(col)
-            logger.info(f"Removing column '{col}': all zeros or non-numeric")
-            continue
-
-    # Drop the identified columns
-    if cols_to_drop:
-        df = df.drop(columns=cols_to_drop)
-        logger.info(f"Cleaned DataFrame: removed {len(cols_to_drop)} columns "
-                   f"({original_cols} -> {len(df.columns)})")
-    else:
-        logger.info("No columns needed to be removed during cleaning")
-
-    return df
-
-
 def load_and_process_asc_file(file_name):
     """Load ASC file and return DataFrame with consistent column structure.
 
@@ -123,9 +75,6 @@ def load_and_process_asc_file(file_name):
             df[col] = df[col].apply(lambda x: x.replace(',', '.') if isinstance(x, str) else x)
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # Clean data: remove columns with empty names, all zeros, or all NaN
-        df = clean_dataframe(df)
-
         # CRITICAL: Fill NaN values with 0 to maintain consistent structure
         df = df.fillna(0.0)
 
@@ -146,8 +95,6 @@ def load_and_process_asc_file(file_name):
 def load_and_process_csv_file(file_name):
     """Load CSV file with consistent handling."""
     df = pd.read_csv(file_name)
-    # Clean data: remove columns with empty names, all zeros, or all NaN
-    df = clean_dataframe(df)
     # Fill NaN to maintain consistency
     df = df.fillna(0.0)
     return df
