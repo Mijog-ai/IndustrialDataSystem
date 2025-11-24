@@ -96,6 +96,7 @@ class ReaderLoginPage(QWidget):
 
     login_requested = pyqtSignal(str, str, str)
     signup_requested = pyqtSignal()
+    back_to_gateway_requested = pyqtSignal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -174,6 +175,11 @@ class ReaderLoginPage(QWidget):
         self.signup_button.setProperty("secondary", True)
         self.signup_button.clicked.connect(self.signup_requested.emit)
         form_layout.addWidget(self.signup_button)
+
+        back_button = QPushButton("← Back to App Selection")
+        back_button.setProperty("flat", True)
+        back_button.clicked.connect(self.back_to_gateway_requested.emit)
+        form_layout.addWidget(back_button)
 
         layout.addWidget(form_container, alignment=Qt.AlignCenter)
         layout.addStretch()
@@ -758,6 +764,7 @@ class ReaderApp(QMainWindow):
 
         self.login_page.login_requested.connect(self.handle_login)
         self.login_page.signup_requested.connect(self.open_signup_dialog)
+        self.login_page.back_to_gateway_requested.connect(self.close)
         self.dashboard.logout_requested.connect(self.handle_logout)
         self.dashboard.refresh_requested.connect(self.refresh_resources)
         self.dashboard.download_button.clicked.connect(self.dashboard.download_current)
