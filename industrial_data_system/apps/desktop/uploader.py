@@ -798,6 +798,7 @@ class DashboardPage(QWidget):
         list, str, str
     )  # List of file IDs, new pump series, new test type
     selection_changed = pyqtSignal()  # Signal when pump series or test type changes
+    back_to_gateway_requested = pyqtSignal()  # Signal to return to app selection
 
     def __init__(self) -> None:
         super().__init__()
@@ -842,6 +843,11 @@ class DashboardPage(QWidget):
         # Action Buttons
         action_layout = QHBoxLayout()
         action_layout.setSpacing(12)
+
+        back_button = QPushButton("← Back to App Selection")
+        back_button.setProperty("flat", True)
+        back_button.clicked.connect(self.back_to_gateway_requested.emit)
+        action_layout.addWidget(back_button)
 
         upload_button = QPushButton("Upload File")
         upload_button.setProperty("primary", True)
@@ -1745,6 +1751,7 @@ class IndustrialDataApp(QMainWindow):
         self.dashboard_page.test_type_created.connect(self.handle_new_test_type)
         self.dashboard_page.files_deleted.connect(self.handle_delete_files)
         self.dashboard_page.selection_changed.connect(self.refresh_files)
+        self.dashboard_page.back_to_gateway_requested.connect(self.close)
 
         self._initialize_gateway_session()
 
