@@ -165,6 +165,26 @@ class DatabaseManager:
         """Clear all cached queries (call after insert/update/delete)"""
         self._cache.clear()
 
+    def get_upload_by_id(self, upload_id: int) -> Optional[Dict[str, Any]]:
+        """Get a single upload record by ID."""
+        row = self._execute(
+            "SELECT * FROM uploads WHERE id = ?",
+            (upload_id,),
+            fetchone=True
+        )
+        if not row:
+            return None
+        upload_record = self._row_to_upload(row)
+        return {
+            "id": upload_record.id,
+            "user_id": upload_record.user_id,
+            "filename": upload_record.filename,
+            "file_path": upload_record.file_path,
+            "pump_series": upload_record.pump_series,
+            "test_type": upload_record.test_type,
+            "file_size": upload_record.file_size,
+            "created_at": upload_record.created_at,
+        }
 
     def delete_upload(self, upload_id: int) -> None:
         self._execute("DELETE FROM uploads WHERE id = ?", (upload_id,))
