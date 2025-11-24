@@ -1091,15 +1091,17 @@ class DashboardPage(QWidget):
         self._populate_test_types(self.get_selected_pump_series())
 
     def _populate_test_types(self, pump_series: Optional[str]) -> None:
+        self.test_type_combo.blockSignals(True)
         self.test_type_combo.clear()
         if not pump_series or pump_series not in self.catalog:
             self.test_type_combo.addItem("No test types available")
-            return
-        test_types = self.catalog.get(pump_series, [])
-        if test_types:
-            self.test_type_combo.addItems(test_types)
         else:
-            self.test_type_combo.addItem("No test types available")
+            test_types = self.catalog.get(pump_series, [])
+            if test_types:
+                self.test_type_combo.addItems(test_types)
+            else:
+                self.test_type_combo.addItem("No test types available")
+        self.test_type_combo.blockSignals(False)
 
     def get_selected_test_type(self) -> Optional[str]:
         """Get the currently selected test type."""
