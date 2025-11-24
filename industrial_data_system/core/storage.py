@@ -9,12 +9,12 @@ from typing import List, Optional
 
 from industrial_data_system.core.config import AppConfig, get_config
 from industrial_data_system.core.db_manager import DatabaseManager
-
+from industrial_data_system.core.model_manager import EnhancedModelManager, ModelTrainingError
 # Add after existing imports
 import logging
 
 from industrial_data_system.utils.asc_utils import convert_asc_to_parquet
-from industrial_data_system.core.model_manager import AutoencoderModelManager, ModelTrainingError
+# from industrial_data_system.core.model_manager import AutoencoderModelManager, ModelTrainingError
 
 # Add logger after imports
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ class LocalStorageManager:
         self.base_path = self.config.files_base_path
         self.config.ensure_directories()
         self._last_drive_state: bool = self.base_path.exists()
-        self._model_manager = AutoencoderModelManager(logger=logger)
+        self._model_manager = EnhancedModelManager(logger=logger)
 
     # ------------------------------------------------------------------
     # Utility helpers

@@ -1,12 +1,10 @@
-"""Model training and management utilities for incremental autoencoder models."""
+"""Enhanced model training that stores models alongside data files."""
 from __future__ import annotations
 
 import json
 import logging
-import shutil
 from dataclasses import dataclass, asdict
 from datetime import UTC, datetime
-from hashlib import sha256
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -38,6 +36,7 @@ class ModelMetadata:
     input_dim: int
     metrics: Dict[str, float]
     files: List[str]
+    is_new_model: bool  # True if created from scratch, False if fine-tuned
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
@@ -46,7 +45,13 @@ class ModelMetadata:
 class Autoencoder:
     """Lightweight autoencoder using NumPy for incremental training."""
 
-    def __init__(self, input_dim: int, *, hidden_dim: Optional[int] = None, rng: Optional[np.random.Generator] = None) -> None:
+    def __init__(
+        self,
+        input_dim: int,
+        *,
+        hidden_dim: Optional[int] = None,
+        rng: Optional[np.random.Generator] = None
+    ) -> None:
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim or max(4, input_dim // 2)
         self.rng = rng or np.random.default_rng()
@@ -85,7 +90,14 @@ class Autoencoder:
 
         return loss
 
-    def train(self, data: np.ndarray, *, epochs: int, batch_size: int, learning_rate: float) -> Dict[str, float]:
+    def train(
+        self,
+        data: np.ndarray,
+        *,
+        epochs: int,
+        batch_size: int,
+        learning_rate: float
+    ) -> Dict[str, float]:
         batch_size = max(1, min(batch_size, len(data)))
         losses: List[float] = []
         for _ in range(epochs):
@@ -120,8 +132,8 @@ class Autoencoder:
         self.b2 = np.array(state["b2"], dtype=np.float32)
 
 
-class AutoencoderModelManager:
-    """Manage datasets and incremental autoencoder model training."""
+class EnhancedModelManager:
+    """Manage models stored alongside data files in test folders."""
 
     SUPPORTED_EXTENSIONS = {".csv": "csv", ".parquet": "parquet"}
 
@@ -142,18 +154,25 @@ class AutoencoderModelManager:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
 
-        self._root = self.config.shared_drive_path
         self._files_root = self.config.files_base_path
-        self._models_root = self.config.shared_drive_path / "models"
-        for directory in (self._root, self._files_root, self._models_root):
-            directory.mkdir(parents=True, exist_ok=True)
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-    def handle_new_dataset(self, dataset_path: Path | str, *, pump_series: str, test_type: str) -> ModelMetadata:
-        """Register a new dataset file and trigger incremental training."""
+    def handle_new_dataset(
+        self,
+        dataset_path: Path | str,
+        *,
+        pump_series: str,
+        test_type: str
+    ) -> ModelMetadata:
+        """Train or fine-tune model when new data is uploaded.
 
+        Args:
+            dataset_path: Path to the uploaded data file
+            pump_series: Pump series name
+            test_type: Test type name
+
+        Returns:
+            ModelMetadata with training information
+        """
         if not pump_series or not test_type:
             raise ModelTrainingError("Pump series and test type are required for training.")
 
@@ -163,15 +182,16 @@ class AutoencoderModelManager:
 
         file_type = self._resolve_file_type(dataset_path)
 
-        # Don't store dataset again - it's already stored by LocalStorageManager
-        # Just use the path that was passed in
-        stored_dataset = dataset_path
-
-        numeric_chunks = list(self._load_numeric_chunks(stored_dataset, file_type))
+        # Load numeric data
+        numeric_chunks = list(self._load_numeric_chunks(dataset_path, file_type))
         if not numeric_chunks:
             raise ModelTrainingError("Uploaded file does not contain numeric columns for training.")
 
-        scaler, _ = self._load_or_create_scaler(pump_series, test_type, file_type)
+        # Get test folder where data and models are stored
+        test_folder = self._get_test_folder(pump_series, test_type)
+
+        # Load or create scaler
+        scaler, _ = self._load_or_create_scaler(test_folder, file_type)
         data_chunks = []
         for chunk in numeric_chunks:
             scaler.partial_fit(chunk)
@@ -180,53 +200,60 @@ class AutoencoderModelManager:
         scaled_data = np.vstack([scaler.transform(chunk) for chunk in data_chunks])
         input_dim = scaled_data.shape[1]
 
-        existing_record = self.database.get_latest_model_record(pump_series, test_type, file_type)
+        # Check for existing model in the test folder
+        model_path = self._get_model_path(test_folder, file_type)
         model: Autoencoder
+        is_new_model = True
         base_file_count = 0
         version = 1
 
-        # Check if existing model exists and is accessible
-        if existing_record and existing_record.input_dim == input_dim:
-            model_path = Path(existing_record.model_path)
-            if model_path.exists():
-                try:
+        if model_path.exists():
+            # Model exists - fine-tune it
+            try:
+                existing_record = self.database.get_latest_model_record(
+                    pump_series, test_type, file_type
+                )
+
+                if existing_record and existing_record.input_dim == input_dim:
                     model = self._load_model(str(model_path), input_dim)
+                    is_new_model = False
                     version = existing_record.version + 1
                     base_file_count = existing_record.file_count
-                except Exception as exc:
-                    self.logger.warning(
-                        "Failed to load existing model from %s: %s. Creating new model.",
-                        model_path,
-                        exc,
+                    self.logger.info(
+                        f"Fine-tuning existing model for {pump_series}/{test_type} "
+                        f"(version {version})"
                     )
+                else:
+                    # Input dimension changed - create new model
                     model = Autoencoder(input_dim)
-                    version = (existing_record.version + 1) if existing_record else 1
-                    base_file_count = existing_record.file_count if existing_record else 0
-            else:
+                    if existing_record:
+                        version = existing_record.version + 1
+                        base_file_count = existing_record.file_count
+                        self.logger.warning(
+                            f"Input dimension changed for {pump_series}/{test_type} - "
+                            f"creating new model architecture"
+                        )
+            except Exception as exc:
                 self.logger.warning(
-                    "Model file not found at %s. Creating new model.",
-                    model_path,
+                    f"Failed to load existing model from {model_path}: {exc}. "
+                    f"Creating new model."
                 )
                 model = Autoencoder(input_dim)
-                version = (existing_record.version + 1) if existing_record else 1
-                base_file_count = existing_record.file_count if existing_record else 0
         else:
-            if existing_record and existing_record.input_dim != input_dim:
-                self.logger.warning(
-                    "Input dimension changed for %s/%s/%s – resetting model architecture.",
-                    pump_series,
-                    test_type,
-                    file_type,
-                )
-                version = (existing_record.version + 1) if existing_record else 1
-                base_file_count = existing_record.file_count if existing_record else 0
+            # No model exists - create new one
             model = Autoencoder(input_dim)
+            self.logger.info(
+                f"Creating new model for {pump_series}/{test_type} (version {version})"
+            )
 
+        # Train the model
         metrics = self._train_model(model, scaled_data)
 
+        # Persist model, scaler, and metadata in test folder
         metadata = self._persist_model(
             model,
             scaler,
+            test_folder=test_folder,
             pump_series=pump_series,
             test_type=test_type,
             file_type=file_type,
@@ -234,26 +261,19 @@ class AutoencoderModelManager:
             input_dim=input_dim,
             file_count=base_file_count + 1,
             metrics=metrics,
-            files=[stored_dataset.name],
+            files=[dataset_path.name],
+            is_new_model=is_new_model,
         )
 
-        self.database.register_dataset_file(
-            pump_series=pump_series,
-            test_type=test_type,
-            file_type=file_type,
-            file_path=str(stored_dataset),
-            file_size=stored_dataset.stat().st_size,
-            checksum=self._checksum(stored_dataset),
-        )
-
+        # Register in database
         self.database.record_model_version(
             pump_series=pump_series,
             test_type=test_type,
             file_type=file_type,
             version=metadata.version,
-            model_path=str(self._model_file_path(pump_series, test_type, file_type)),
-            scaler_path=str(self._scaler_file_path(pump_series, test_type, file_type)),
-            metadata_path=str(self._metadata_file_path(pump_series, test_type, file_type)),
+            model_path=str(model_path),
+            scaler_path=str(self._get_scaler_path(test_folder, file_type)),
+            metadata_path=str(self._get_metadata_path(test_folder, file_type)),
             file_count=metadata.file_count,
             input_dim=input_dim,
             metrics=metadata.metrics,
@@ -261,64 +281,82 @@ class AutoencoderModelManager:
 
         return metadata
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+    def _get_test_folder(self, pump_series: str, test_type: str) -> Path:
+        """Get the test folder where data and models are stored."""
+        test_folder = self._files_root / pump_series / "tests" / test_type
+        test_folder.mkdir(parents=True, exist_ok=True)
+        return test_folder
+
+    def _get_model_path(self, test_folder: Path, file_type: str) -> Path:
+        """Get path to model file in test folder."""
+        return test_folder / f"model_{file_type}.pkl"
+
+    def _get_scaler_path(self, test_folder: Path, file_type: str) -> Path:
+        """Get path to scaler file in test folder."""
+        return test_folder / f"scaler_{file_type}.pkl"
+
+    def _get_metadata_path(self, test_folder: Path, file_type: str) -> Path:
+        """Get path to metadata file in test folder."""
+        return test_folder / f"metadata_{file_type}.json"
+
     def _resolve_file_type(self, dataset_path: Path) -> str:
         extension = dataset_path.suffix.lower()
         if extension not in self.SUPPORTED_EXTENSIONS:
             raise ModelTrainingError(
-                f"Unsupported dataset format '{dataset_path.suffix}'. Supported: csv, parquet."
+                f"Unsupported dataset format '{dataset_path.suffix}'. "
+                f"Supported: csv, parquet."
             )
         return self.SUPPORTED_EXTENSIONS[extension]
 
-    def _models_directory(self, pump_series: str, test_type: str, file_type: str) -> Path:
-        # Match the structure: models/pump_series/tests/test_type/file_type
-        destination = self._models_root / pump_series / "tests" / test_type / file_type
-        destination.mkdir(parents=True, exist_ok=True)
-        return destination
-
-    def _unique_path(self, base_path: Path) -> Path:
-        counter = 1
-        while base_path.exists():
-            base_path = base_path.with_name(f"{base_path.stem}_{counter}{base_path.suffix}")
-            counter += 1
-        return base_path
-
-    def _load_numeric_chunks(self, dataset_path: Path, file_type: str) -> Iterable[np.ndarray]:
+    def _load_numeric_chunks(
+        self,
+        dataset_path: Path,
+        file_type: str
+    ) -> Iterable[np.ndarray]:
         if file_type == "csv":
             for chunk in pd.read_csv(dataset_path, chunksize=10_000):
-                numeric = chunk.select_dtypes(include=["float", "int", "bool"]).apply(pd.to_numeric, errors="coerce")
-                numeric = numeric.replace([np.inf, -np.inf], np.nan).dropna(axis=1, how="all").fillna(0.0)
+                numeric = chunk.select_dtypes(
+                    include=["float", "int", "bool"]
+                ).apply(pd.to_numeric, errors="coerce")
+                numeric = numeric.replace(
+                    [np.inf, -np.inf], np.nan
+                ).dropna(axis=1, how="all").fillna(0.0)
                 if numeric.empty:
                     continue
                 yield numeric.to_numpy(dtype=np.float32)
         else:
-            dataframe = pd.read_parquet(dataset_path).select_dtypes(include=["float", "int", "bool"]).apply(
-                pd.to_numeric, errors="coerce"
-            )
-            dataframe = dataframe.replace([np.inf, -np.inf], np.nan).dropna(axis=1, how="all").fillna(0.0)
+            dataframe = pd.read_parquet(dataset_path).select_dtypes(
+                include=["float", "int", "bool"]
+            ).apply(pd.to_numeric, errors="coerce")
+            dataframe = dataframe.replace(
+                [np.inf, -np.inf], np.nan
+            ).dropna(axis=1, how="all").fillna(0.0)
             if not dataframe.empty:
                 yield dataframe.to_numpy(dtype=np.float32)
 
     def _load_or_create_scaler(
         self,
-        pump_series: str,
-        test_type: str,
+        test_folder: Path,
         file_type: str,
     ) -> Tuple[StandardScaler, bool]:
-        scaler_path = self._scaler_file_path(pump_series, test_type, file_type)
+        scaler_path = self._get_scaler_path(test_folder, file_type)
         if scaler_path.exists():
             try:
                 scaler = joblib.load(scaler_path)
                 if isinstance(scaler, StandardScaler):
                     return scaler, True
-            except Exception as exc:  # pragma: no cover - defensive
-                self.logger.warning("Failed to load scaler from %s: %s", scaler_path, exc)
+            except Exception as exc:
+                self.logger.warning(
+                    f"Failed to load scaler from {scaler_path}: {exc}"
+                )
         scaler = StandardScaler()
         return scaler, False
 
-    def _train_model(self, model: Autoencoder, training_data: np.ndarray) -> Dict[str, float]:
+    def _train_model(
+        self,
+        model: Autoencoder,
+        training_data: np.ndarray
+    ) -> Dict[str, float]:
         stats = model.train(
             training_data,
             epochs=self.max_epochs,
@@ -339,6 +377,7 @@ class AutoencoderModelManager:
         model: Autoencoder,
         scaler: StandardScaler,
         *,
+        test_folder: Path,
         pump_series: str,
         test_type: str,
         file_type: str,
@@ -347,15 +386,19 @@ class AutoencoderModelManager:
         file_count: int,
         metrics: Dict[str, float],
         files: List[str],
+        is_new_model: bool,
     ) -> ModelMetadata:
-        models_dir = self._models_directory(pump_series, test_type, file_type)
-        versioned_model = models_dir / f"model_v{version:03d}.pkl"
-        versioned_scaler = models_dir / f"scaler_v{version:03d}.pkl"
-        versioned_metadata = models_dir / f"metadata_v{version:03d}.json"
+        """Save model, scaler, and metadata in the test folder."""
 
-        joblib.dump(model.state_dict(), versioned_model)
-        joblib.dump(scaler, versioned_scaler)
+        # Save current model
+        model_path = self._get_model_path(test_folder, file_type)
+        scaler_path = self._get_scaler_path(test_folder, file_type)
+        metadata_path = self._get_metadata_path(test_folder, file_type)
 
+        joblib.dump(model.state_dict(), model_path)
+        joblib.dump(scaler, scaler_path)
+
+        # Create metadata
         metadata = ModelMetadata(
             pump_series=pump_series,
             test_type=test_type,
@@ -366,42 +409,34 @@ class AutoencoderModelManager:
             input_dim=input_dim,
             metrics=metrics,
             files=files,
+            is_new_model=is_new_model,
         )
+        metadata_path.write_text(metadata.to_json(), encoding="utf-8")
+
+        # Also save versioned copies for history
+        versioned_model = test_folder / f"model_{file_type}_v{version:03d}.pkl"
+        versioned_scaler = test_folder / f"scaler_{file_type}_v{version:03d}.pkl"
+        versioned_metadata = test_folder / f"metadata_{file_type}_v{version:03d}.json"
+
+        joblib.dump(model.state_dict(), versioned_model)
+        joblib.dump(scaler, versioned_scaler)
         versioned_metadata.write_text(metadata.to_json(), encoding="utf-8")
 
-        # Update latest pointers
-        joblib.dump(model.state_dict(), self._model_file_path(pump_series, test_type, file_type))
-        joblib.dump(scaler, self._scaler_file_path(pump_series, test_type, file_type))
-        self._metadata_file_path(pump_series, test_type, file_type).write_text(
-            metadata.to_json(), encoding="utf-8"
+        self.logger.info(
+            f"Saved {'new' if is_new_model else 'fine-tuned'} model to {model_path} "
+            f"(version {version})"
         )
 
         return metadata
-
-    def _model_file_path(self, pump_series: str, test_type: str, file_type: str) -> Path:
-        return self._models_directory(pump_series, test_type, file_type) / "model.pkl"
-
-    def _scaler_file_path(self, pump_series: str, test_type: str, file_type: str) -> Path:
-        return self._models_directory(pump_series, test_type, file_type) / "scaler.pkl"
-
-    def _metadata_file_path(self, pump_series: str, test_type: str, file_type: str) -> Path:
-        return self._models_directory(pump_series, test_type, file_type) / "metadata.json"
 
     def _load_model(self, model_path: str, input_dim: int) -> Autoencoder:
         state = joblib.load(model_path)
         model = Autoencoder(input_dim)
         if isinstance(state, dict):
             model.load_state_dict(state)
-        else:  # pragma: no cover - defensive
+        else:
             raise ModelTrainingError(f"Invalid model state stored at {model_path}")
         return model
 
-    def _checksum(self, file_path: Path) -> str:
-        digest = sha256()
-        with file_path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
 
-
-__all__ = ["AutoencoderModelManager", "ModelMetadata", "ModelTrainingError"]
+__all__ = ["EnhancedModelManager", "ModelMetadata", "ModelTrainingError"]

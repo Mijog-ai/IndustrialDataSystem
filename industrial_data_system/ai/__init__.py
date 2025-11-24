@@ -5,6 +5,7 @@ from industrial_data_system.ai.toolkit import (
     run_ai_data_study,
     run_plotter,
     run_training_simulation,
+    run_anomaly_detector,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "run_ai_data_study",
     "run_plotter",
     "run_training_simulation",
+    "run_anomaly_detector",
 ]
