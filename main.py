@@ -5,7 +5,7 @@ import sys
 from typing import List
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QCloseEvent, QFont
 from PyQt5.QtWidgets import (
     QApplication,
     QLabel,
@@ -94,11 +94,19 @@ class GatewayWindow(QMainWindow):
         window.show()
         self.hide()
 
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Quit the application when the gateway window is closed."""
+        for window in self._open_windows:
+            window.close()
+        QApplication.quit()
+        event.accept()
+
 
 def main() -> None:
     app = QApplication(sys.argv)
     app.setStyleSheet(IndustrialTheme.get_stylesheet())
     app.setFont(QFont("Segoe UI", 10))
+    app.setQuitOnLastWindowClosed(False)
 
     gateway = GatewayWindow()
     gateway.show()
