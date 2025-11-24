@@ -737,6 +737,7 @@ class ReaderApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Industrial Data Reader")
         self.setMinimumSize(1100, 700)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
 
         self.config = get_config()
         self.db_manager = DatabaseManager()

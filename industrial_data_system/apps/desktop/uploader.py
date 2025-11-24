@@ -1732,6 +1732,7 @@ class IndustrialDataApp(QMainWindow):
         self.setWindowTitle("Industrial Data System")
         self.resize(1200, 800)
         self.setMinimumSize(900, 600)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
 
         self.session_state = SessionState()
         self.db_manager = DatabaseManager()
