@@ -1,13 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_submodules, collect_data_files, collect_all
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 block_cipher = None
-
-# Collect all submodules and data for key packages
-scipy_imports, scipy_binaries, scipy_datas = collect_all('scipy')
-sklearn_imports, sklearn_binaries, sklearn_datas = collect_all('sklearn')
-matplotlib_imports, matplotlib_binaries, matplotlib_datas = collect_all('matplotlib')
 
 # Build comprehensive hidden imports list
 hiddenimports = [
@@ -42,53 +37,77 @@ hiddenimports = [
     'scipy.special',
     'scipy.special._ufuncs_cxx',
     'scipy.linalg',
+    'scipy.linalg.cython_blas',
+    'scipy.linalg.cython_lapack',
     'scipy.sparse',
     'scipy.sparse.csgraph',
     'scipy.sparse.linalg',
     'scipy.stats',
     'scipy.signal',
+    'scipy.integrate',
+    'scipy.optimize',
     'sklearn',
     'sklearn.preprocessing',
     'sklearn.ensemble',
     'sklearn.tree',
     'sklearn.utils',
     'sklearn.utils._cython_blas',
+    'sklearn.neighbors',
     'sklearn.neighbors.typedefs',
     'sklearn.neighbors.quad_tree',
     'sklearn.tree._utils',
 ]
 
-# Add collected submodules
-hiddenimports.extend(collect_submodules('sqlite3'))
-hiddenimports.extend(collect_submodules('industrial_data_system'))
-hiddenimports.extend(scipy_imports)
-hiddenimports.extend(sklearn_imports)
-hiddenimports.extend(matplotlib_imports)
+# Safely collect submodules
+try:
+    hiddenimports.extend(collect_submodules('sqlite3'))
+except Exception:
+    pass
 
-# Collect all data files
-datas = [
-    ('.env', '.'),  # Configuration file
+try:
+    hiddenimports.extend(collect_submodules('industrial_data_system'))
+except Exception:
+    pass
+
+# Collect matplotlib data files
+datas = []
+try:
+    matplotlib_datas = collect_data_files('matplotlib', include_py_files=True)
+    datas.extend(matplotlib_datas)
+except Exception:
+    pass
+
+try:
+    scipy_datas = collect_data_files('scipy')
+    datas.extend(scipy_datas)
+except Exception:
+    pass
+
+# Add .env if it exists
+datas.append(('.env', '.'))
+
+# Modules to exclude
+excludes = [
+    'torch',
+    'tensorflow',
+    'PIL.ImageTk',
+    'tkinter',
+    'matplotlib.tests',
+    'scipy.weave',
+    'scipy._lib.array_api_compat.torch',
+    'sklearn.externals.array_api_compat.torch',
 ]
-datas.extend(scipy_datas)
-datas.extend(sklearn_datas)
-datas.extend(matplotlib_datas)
-
-# Collect binaries
-binaries = []
-binaries.extend(scipy_binaries)
-binaries.extend(sklearn_binaries)
-binaries.extend(matplotlib_binaries)
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=binaries,
+    binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=excludes,
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
