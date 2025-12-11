@@ -59,25 +59,25 @@ hiddenimports = [
 ]
 
 # Add collected submodules
-hiddenimports += collect_submodules('sqlite3')
-hiddenimports += collect_submodules('industrial_data_system')
-hiddenimports += scipy_imports
-hiddenimports += sklearn_imports
-hiddenimports += matplotlib_imports
+hiddenimports.extend(collect_submodules('sqlite3'))
+hiddenimports.extend(collect_submodules('industrial_data_system'))
+hiddenimports.extend(scipy_imports)
+hiddenimports.extend(sklearn_imports)
+hiddenimports.extend(matplotlib_imports)
 
 # Collect all data files
 datas = [
     ('.env', '.'),  # Configuration file
 ]
-datas += scipy_datas
-datas += sklearn_datas
-datas += matplotlib_datas
+datas.extend(scipy_datas)
+datas.extend(sklearn_datas)
+datas.extend(matplotlib_datas)
 
 # Collect binaries
 binaries = []
-binaries += scipy_binaries
-binaries += sklearn_binaries
-binaries += matplotlib_binaries
+binaries.extend(scipy_binaries)
+binaries.extend(sklearn_binaries)
+binaries.extend(matplotlib_binaries)
 
 a = Analysis(
     ['main.py'],
