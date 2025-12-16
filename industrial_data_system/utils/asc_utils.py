@@ -271,8 +271,17 @@ def convert_asc_to_parquet(
         This function ensures that the Parquet file has the EXACT same columns
         as the ASC file to prevent dimension mismatches in model training.
     """
+    # Defensive type checking
+    if not isinstance(asc_path, Path):
+        asc_path = Path(asc_path)
+
+    if not asc_path.exists():
+        raise FileNotFoundError(f"ASC file not found: {asc_path}")
+
     if parquet_path is None:
         parquet_path = asc_path.with_suffix(".parquet")
+    elif not isinstance(parquet_path, Path):
+        parquet_path = Path(parquet_path)
 
     # Load ASC file with careful column handling
     df = load_and_process_asc_file(str(asc_path))

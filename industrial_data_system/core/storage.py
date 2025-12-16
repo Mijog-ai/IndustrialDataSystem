@@ -169,7 +169,11 @@ class LocalStorageManager:
         final_destination = destination
         if source.suffix.lower() == ".asc":
             try:
-                parquet_path = convert_asc_to_parquet(destination)
+                logger.info(f"Converting ASC file to Parquet: {destination}")
+                logger.debug(f"ASC file path type: {type(destination)}, exists: {destination.exists()}")
+
+                # Convert ASC to Parquet with explicit Path object
+                parquet_path = convert_asc_to_parquet(asc_path=destination)
                 logger.info(f"Created parquet conversion: {parquet_path.name}")
 
                 # Update to use parquet file as the primary file
@@ -181,7 +185,10 @@ class LocalStorageManager:
                 # logger.info(f"Removed original ASC file: {destination.name}")
 
             except Exception as e:
-                logger.warning(f"Failed to convert ASC to parquet: {e}")
+                logger.error(
+                    f"Failed to convert ASC to parquet: {type(e).__name__}: {e}",
+                    exc_info=True
+                )
                 # Continue - original file was still copied successfully
 
         relative_path = final_destination.relative_to(self.base_path)
