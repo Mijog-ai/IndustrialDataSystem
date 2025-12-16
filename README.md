@@ -138,10 +138,122 @@ pyinstaller IndustrialDataSystem.spec
 
 Ensure the shared drive is accessible when launching the packaged application.
 
+## Development
+
+### Code Quality
+
+This project uses comprehensive code quality tools to maintain high standards. For detailed
+information, see [CODE_QUALITY.md](CODE_QUALITY.md).
+
+#### Quick Start for Contributors
+
+1. **Install development dependencies:**
+   ```bash
+   make install-dev
+   # or
+   pip install -r requirements-dev.txt
+   pre-commit install
+   ```
+
+2. **Format code before committing:**
+   ```bash
+   make format
+   ```
+
+3. **Run all quality checks:**
+   ```bash
+   make check
+   ```
+
+4. **Run full quality suite:**
+   ```bash
+   make quality
+   ```
+
+#### Code Quality Tools
+
+- **Black** - Automatic code formatting (line length: 100)
+- **isort** - Import statement sorting
+- **Flake8** - Style guide enforcement
+- **Pylint** - Comprehensive code analysis
+- **MyPy** - Static type checking with strict mode
+- **Bandit** - Security issue detection
+- **Pre-commit hooks** - Automated checks before commits
+
+#### Available Make Commands
+
+```bash
+make help           # Show all available commands
+make install        # Install production dependencies
+make install-dev    # Install development dependencies
+make format         # Format code with black and isort
+make lint           # Run all linters
+make typecheck      # Run type checking with mypy
+make check          # Check code quality (no modifications)
+make test           # Run tests with coverage
+make security       # Run security checks
+make quality        # Run all quality checks and fix issues
+make pre-commit     # Run pre-commit hooks on all files
+make clean          # Clean up temporary files
+make build          # Build application with PyInstaller
+```
+
+#### Type Hints
+
+All functions must include type hints:
+
+```python
+from typing import List, Dict, Optional
+from pathlib import Path
+
+def process_file(file_path: Path, options: Optional[Dict[str, str]] = None) -> bool:
+    """Process a file with optional configuration.
+
+    Args:
+        file_path: Path to file to process
+        options: Optional configuration dictionary
+
+    Returns:
+        True if successful, False otherwise
+
+    Raises:
+        FileNotFoundError: If file doesn't exist
+    """
+    pass
+```
+
+#### Error Handling Standards
+
+Follow the patterns documented in [CODE_QUALITY.md](CODE_QUALITY.md#error-handling):
+- Catch specific exceptions
+- Provide meaningful error messages
+- Use custom exception classes
+- Log errors appropriately
+- Clean up resources with context managers
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
+
 ## Testing
 
-Before distributing a build, run a quick byte-compilation check to catch syntax
-errors:
+### Running Tests
+
+```bash
+make test
+# or
+pytest --cov=industrial_data_system --cov-report=html
+```
+
+### Pre-deployment Checks
+
+Before distributing a build, ensure all quality checks pass:
+
+```bash
+make quality
+make test
+make security
+```
+
+Run a quick byte-compilation check to catch syntax errors:
 
 ```bash
 python -m compileall .

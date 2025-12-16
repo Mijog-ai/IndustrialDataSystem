@@ -1,0 +1,16 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.black-formatter",
+    "ms-python.isort",
+    "ms-python.pylint",
+    "ms-python.flake8",
+    "charliermarsh.ruff",
+    "matangover.mypy",
+    "editorconfig.editorconfig",
+    "github.vscode-pull-request-github",
+    "donjayamanne.githistory",
+    "eamodio.gitlens"
+  ]
+}

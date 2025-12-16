@@ -1,0 +1,83 @@
+[MASTER]
+# Use multiple processes for faster analysis
+jobs=0
+# Ignore paths
+ignore=.git,__pycache__,.venv,venv,build,dist
+ignore-patterns=^\.#
+persistent=yes
+suggestion-mode=yes
+unsafe-load-any-extension=no
+
+[MESSAGES CONTROL]
+# Disable certain warnings
+disable=
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    too-few-public-methods,
+    too-many-arguments,
+    protected-access,
+    fixme,
+    duplicate-code
+
+[REPORTS]
+output-format=text
+reports=no
+score=yes
+
+[REFACTORING]
+# Maximum number of nested blocks
+max-nested-blocks=5
+
+[BASIC]
+# Good variable names
+good-names=i,j,k,ex,Run,_,x,y,z,df,db,pk,id,ui,app
+# Naming conventions
+argument-naming-style=snake_case
+attr-naming-style=snake_case
+class-attribute-naming-style=any
+class-naming-style=PascalCase
+const-naming-style=UPPER_CASE
+function-naming-style=snake_case
+method-naming-style=snake_case
+module-naming-style=snake_case
+variable-naming-style=snake_case
+
+[FORMAT]
+# Maximum line length
+max-line-length=100
+indent-string='    '
+expected-line-ending-format=LF
+
+[DESIGN]
+max-args=7
+max-attributes=10
+max-bool-expr=5
+max-branches=15
+max-locals=20
+max-parents=7
+max-public-methods=25
+max-returns=6
+max-statements=50
+min-public-methods=1
+
+[SIMILARITIES]
+# Minimum lines of similar code to detect
+min-similarity-lines=10
+ignore-comments=yes
+ignore-docstrings=yes
+ignore-imports=yes
+
+[TYPECHECK]
+# List of members which are set dynamically
+generated-members=
+
+[VARIABLES]
+# Tells whether we should check for unused import in __init__ files
+init-import=no
+# Allow unused variables when they are part of a tuple unpacking
+allow-global-unused-variables=yes
+
+[EXCEPTIONS]
+# Exceptions that will emit a warning when caught
+overgeneral-exceptions=builtins.BaseException,builtins.Exception
