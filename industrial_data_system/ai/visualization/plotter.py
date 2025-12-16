@@ -790,7 +790,7 @@ class QuickPlotterWindow(QMainWindow):
             left=left_margin,
             right=right_margin,
             top=0.96,
-            bottom=0.12
+            bottom=0.18
         )
 
         self.canvas.draw_idle()
