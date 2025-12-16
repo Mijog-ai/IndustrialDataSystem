@@ -1,21 +1,18 @@
 """Local authentication and upload history storage backed by SQLite."""
+
 from __future__ import annotations
 
 import hashlib
 import secrets
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from datetime import datetime, timedelta
-from industrial_data_system.core.db_manager import (
-    DatabaseManager,
-    UploadRecord,
-    UserRecord,
-)
+
+from industrial_data_system.core.db_manager import DatabaseManager, UploadRecord, UserRecord
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-
 
 
 class SessionManager:
@@ -57,6 +54,7 @@ class SessionManager:
         remaining = timeout - (datetime.now() - last_activity)
         return max(0, int(remaining.total_seconds() / 60))
 
+
 def validate_password_strength(password: str) -> tuple[bool, str]:
     """Validate password meets minimum security requirements.
 
@@ -76,6 +74,7 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
         return False, "Password must contain at least one number."
 
     return True, ""
+
 
 def default_data_path(filename: str) -> Path:
     """Return a path inside the legacy shared data directory."""
@@ -127,12 +126,12 @@ class LocalAuthStore:
     # Public API
     # ------------------------------------------------------------------
     def create_user(
-            self,
-            email: str,
-            password: str,
-            *,
-            username: Optional[str] = None,
-            metadata: Optional[Dict[str, Any]] = None,
+        self,
+        email: str,
+        password: str,
+        *,
+        username: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> LocalUser:
         email = email.strip().lower()
 
@@ -219,9 +218,7 @@ class UploadHistoryStore:
     ) -> UploadRecord:
         pump_series_value = pump_series.strip() if pump_series else None
         pump_series_record = (
-            self.manager.ensure_pump_series(pump_series_value)
-            if pump_series_value
-            else None
+            self.manager.ensure_pump_series(pump_series_value) if pump_series_value else None
         )
         test_type_record = self.manager.ensure_test_type(
             test_type,

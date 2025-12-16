@@ -5,34 +5,34 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-import pandas as pd
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.figure import Figure
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
+    QFileDialog,
+    QGridLayout,
+    QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
-    QTableWidget,
-    QHeaderView,
-    QTableWidgetItem,
-    QCheckBox,
-    QLineEdit,
-    QFileDialog,
-    QGroupBox,
-    QGridLayout,
 )
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
-from matplotlib.figure import Figure
-import matplotlib.pyplot as plt
 
 from industrial_data_system.utils.asc_utils import (
     load_and_process_asc_file,
@@ -60,9 +60,7 @@ class StatisticsArea(QWidget):
 
         self.stats_table = QTableWidget()
         self.stats_table.setColumnCount(5)
-        self.stats_table.setHorizontalHeaderLabels(
-            ["Column", "Max", "Mean", "Min", "Std"]
-        )
+        self.stats_table.setHorizontalHeaderLabels(["Column", "Max", "Mean", "Min", "Std"])
         self.stats_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.stats_table.verticalHeader().setVisible(False)
         self.stats_table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -100,9 +98,7 @@ class StatisticsArea(QWidget):
     def export_statistics(self):
         """Export statistics table to CSV file."""
         if self._current_df is None or self._current_df.empty:
-            QMessageBox.warning(
-                self, "Export Statistics", "No statistics available to export."
-            )
+            QMessageBox.warning(self, "Export Statistics", "No statistics available to export.")
             return
 
         file_path, _ = QFileDialog.getSaveFileName(
@@ -117,9 +113,7 @@ class StatisticsArea(QWidget):
                     self, "Export Success", f"Statistics exported to:\n{file_path}"
                 )
             except Exception as exc:
-                QMessageBox.critical(
-                    self, "Export Failed", f"Failed to export statistics:\n{exc}"
-                )
+                QMessageBox.critical(self, "Export Failed", f"Failed to export statistics:\n{exc}")
 
 
 class QuickPlotterWindow(QMainWindow):
@@ -196,9 +190,7 @@ class QuickPlotterWindow(QMainWindow):
         self.metadata_table.setRowCount(4)
         self.metadata_table.setColumnCount(2)
         self.metadata_table.setHorizontalHeaderLabels(["Property", "Value"])
-        self.metadata_table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.Stretch
-        )
+        self.metadata_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.metadata_table.verticalHeader().setVisible(False)
         self.metadata_table.setMaximumHeight(150)
         self.metadata_table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -424,9 +416,7 @@ class QuickPlotterWindow(QMainWindow):
         if ext in {".xls", ".xlsx", ".xlsm", ".xlsb"}:
             return pd.read_excel(path)
         if not ext:
-            raise ValueError(
-                "Files without an extension are not supported by the quick plotter."
-            )
+            raise ValueError("Files without an extension are not supported by the quick plotter.")
         raise ValueError(f"Unsupported file type: {ext}")
 
     def _populate_metadata_table(self) -> None:
@@ -519,13 +509,9 @@ class QuickPlotterWindow(QMainWindow):
         if not selected_x:
             self.status_label.setText("⚠ Select a column for the X axis")
         elif not selected_y:
-            self.status_label.setText(
-                "⚠ Select one or more numeric columns for the Y axis"
-            )
+            self.status_label.setText("⚠ Select one or more numeric columns for the Y axis")
         else:
-            self.status_label.setText(
-                f"📊 Plotting: {selected_x} vs [{', '.join(selected_y)}]"
-            )
+            self.status_label.setText(f"📊 Plotting: {selected_x} vs [{', '.join(selected_y)}]")
 
     def _current_x_axis(self) -> str | None:
         """Get currently selected X axis column."""
@@ -605,9 +591,7 @@ class QuickPlotterWindow(QMainWindow):
                     new_ax.yaxis.set_ticks_position("left")
                 else:  # Odd indices go to the right side
                     new_ax.spines["left"].set_visible(False)
-                    new_ax.spines["right"].set_position(
-                        ("axes", 1 + 0.12 * ((i - 1) // 2))
-                    )
+                    new_ax.spines["right"].set_position(("axes", 1 + 0.12 * ((i - 1) // 2)))
                     new_ax.yaxis.set_label_position("right")
                     new_ax.yaxis.set_ticks_position("right")
                 axes.append(new_ax)
@@ -633,9 +617,7 @@ class QuickPlotterWindow(QMainWindow):
             plotted_any = True
 
         if not plotted_any:
-            raise ValueError(
-                "None of the selected y-axis columns contain numeric data."
-            )
+            raise ValueError("None of the selected y-axis columns contain numeric data.")
 
         # Style X-axis with more padding
         ax.set_xlabel(x_column, fontsize=12, fontweight="bold", labelpad=15)
@@ -689,9 +671,7 @@ class QuickPlotterWindow(QMainWindow):
                     ax.set_xlim(new_xlim)
                     self.canvas.draw_idle()
         except ValueError:
-            QMessageBox.warning(
-                self, "Invalid Range", "Please enter valid numeric values."
-            )
+            QMessageBox.warning(self, "Invalid Range", "Please enter valid numeric values.")
 
     def _reset_zoom(self) -> None:
         """Reset zoom to show all data."""
@@ -715,13 +695,9 @@ class QuickPlotterWindow(QMainWindow):
         if file_path:
             try:
                 self.figure.savefig(file_path, dpi=300, bbox_inches="tight")
-                QMessageBox.information(
-                    self, "Export Success", f"Plot saved to:\n{file_path}"
-                )
+                QMessageBox.information(self, "Export Success", f"Plot saved to:\n{file_path}")
             except Exception as exc:
-                QMessageBox.critical(
-                    self, "Export Failed", f"Failed to export plot:\n{exc}"
-                )
+                QMessageBox.critical(self, "Export Failed", f"Failed to export plot:\n{exc}")
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         """Handle window close event."""

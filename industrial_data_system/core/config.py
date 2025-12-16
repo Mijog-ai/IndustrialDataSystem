@@ -1,4 +1,5 @@
 """Configuration helpers for the Industrial Data System applications."""
+
 from __future__ import annotations
 
 import os
@@ -8,7 +9,6 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-
 
 _ENV_LOCK = threading.Lock()
 _ENV_INITIALISED = False
@@ -103,9 +103,7 @@ class AppConfig:
                     else:
                         path.mkdir(parents=True, exist_ok=True)
                 except OSError as exc:
-                    raise ConfigError(
-                        f"Required path '{path}' is unavailable: {exc}"
-                    ) from exc
+                    raise ConfigError(f"Required path '{path}' is unavailable: {exc}") from exc
 
     def resolve_file_path(self, *relative_parts: str) -> Path:
         """Resolve a relative path inside the shared files directory."""

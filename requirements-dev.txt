@@ -1,0 +1,82 @@
+# Development and testing dependencies for Industrial Data System
+# Install with: pip install -r requirements-dev.txt
+
+# Include production requirements
+-r requirements.txt
+
+# Code Formatting
+black==24.1.1
+isort==5.13.2
+autoflake==2.2.1
+pyupgrade==3.15.0
+
+# Linting
+flake8==7.0.0
+flake8-bugbear==24.1.17
+flake8-comprehensions==3.14.0
+flake8-simplify==0.21.0
+flake8-docstrings==1.7.0
+flake8-quotes==3.3.2
+flake8-import-order==0.18.2
+pylint==3.0.3
+ruff==0.1.14
+
+# Type Checking
+mypy==1.8.0
+types-python-dotenv==1.0.0.20240106
+types-setuptools==69.0.0.20240125
+
+# Security
+bandit==1.7.6
+bandit[toml]==1.7.6
+safety==3.0.1
+detect-secrets==1.4.0
+
+# Testing
+pytest==7.4.4
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+pytest-asyncio==0.23.3
+pytest-xdist==3.5.0
+pytest-timeout==2.2.0
+pytest-qt==4.3.1
+coverage[toml]==7.4.0
+
+# Pre-commit Hooks
+pre-commit==3.6.0
+
+# Documentation
+pydocstyle==6.3.0
+sphinx==7.2.6
+sphinx-rtd-theme==2.0.0
+sphinx-autodoc-typehints==1.25.2
+
+# Development Tools
+ipython==8.20.0
+ipdb==0.13.13
+watchdog==3.0.0
+
+# Build Tools
+build==1.0.3
+twine==4.0.2
+wheel==0.42.0
+setuptools==69.0.3
+
+# Performance Profiling
+py-spy==0.3.14
+memory-profiler==0.61.0
+line-profiler==4.1.1
+
+# Database Tools
+sqlalchemy==2.0.25  # For advanced database operations
+alembic==1.13.1  # Database migrations
+
+# API Testing (for future API development)
+requests==2.31.0
+responses==0.25.0
+
+# Environment Management
+python-dotenv==1.0.1  # Already in requirements.txt but listed for clarity
+
+# Continuous Integration
+tox==4.11.4

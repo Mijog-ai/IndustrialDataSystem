@@ -5,37 +5,37 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-import pandas as pd
-import numpy as np
 import joblib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.figure import Figure
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QGridLayout,
+    QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
-    QTableWidget,
-    QHeaderView,
-    QTableWidgetItem,
-    QCheckBox,
-    QLineEdit,
-    QFileDialog,
-    QGroupBox,
-    QGridLayout,
-    QSpinBox,
-    QDoubleSpinBox,
 )
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
-from matplotlib.figure import Figure
-import matplotlib.pyplot as plt
 
 from industrial_data_system.utils.asc_utils import (
     load_and_process_asc_file,
@@ -131,9 +131,7 @@ class AnomalyDetectorWindow(QMainWindow):
         self.model_info_table.setRowCount(5)
         self.model_info_table.setColumnCount(2)
         self.model_info_table.setHorizontalHeaderLabels(["Property", "Value"])
-        self.model_info_table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.Stretch
-        )
+        self.model_info_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.model_info_table.verticalHeader().setVisible(False)
         self.model_info_table.setMaximumHeight(180)
         self.model_info_table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -148,13 +146,9 @@ class AnomalyDetectorWindow(QMainWindow):
 
         settings_layout.addWidget(QLabel("Threshold Method:"), 0, 0)
         self.threshold_method = QListWidget()
-        self.threshold_method.addItems([
-            "Mean + 2×Std",
-            "Mean + 3×Std",
-            "95th Percentile",
-            "99th Percentile",
-            "Custom Value"
-        ])
+        self.threshold_method.addItems(
+            ["Mean + 2×Std", "Mean + 3×Std", "95th Percentile", "99th Percentile", "Custom Value"]
+        )
         self.threshold_method.setCurrentRow(1)  # Default: Mean + 3×Std
         self.threshold_method.setMaximumHeight(120)
         self.threshold_method.currentRowChanged.connect(self._on_threshold_method_changed)
@@ -183,9 +177,7 @@ class AnomalyDetectorWindow(QMainWindow):
         self.stats_table.setRowCount(6)
         self.stats_table.setColumnCount(2)
         self.stats_table.setHorizontalHeaderLabels(["Metric", "Value"])
-        self.stats_table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.Stretch
-        )
+        self.stats_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.stats_table.verticalHeader().setVisible(False)
         self.stats_table.setMaximumHeight(220)
         self.stats_table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -295,9 +287,7 @@ class AnomalyDetectorWindow(QMainWindow):
             raise ValueError("The selected file did not contain any data.")
 
         self._dataframe = df
-        self.status_label.setText(
-            f"✓ Data loaded: {df.shape[0]} rows, {df.shape[1]} columns"
-        )
+        self.status_label.setText(f"✓ Data loaded: {df.shape[0]} rows, {df.shape[1]} columns")
 
     @staticmethod
     def _read_file(path: Path) -> pd.DataFrame:
@@ -325,10 +315,10 @@ class AnomalyDetectorWindow(QMainWindow):
             file_parts = self._file_path.parts
 
             # Find 'tests' in the path
-            if 'tests' not in file_parts:
+            if "tests" not in file_parts:
                 raise ValueError("Could not determine test type from file path")
 
-            tests_index = file_parts.index('tests')
+            tests_index = file_parts.index("tests")
             if tests_index + 1 >= len(file_parts):
                 raise ValueError("Invalid file path structure")
 
@@ -367,14 +357,13 @@ class AnomalyDetectorWindow(QMainWindow):
             metadata = {}
             if metadata_path.exists():
                 import json
+
                 metadata = json.loads(metadata_path.read_text())
 
             # Update model info table
             self._populate_model_info(pump_series, test_type, metadata)
 
-            self.status_label.setText(
-                f"✓ Model loaded: {pump_series} / {test_type}"
-            )
+            self.status_label.setText(f"✓ Model loaded: {pump_series} / {test_type}")
             self.status_label.setStyleSheet(
                 "color: #0F172A; font-weight: 500; padding: 8px; "
                 "background: #D1FAE5; border-radius: 6px;"
@@ -390,7 +379,7 @@ class AnomalyDetectorWindow(QMainWindow):
                 self,
                 "Model Loading Failed",
                 f"Could not load trained model:\n\n{exc}\n\n"
-                "Please ensure training data has been uploaded for this test type."
+                "Please ensure training data has been uploaded for this test type.",
             )
 
     def _create_model_from_state(self, state: dict):
@@ -457,9 +446,7 @@ class AnomalyDetectorWindow(QMainWindow):
             return
 
         if self._dataframe is None:
-            QMessageBox.warning(
-                self, "Anomaly Detection", "No data is loaded."
-            )
+            QMessageBox.warning(self, "Anomaly Detection", "No data is loaded.")
             return
 
         try:
@@ -491,9 +478,7 @@ class AnomalyDetectorWindow(QMainWindow):
             self._threshold = self._calculate_threshold()
 
             # Find anomalies
-            self._anomaly_indices = np.where(
-                self._reconstruction_errors > self._threshold
-            )[0]
+            self._anomaly_indices = np.where(self._reconstruction_errors > self._threshold)[0]
 
             # Update statistics
             self._update_statistics()
@@ -510,9 +495,7 @@ class AnomalyDetectorWindow(QMainWindow):
             )
 
         except Exception as exc:
-            QMessageBox.critical(
-                self, "Detection Failed", f"Anomaly detection failed:\n\n{exc}"
-            )
+            QMessageBox.critical(self, "Detection Failed", f"Anomaly detection failed:\n\n{exc}")
 
     def _calculate_threshold(self) -> float:
         """Calculate anomaly threshold based on selected method."""
@@ -589,10 +572,10 @@ class AnomalyDetectorWindow(QMainWindow):
         ax1.plot(
             indices,
             self._reconstruction_errors,
-            'b-',
+            "b-",
             linewidth=1,
-            label='Reconstruction Error',
-            alpha=0.7
+            label="Reconstruction Error",
+            alpha=0.7,
         )
 
         # Highlight anomalies
@@ -600,36 +583,36 @@ class AnomalyDetectorWindow(QMainWindow):
             ax1.scatter(
                 self._anomaly_indices,
                 self._reconstruction_errors[self._anomaly_indices],
-                c='red',
+                c="red",
                 s=50,
-                marker='o',
-                label='Anomalies',
-                zorder=5
+                marker="o",
+                label="Anomalies",
+                zorder=5,
             )
 
         # Threshold line
         ax1.axhline(
             y=self._threshold,
-            color='r',
-            linestyle='--',
+            color="r",
+            linestyle="--",
             linewidth=2,
-            label=f'Threshold = {self._threshold:.4f}'
+            label=f"Threshold = {self._threshold:.4f}",
         )
 
-        ax1.set_xlabel('Data Point Index', fontweight='bold')
-        ax1.set_ylabel('Reconstruction Error', fontweight='bold')
-        ax1.set_title('Reconstruction Error vs Data Points', fontweight='bold', fontsize=12)
-        ax1.legend(loc='upper right')
+        ax1.set_xlabel("Data Point Index", fontweight="bold")
+        ax1.set_ylabel("Reconstruction Error", fontweight="bold")
+        ax1.set_title("Reconstruction Error vs Data Points", fontweight="bold", fontsize=12)
+        ax1.legend(loc="upper right")
         ax1.grid(True, alpha=0.3)
 
         # Plot 2: Histogram of reconstruction errors
         ax2.hist(
             self._reconstruction_errors,
             bins=50,
-            color='skyblue',
-            edgecolor='black',
+            color="skyblue",
+            edgecolor="black",
             alpha=0.7,
-            label='Normal'
+            label="Normal",
         )
 
         # Highlight anomaly region
@@ -638,26 +621,26 @@ class AnomalyDetectorWindow(QMainWindow):
             ax2.hist(
                 anomaly_errors,
                 bins=50,
-                color='red',
-                edgecolor='darkred',
+                color="red",
+                edgecolor="darkred",
                 alpha=0.7,
-                label='Anomalies'
+                label="Anomalies",
             )
 
         # Threshold line
         ax2.axvline(
             x=self._threshold,
-            color='r',
-            linestyle='--',
+            color="r",
+            linestyle="--",
             linewidth=2,
-            label=f'Threshold = {self._threshold:.4f}'
+            label=f"Threshold = {self._threshold:.4f}",
         )
 
-        ax2.set_xlabel('Reconstruction Error', fontweight='bold')
-        ax2.set_ylabel('Frequency', fontweight='bold')
-        ax2.set_title('Distribution of Reconstruction Errors', fontweight='bold', fontsize=12)
-        ax2.legend(loc='upper right')
-        ax2.grid(True, alpha=0.3, axis='y')
+        ax2.set_xlabel("Reconstruction Error", fontweight="bold")
+        ax2.set_ylabel("Frequency", fontweight="bold")
+        ax2.set_title("Distribution of Reconstruction Errors", fontweight="bold", fontsize=12)
+        ax2.legend(loc="upper right")
+        ax2.grid(True, alpha=0.3, axis="y")
 
         self.figure.tight_layout()
         self.canvas.draw_idle()
@@ -665,31 +648,27 @@ class AnomalyDetectorWindow(QMainWindow):
     def _export_anomalies(self) -> None:
         """Export detected anomalies to CSV file."""
         if self._anomaly_indices is None or len(self._anomaly_indices) == 0:
-            QMessageBox.warning(
-                self, "Export Anomalies", "No anomalies detected to export."
-            )
+            QMessageBox.warning(self, "Export Anomalies", "No anomalies detected to export.")
             return
 
         file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export Anomalies",
-            f"{self._file_path.stem}_anomalies.csv",
-            "CSV Files (*.csv)"
+            self, "Export Anomalies", f"{self._file_path.stem}_anomalies.csv", "CSV Files (*.csv)"
         )
 
         if file_path:
             try:
                 # Create DataFrame with anomalies
                 anomaly_df = self._dataframe.iloc[self._anomaly_indices].copy()
-                anomaly_df['reconstruction_error'] = self._reconstruction_errors[
+                anomaly_df["reconstruction_error"] = self._reconstruction_errors[
                     self._anomaly_indices
                 ]
-                anomaly_df['data_point_index'] = self._anomaly_indices
+                anomaly_df["data_point_index"] = self._anomaly_indices
 
                 # Reorder columns to put index and error first
-                cols = ['data_point_index', 'reconstruction_error'] + [
-                    col for col in anomaly_df.columns
-                    if col not in ['data_point_index', 'reconstruction_error']
+                cols = ["data_point_index", "reconstruction_error"] + [
+                    col
+                    for col in anomaly_df.columns
+                    if col not in ["data_point_index", "reconstruction_error"]
                 ]
                 anomaly_df = anomaly_df[cols]
 
@@ -698,12 +677,10 @@ class AnomalyDetectorWindow(QMainWindow):
                     self,
                     "Export Success",
                     f"Anomalies exported to:\n{file_path}\n\n"
-                    f"Total anomalies: {len(self._anomaly_indices)}"
+                    f"Total anomalies: {len(self._anomaly_indices)}",
                 )
             except Exception as exc:
-                QMessageBox.critical(
-                    self, "Export Failed", f"Failed to export anomalies:\n{exc}"
-                )
+                QMessageBox.critical(self, "Export Failed", f"Failed to export anomalies:\n{exc}")
 
     def _export_plot(self) -> None:
         """Export current plot to image file."""
@@ -711,19 +688,15 @@ class AnomalyDetectorWindow(QMainWindow):
             self,
             "Export Plot",
             f"{self._file_path.stem}_anomaly_plot.png",
-            "PNG (*.png);;PDF (*.pdf);;SVG (*.svg)"
+            "PNG (*.png);;PDF (*.pdf);;SVG (*.svg)",
         )
 
         if file_path:
             try:
-                self.figure.savefig(file_path, dpi=300, bbox_inches='tight')
-                QMessageBox.information(
-                    self, "Export Success", f"Plot saved to:\n{file_path}"
-                )
+                self.figure.savefig(file_path, dpi=300, bbox_inches="tight")
+                QMessageBox.information(self, "Export Success", f"Plot saved to:\n{file_path}")
             except Exception as exc:
-                QMessageBox.critical(
-                    self, "Export Failed", f"Failed to export plot:\n{exc}"
-                )
+                QMessageBox.critical(self, "Export Failed", f"Failed to export plot:\n{exc}")
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         """Handle window close event."""
@@ -747,9 +720,7 @@ def run(file_path: Path | str, parent: Optional[QWidget] = None) -> None:
     """
     path = Path(file_path)
     if not path.exists():
-        QMessageBox.warning(
-            None, "Anomaly Detector", f"The file '{path}' could not be found."
-        )
+        QMessageBox.warning(None, "Anomaly Detector", f"The file '{path}' could not be found.")
         return
 
     try:
@@ -758,9 +729,7 @@ def run(file_path: Path | str, parent: Optional[QWidget] = None) -> None:
         QMessageBox.warning(None, "Anomaly Detector", str(exc))
         return
     except Exception as exc:
-        QMessageBox.critical(
-            None, "Anomaly Detector", f"Unable to open detector: {exc}"
-        )
+        QMessageBox.critical(None, "Anomaly Detector", f"Unable to open detector: {exc}")
         return
 
     window.show()

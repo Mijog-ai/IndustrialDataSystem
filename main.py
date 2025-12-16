@@ -1,4 +1,5 @@
 """Application gateway that routes to the upload or reader tools."""
+
 from __future__ import annotations
 
 import sys
@@ -6,22 +7,14 @@ from typing import List
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QCloseEvent, QFont
-from PyQt5.QtWidgets import (
-    QApplication,
-    QLabel,
-    QMainWindow,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
 
 from industrial_data_system.apps import IndustrialDataApp, IndustrialTheme, ReaderApp
 
-
 # Enable High DPI scaling for different screen resolutions
-if hasattr(Qt, 'AA_EnableHighDpiScaling'):
+if hasattr(Qt, "AA_EnableHighDpiScaling"):
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
+if hasattr(Qt, "AA_UseHighDpiPixmaps"):
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
 

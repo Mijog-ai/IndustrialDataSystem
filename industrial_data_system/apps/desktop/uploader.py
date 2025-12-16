@@ -10,43 +10,39 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from industrial_data_system.core.constants import MAX_PREVIEW_ROWS, SUPPORTED_EXTENSIONS
 
 from dotenv import load_dotenv
-from PyQt5.QtCore import Qt, pyqtSignal, QSize, QUrl
-from PyQt5.QtGui import QDesktopServices, QFont, QPalette, QColor, QIcon
+from PyQt5.QtCore import QSize, Qt, QUrl, pyqtSignal
+from PyQt5.QtGui import QColor, QDesktopServices, QFont, QIcon, QPalette
 from PyQt5.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
-    QHeaderView,
+    QFrame,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
-    QFrame,
-    QScrollArea,
-    QComboBox,
-    QDialog,
-    QDialogButtonBox,
-    QProgressDialog,
-    QCheckBox,
 )
-from industrial_data_system.core.auth import (
-    LocalAuthStore,
-    LocalUser,
-    UploadHistoryStore,
-)
+
+from industrial_data_system.core.auth import LocalAuthStore, LocalUser, UploadHistoryStore
 from industrial_data_system.core.config import get_config
+from industrial_data_system.core.constants import MAX_PREVIEW_ROWS, SUPPORTED_EXTENSIONS
 from industrial_data_system.core.db_manager import DatabaseManager
 from industrial_data_system.core.storage import LocalStorageManager, StorageError
-
 
 # ---------------------------------------------------------------------------
 # Environment loading helpers
@@ -349,9 +345,7 @@ class NewPumpSeriesDialog(QDialog):
         layout.addWidget(desc)
 
         input_label = QLabel("Pump Series Name")
-        input_label.setStyleSheet(
-            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
-        )
+        input_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         layout.addWidget(input_label)
 
         self.series_input = QLineEdit()
@@ -415,15 +409,11 @@ class NewTestTypeDialog(QDialog):
 
         # Input field
         input_label = QLabel("Test Type Name")
-        input_label.setStyleSheet(
-            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
-        )
+        input_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         layout.addWidget(input_label)
 
         self.test_type_input = QLineEdit()
-        self.test_type_input.setPlaceholderText(
-            "e.g., Performance Test, Load Test, Stress Test"
-        )
+        self.test_type_input.setPlaceholderText("e.g., Performance Test, Load Test, Stress Test")
         layout.addWidget(self.test_type_input)
 
         description_label = QLabel("Description (optional)")
@@ -713,15 +703,11 @@ class LoginPage(QWidget):
         confirm = self.signup_confirm_input.text()
 
         if not email or not username or not password or not confirm:
-            QMessageBox.warning(
-                self, "Industrial Data System", "All signup fields are required."
-            )
+            QMessageBox.warning(self, "Industrial Data System", "All signup fields are required.")
             return
 
         if password != confirm:
-            QMessageBox.warning(
-                self, "Industrial Data System", "Passwords do not match."
-            )
+            QMessageBox.warning(self, "Industrial Data System", "Passwords do not match.")
             return
 
         self.signup_requested.emit(email, username, password)
@@ -759,9 +745,7 @@ class ForgotPasswordPage(QWidget):
         form_layout.setContentsMargins(32, 32, 32, 32)
 
         email_label = QLabel("Email Address")
-        email_label.setStyleSheet(
-            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
-        )
+        email_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         self.email_input = QLineEdit()
         self.email_input.setPlaceholderText("your.email@company.com")
         form_layout.addWidget(email_label)
@@ -794,9 +778,7 @@ class DashboardPage(QWidget):
     pump_series_created = pyqtSignal(str, str)
     test_type_created = pyqtSignal(str, str, str)
     files_deleted = pyqtSignal(list)  # List of file IDs to delete
-    files_moved = pyqtSignal(
-        list, str, str
-    )  # List of file IDs, new pump series, new test type
+    files_moved = pyqtSignal(list, str, str)  # List of file IDs, new pump series, new test type
     selection_changed = pyqtSignal()  # Signal when pump series or test type changes
     back_to_gateway_requested = pyqtSignal()  # Signal to return to app selection
 
@@ -884,9 +866,7 @@ class DashboardPage(QWidget):
 
         self.pump_series_combo = QComboBox()
         self.pump_series_combo.setMinimumWidth(250)
-        self.pump_series_combo.currentIndexChanged.connect(
-            self._handle_pump_series_changed
-        )
+        self.pump_series_combo.currentIndexChanged.connect(self._handle_pump_series_changed)
         pump_series_layout.addWidget(self.pump_series_combo, stretch=1)
 
         new_series_button = QPushButton("+ New Pump Series")
@@ -901,9 +881,7 @@ class DashboardPage(QWidget):
         test_type_layout.setSpacing(12)
 
         test_type_label = QLabel("Test Type:")
-        test_type_label.setStyleSheet(
-            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
-        )
+        test_type_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         test_type_layout.addWidget(test_type_label)
 
         self.test_type_combo = QComboBox()
@@ -954,9 +932,7 @@ class DashboardPage(QWidget):
         self.selection_count_label.setProperty("caption", True)
         files_header_layout.addWidget(self.selection_count_label)
 
-        files_header_widget.setStyleSheet(
-            f"border-bottom: 1px solid {IndustrialTheme.BORDER};"
-        )
+        files_header_widget.setStyleSheet(f"border-bottom: 1px solid {IndustrialTheme.BORDER};")
         files_layout.addWidget(files_header_widget)
 
         # Table with checkbox column (now 6 columns instead of 5)
@@ -1285,15 +1261,11 @@ class DashboardPage(QWidget):
     def _open_selected_file(self) -> None:
         record = self._get_selected_record()
         if not record:
-            QMessageBox.information(
-                self, "Industrial Data System", "Select a file first."
-            )
+            QMessageBox.information(self, "Industrial Data System", "Select a file first.")
             return
         path_value = record.get("absolute_path") or record.get("file_path")
         if not path_value:
-            QMessageBox.warning(
-                self, "Industrial Data System", "No file path available."
-            )
+            QMessageBox.warning(self, "Industrial Data System", "No file path available.")
             return
         path = Path(path_value)
         if not path.is_absolute():
@@ -1301,24 +1273,18 @@ class DashboardPage(QWidget):
             if base_path:
                 path = Path(base_path) / path
         if not path.exists():
-            QMessageBox.warning(
-                self, "Industrial Data System", f"File not found: {path}"
-            )
+            QMessageBox.warning(self, "Industrial Data System", f"File not found: {path}")
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     def _open_selected_folder(self) -> None:
         record = self._get_selected_record()
         if not record:
-            QMessageBox.information(
-                self, "Industrial Data System", "Select a file first."
-            )
+            QMessageBox.information(self, "Industrial Data System", "Select a file first.")
             return
         path_value = record.get("absolute_path") or record.get("file_path")
         if not path_value:
-            QMessageBox.warning(
-                self, "Industrial Data System", "No file path available."
-            )
+            QMessageBox.warning(self, "Industrial Data System", "No file path available.")
             return
         path = Path(path_value)
         if not path.is_absolute():
@@ -1326,24 +1292,18 @@ class DashboardPage(QWidget):
             if base_path:
                 path = Path(base_path) / path
         if not path.exists():
-            QMessageBox.warning(
-                self, "Industrial Data System", f"File not found: {path}"
-            )
+            QMessageBox.warning(self, "Industrial Data System", f"File not found: {path}")
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent)))
 
     def _copy_selected_path(self) -> None:
         record = self._get_selected_record()
         if not record:
-            QMessageBox.information(
-                self, "Industrial Data System", "Select a file first."
-            )
+            QMessageBox.information(self, "Industrial Data System", "Select a file first.")
             return
         path_value = record.get("absolute_path") or record.get("file_path")
         if not path_value:
-            QMessageBox.warning(
-                self, "Industrial Data System", "No file path available."
-            )
+            QMessageBox.warning(self, "Industrial Data System", "No file path available.")
             return
         path = Path(path_value)
         if not path.is_absolute():
@@ -1351,9 +1311,7 @@ class DashboardPage(QWidget):
             if base_path:
                 path = Path(base_path) / path
         QApplication.clipboard().setText(str(path))
-        QMessageBox.information(
-            self, "Industrial Data System", "File path copied to clipboard."
-        )
+        QMessageBox.information(self, "Industrial Data System", "File path copied to clipboard.")
 
     def _load_next_page(self):
         """Load next page"""
@@ -1371,15 +1329,11 @@ class DashboardPage(QWidget):
     def _show_selected_properties(self) -> None:
         record = self._get_selected_record()
         if not record:
-            QMessageBox.information(
-                self, "Industrial Data System", "Select a file first."
-            )
+            QMessageBox.information(self, "Industrial Data System", "Select a file first.")
             return
         path_value = record.get("absolute_path") or record.get("file_path")
         if not path_value:
-            QMessageBox.warning(
-                self, "Industrial Data System", "No file path available."
-            )
+            QMessageBox.warning(self, "Industrial Data System", "No file path available.")
             return
         path = Path(path_value)
         if not path.is_absolute():
@@ -1387,9 +1341,7 @@ class DashboardPage(QWidget):
             if base_path:
                 path = Path(base_path) / path
         if not path.exists():
-            QMessageBox.warning(
-                self, "Industrial Data System", f"File not found: {path}"
-            )
+            QMessageBox.warning(self, "Industrial Data System", f"File not found: {path}")
             return
         stat = path.stat()
         size_mb = stat.st_size / (1024 * 1024)
@@ -1425,7 +1377,9 @@ class DashboardPage(QWidget):
             return
 
         file_dialog_filter = "Data Files (*.csv *.xlsx *.xlsm *.xltx *.xltm *.asc);;"
-        file_dialog_filter += "CSV Files (*.csv);;ASC Files (*.asc);;Excel Files (*.xlsx *.xlsm *.xltx *.xltm)"
+        file_dialog_filter += (
+            "CSV Files (*.csv);;ASC Files (*.asc);;Excel Files (*.xlsx *.xlsm *.xltx *.xltm)"
+        )
 
         # Changed from getOpenFileName to getOpenFileNames (plural)
         file_paths, _ = QFileDialog.getOpenFileNames(  # <-- THIS IS THE KEY CHANGE
@@ -1451,9 +1405,7 @@ class DashboardPage(QWidget):
         self.csv_table.setRowCount(len(rows))
         for row_index, row_values in enumerate(rows):
             for column_index in range(column_count):
-                value = (
-                    row_values[column_index] if column_index < len(row_values) else ""
-                )
+                value = row_values[column_index] if column_index < len(row_values) else ""
                 item = QTableWidgetItem(value)
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 self.csv_table.setItem(row_index, column_index, item)
@@ -1517,9 +1469,7 @@ class DashboardPage(QWidget):
         """Delete all selected files"""
         checked_records = self._get_checked_records()
         if not checked_records:
-            QMessageBox.information(
-                self, "Industrial Data System", "No files selected."
-            )
+            QMessageBox.information(self, "Industrial Data System", "No files selected.")
             return
 
         # Confirm deletion
@@ -1533,18 +1483,14 @@ class DashboardPage(QWidget):
         )
 
         if reply == QMessageBox.Yes:
-            file_ids = [
-                record.get("id") for record in checked_records if record.get("id")
-            ]
+            file_ids = [record.get("id") for record in checked_records if record.get("id")]
             self.files_deleted.emit(file_ids)
 
     def _bulk_move_files(self):
         """Move all selected files to a new pump series/test type"""
         checked_records = self._get_checked_records()
         if not checked_records:
-            QMessageBox.information(
-                self, "Industrial Data System", "No files selected."
-            )
+            QMessageBox.information(self, "Industrial Data System", "No files selected.")
             return
 
         # Create dialog for selecting new location
@@ -1554,9 +1500,7 @@ class DashboardPage(QWidget):
             new_test_type = dialog.get_test_type()
 
             if new_pump_series and new_test_type:
-                file_ids = [
-                    record.get("id") for record in checked_records if record.get("id")
-                ]
+                file_ids = [record.get("id") for record in checked_records if record.get("id")]
                 self.files_moved.emit(file_ids, new_pump_series, new_test_type)
 
     # ============ MODIFIED METHOD FOR DISPLAYING FILES ============
@@ -1665,18 +1609,14 @@ class BulkMoveDialog(QDialog):
         title.setProperty("subheading", True)
         layout.addWidget(title)
 
-        desc = QLabel(
-            "Select the destination pump series and test type for the selected files."
-        )
+        desc = QLabel("Select the destination pump series and test type for the selected files.")
         desc.setProperty("caption", True)
         desc.setWordWrap(True)
         layout.addWidget(desc)
 
         # Pump series selector
         pump_label = QLabel("Destination Pump Series")
-        pump_label.setStyleSheet(
-            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
-        )
+        pump_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         layout.addWidget(pump_label)
 
         self.pump_combo = QComboBox()
@@ -1686,9 +1626,7 @@ class BulkMoveDialog(QDialog):
 
         # Test type selector
         test_label = QLabel("Destination Test Type")
-        test_label.setStyleSheet(
-            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
-        )
+        test_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         layout.addWidget(test_label)
 
         self.test_combo = QComboBox()
@@ -1738,9 +1676,7 @@ class IndustrialDataApp(QMainWindow):
         self.db_manager = DatabaseManager()
         self.auth_store = LocalAuthStore(self.db_manager)
         self.history_store = UploadHistoryStore(self.db_manager)
-        self.storage_manager = LocalStorageManager(
-            config=CONFIG, database=self.db_manager
-        )
+        self.storage_manager = LocalStorageManager(config=CONFIG, database=self.db_manager)
         self.current_username: str = ""
         self.default_pump_series = "General"
 
@@ -1776,11 +1712,7 @@ class IndustrialDataApp(QMainWindow):
             metadata = dict(record.metadata or {})
             if default_username and "username" not in metadata and record.username:
                 metadata["username"] = record.username
-            if (
-                default_username
-                and "username_normalized" not in metadata
-                and record.username
-            ):
+            if default_username and "username_normalized" not in metadata and record.username:
                 metadata["username_normalized"] = record.username.lower()
             if "display_name" not in metadata:
                 metadata["display_name"] = default_display_name
@@ -1836,9 +1768,7 @@ class IndustrialDataApp(QMainWindow):
             catalog: Dict[str, set[str]] = {}
 
             def ensure_series(name: Optional[str]) -> set[str]:
-                series_name = (
-                    name or self.default_pump_series
-                ).strip() or self.default_pump_series
+                series_name = (name or self.default_pump_series).strip() or self.default_pump_series
                 return catalog.setdefault(series_name, set())
 
             # Existing pump series from database
@@ -1873,9 +1803,7 @@ class IndustrialDataApp(QMainWindow):
             if not catalog:
                 ensure_series(self.default_pump_series)
 
-            normalized_catalog = {
-                name: sorted(types) for name, types in catalog.items()
-            }
+            normalized_catalog = {name: sorted(types) for name, types in catalog.items()}
             self.dashboard_page.set_catalog(normalized_catalog)
         except Exception:
             self.dashboard_page.set_catalog({})
@@ -1900,9 +1828,7 @@ class IndustrialDataApp(QMainWindow):
         if index >= 0:
             self.dashboard_page.pump_series_combo.setCurrentIndex(index)
 
-    def handle_new_test_type(
-        self, pump_series: str, name: str, description: str
-    ) -> None:
+    def handle_new_test_type(self, pump_series: str, name: str, description: str) -> None:
         pump_series = pump_series.strip()
         name = name.strip()
         if not pump_series:
@@ -1964,10 +1890,7 @@ class IndustrialDataApp(QMainWindow):
                 message += f"\nFailed to delete {failed_count} file(s)."
             self._alert(message, QMessageBox.Information)
         elif failed_count > 0:
-            self._alert(
-                f"Failed to delete {failed_count} file(s).",
-                QMessageBox.Warning
-            )
+            self._alert(f"Failed to delete {failed_count} file(s).", QMessageBox.Warning)
 
         # Refresh the file list
         self.refresh_files()
@@ -2035,15 +1958,11 @@ class IndustrialDataApp(QMainWindow):
             relative_path = record.get("file_path")
             absolute_path = None
             if relative_path:
-                absolute_candidate = (
-                    CONFIG.files_base_path / Path(relative_path)
-                ).resolve()
+                absolute_candidate = (CONFIG.files_base_path / Path(relative_path)).resolve()
                 absolute_path = str(absolute_candidate)
             record["absolute_path"] = absolute_path
             record["base_path"] = str(CONFIG.files_base_path)
-            record["pump_series"] = (
-                record.get("pump_series") or self.default_pump_series
-            )
+            record["pump_series"] = record.get("pump_series") or self.default_pump_series
 
             # Filter by selected pump series and test type
             record_pump_series = record.get("pump_series")
@@ -2099,9 +2018,7 @@ class IndustrialDataApp(QMainWindow):
 
             if file_extension not in supported_extensions:
                 allowed = ", ".join(sorted(supported_extensions))
-                failed_uploads.append(
-                    (file_path, f"Unsupported file type. Allowed: {allowed}")
-                )
+                failed_uploads.append((file_path, f"Unsupported file type. Allowed: {allowed}"))
                 continue
 
             # Only show preview for single file
@@ -2116,9 +2033,7 @@ class IndustrialDataApp(QMainWindow):
                 self.dashboard_page.clear_csv_preview()
 
             try:
-                stored = self.storage_manager.upload_file(
-                    file_path, pump_series, test_type
-                )
+                stored = self.storage_manager.upload_file(file_path, pump_series, test_type)
             except StorageError as exc:
                 failed_uploads.append((file_path, str(exc)))
                 continue
@@ -2169,9 +2084,7 @@ class IndustrialDataApp(QMainWindow):
             # Add note about parquet conversion for ASC files
             if Path(successful_uploads[0]).suffix.lower() == ".asc":
                 parquet_path = stored_path.with_suffix(".parquet")
-                message += (
-                    f"\n\n✓ ASC file converted to Parquet format:\n{parquet_path}"
-                )
+                message += f"\n\n✓ ASC file converted to Parquet format:\n{parquet_path}"
 
             self._alert(message, QMessageBox.Information)
         elif failed_uploads:
@@ -2215,26 +2128,18 @@ class IndustrialDataApp(QMainWindow):
                         if not line.strip():
                             continue
                         # Identify common delimiters
-                        if any(
-                            delimiter in line for delimiter in ("\t", ";", ",", "|")
-                        ):
+                        if any(delimiter in line for delimiter in ("\t", ";", ",", "|")):
                             candidate_lines.append(line)
 
                     sample_text = "\n".join(candidate_lines[:40]) or raw_text[:4096]
 
                     try:
-                        dialect = csv.Sniffer().sniff(
-                            sample_text, delimiters=[",", ";", "\t", "|"]
-                        )
+                        dialect = csv.Sniffer().sniff(sample_text, delimiters=[",", ";", "\t", "|"])
                     except csv.Error:
-                        dialect = (
-                            csv.excel_tab if file_extension == ".asc" else csv.excel
-                        )
+                        dialect = csv.excel_tab if file_extension == ".asc" else csv.excel
 
                     reader = csv.reader(
-                        io.StringIO(
-                            "\n".join(candidate_lines) if candidate_lines else raw_text
-                        ),
+                        io.StringIO("\n".join(candidate_lines) if candidate_lines else raw_text),
                         dialect,
                     )
                     rows = [row for row in reader if any(cell.strip() for cell in row)]
@@ -2299,9 +2204,7 @@ class IndustrialDataApp(QMainWindow):
 
                 # Check if any data cell in this column has content
                 col_has_data = any(
-                    row[col_idx].strip() != ""
-                    for row in data_rows
-                    if col_idx < len(row)
+                    row[col_idx].strip() != "" for row in data_rows if col_idx < len(row)
                 )
 
                 # Keep column if header or any data cell has content
