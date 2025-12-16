@@ -312,6 +312,10 @@ class QuickPlotterWindow(QMainWindow):
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.canvas.setMinimumHeight(500)
 
+        # Enable mouse interaction and focus for pan/zoom controls
+        self.canvas.setFocusPolicy(Qt.StrongFocus)
+        self.canvas.setMouseTracking(True)
+
         self.toolbar = NavigationToolbar(self.canvas, self)
         self.toolbar.setStyleSheet("background: #F9FAFB; border: none; padding: 4px;")
 
