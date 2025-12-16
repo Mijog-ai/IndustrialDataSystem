@@ -636,6 +636,17 @@ class ReaderDashboard(QWidget):
                 self._show_message(f"Unable to read parquet file: {exc}")
                 return
 
+            # Check if DataFrame is empty
+            if len(df) == 0:
+                self.table_preview.hide()
+                self.text_preview.hide()
+                self.image_preview.hide()
+                self._show_message(
+                    "This file contains column headers but no data rows. "
+                    "The file was successfully converted to Parquet format, but the original file had no data."
+                )
+                return
+
             # Show first 300 rows as a table
             self._show_table(df.head(300))
             self._show_message("Parquet Table Preview")
@@ -649,6 +660,16 @@ class ReaderDashboard(QWidget):
                 df = pd.read_csv(path)
             except Exception as exc:
                 self._show_message(f"Unable to read table file: {exc}")
+                return
+
+            # Check if DataFrame is empty
+            if len(df) == 0:
+                self.table_preview.hide()
+                self.text_preview.hide()
+                self.image_preview.hide()
+                self._show_message(
+                    "This file contains column headers but no data rows."
+                )
                 return
 
             self._show_table(df.head(300))
