@@ -28,6 +28,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -165,16 +166,31 @@ class QuickPlotterWindow(QMainWindow):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
 
-        # Main horizontal layout: Left controls + Right plot area
+        # Main horizontal splitter: Left controls + Right plot area
         main_layout = QHBoxLayout(self.central_widget)
         main_layout.setContentsMargins(16, 16, 16, 16)
-        main_layout.setSpacing(16)
+        main_layout.setSpacing(0)
+
+        # Create horizontal splitter for resizable panels
+        self.main_splitter = QSplitter(Qt.Horizontal)
+        self.main_splitter.setHandleWidth(8)
+        self.main_splitter.setStyleSheet(
+            """
+            QSplitter::handle {
+                background: #E5E7EB;
+            }
+            QSplitter::handle:hover {
+                background: #3B82F6;
+            }
+            """
+        )
 
         # ========== LEFT PANEL: Controls ==========
         left_panel = QWidget()
-        left_panel.setMaximumWidth(400)
+        left_panel.setMinimumWidth(250)
+        left_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setContentsMargins(0, 0, 8, 0)
         left_layout.setSpacing(12)
 
         # Header
@@ -192,10 +208,10 @@ class QuickPlotterWindow(QMainWindow):
         self.metadata_table.setHorizontalHeaderLabels(["Property", "Value"])
         self.metadata_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.metadata_table.verticalHeader().setVisible(False)
-        self.metadata_table.setMaximumHeight(150)
         self.metadata_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.metadata_table.setSelectionMode(QTableWidget.NoSelection)
         self.metadata_table.setFocusPolicy(Qt.NoFocus)
+        self.metadata_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         metadata_layout.addWidget(self.metadata_table)
 
         left_layout.addWidget(metadata_group)
@@ -212,7 +228,7 @@ class QuickPlotterWindow(QMainWindow):
         self.x_selector = QListWidget()
         self.x_selector.setSelectionMode(QAbstractItemView.SingleSelection)
         self.x_selector.itemSelectionChanged.connect(self._handle_selection_change)
-        self.x_selector.setMaximumHeight(120)
+        self.x_selector.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         selectors_layout.addWidget(self.x_selector)
 
         # Y Axes
@@ -223,7 +239,7 @@ class QuickPlotterWindow(QMainWindow):
         self.y_selector = QListWidget()
         self.y_selector.setSelectionMode(QAbstractItemView.MultiSelection)
         self.y_selector.itemSelectionChanged.connect(self._handle_selection_change)
-        self.y_selector.setMaximumHeight(150)
+        self.y_selector.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         selectors_layout.addWidget(self.y_selector)
 
         left_layout.addWidget(selectors_group)
@@ -316,6 +332,9 @@ class QuickPlotterWindow(QMainWindow):
         self.canvas.setFocusPolicy(Qt.StrongFocus)
         self.canvas.setMouseTracking(True)
 
+        # Connect scroll event for Ctrl+scroll zooming
+        self.canvas.mpl_connect("scroll_event", self._on_scroll)
+
         self.toolbar = NavigationToolbar(self.canvas, self)
         self.toolbar.setStyleSheet("background: #F9FAFB; border: none; padding: 4px;")
 
@@ -324,14 +343,20 @@ class QuickPlotterWindow(QMainWindow):
 
         # Statistics area (below plot)
         self.stats_area = StatisticsArea(self)
-        self.stats_area.setMaximumHeight(250)
+        self.stats_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         plot_stats_layout.addWidget(self.stats_area, stretch=1)
 
         right_layout.addWidget(plot_stats_splitter)
 
-        # Add panels to main layout
-        main_layout.addWidget(left_panel, stretch=1)
-        main_layout.addWidget(right_panel, stretch=3)
+        # Add panels to splitter
+        self.main_splitter.addWidget(left_panel)
+        self.main_splitter.addWidget(right_panel)
+
+        # Set initial splitter sizes (25% left, 75% right)
+        self.main_splitter.setSizes([350, 1050])
+
+        # Add splitter to main layout
+        main_layout.addWidget(self.main_splitter)
 
         # Apply styles
         self.setStyleSheet(
@@ -686,6 +711,48 @@ class QuickPlotterWindow(QMainWindow):
             ax = axes[0]
             ax.autoscale()
             self.canvas.draw_idle()
+
+    def _on_scroll(self, event) -> None:
+        """Handle scroll events for zooming with Ctrl+scroll."""
+        if event.key != "control":
+            return
+
+        if event.inaxes is None:
+            return
+
+        # Get the current axis limits
+        ax = event.inaxes
+        xdata = event.xdata
+        ydata = event.ydata
+
+        if xdata is None or ydata is None:
+            return
+
+        # Zoom factor: scroll up (event.step > 0) zooms in, scroll down zooms out
+        zoom_factor = 1.2 if event.button == "up" else 0.8
+
+        # Get current limits
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+
+        # Calculate new limits centered on cursor position
+        new_width = (xlim[1] - xlim[0]) * zoom_factor
+        new_height = (ylim[1] - ylim[0]) * zoom_factor
+
+        relx = (xlim[1] - xdata) / (xlim[1] - xlim[0])
+        rely = (ylim[1] - ydata) / (ylim[1] - ylim[0])
+
+        ax.set_xlim([xdata - new_width * (1 - relx), xdata + new_width * relx])
+        ax.set_ylim([ydata - new_height * (1 - rely), ydata + new_height * rely])
+
+        # Update all twin axes to maintain synchronization
+        for other_ax in self.figure.get_axes():
+            if other_ax != ax and hasattr(other_ax, "get_shared_x_axes"):
+                shared_x = other_ax.get_shared_x_axes()
+                if shared_x.joined(ax, other_ax):
+                    other_ax.set_xlim(ax.get_xlim())
+
+        self.canvas.draw_idle()
 
     def _export_plot(self) -> None:
         """Export current plot to image file."""
