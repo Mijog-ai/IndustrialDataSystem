@@ -74,6 +74,7 @@ class LocalResource:
     absolute_path: Path
     relative_path: Path
     test_type: str
+    pump_series: str
     file_size: Optional[int]
     created_at: Optional[str]
 
@@ -333,8 +334,9 @@ class ReaderDashboard(QWidget):
         splitter.setOrientation(Qt.Horizontal)
 
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Name", "Type", "Folder"])
+        self.tree.setHeaderLabels(["Name", "Type", "Pump Series", "Folder"])
         self.tree.setColumnWidth(0, 280)
+        self.tree.setColumnWidth(2, 150)
         splitter.addWidget(self.tree)
 
         preview_container = QWidget()
@@ -485,7 +487,7 @@ class ReaderDashboard(QWidget):
                 path_key = "/".join(path_so_far)
                 if path_key not in folders:
                     folder_item = QTreeWidgetItem(
-                        [folder_name, "Folder", "/".join(path_so_far[:-1])]
+                        [folder_name, "Folder", "", "/".join(path_so_far[:-1])]
                     )
                     folder_item.setData(0, Qt.UserRole, {"type": "folder"})
                     parent.addChild(folder_item)
@@ -496,6 +498,7 @@ class ReaderDashboard(QWidget):
                 [
                     resource.display_name,
                     resource.absolute_path.suffix.replace(".", "").upper() or "File",
+                    resource.pump_series,
                     resource.folder,
                 ]
             )
@@ -714,11 +717,12 @@ def _collect_resources(
                 absolute_path=absolute_path,
                 relative_path=relative_path,
                 test_type=record.test_type,
+                pump_series=record.pump_series or "General",
                 file_size=record.file_size,
                 created_at=record.created_at,
             )
         )
-    resources.sort(key=lambda res: (res.test_type.lower(), res.relative_path.parts))
+    resources.sort(key=lambda res: (res.pump_series.lower(), res.test_type.lower(), res.relative_path.parts))
     return resources
 
 
