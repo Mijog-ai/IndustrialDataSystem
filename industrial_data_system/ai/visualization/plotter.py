@@ -315,18 +315,32 @@ class QuickPlotterWindow(QMainWindow):
         self.status_label.setAlignment(Qt.AlignCenter)
         right_layout.addWidget(self.status_label)
 
-        # Plot area with statistics (vertical split)
-        plot_stats_splitter = QWidget()
-        plot_stats_layout = QVBoxLayout(plot_stats_splitter)
-        plot_stats_layout.setContentsMargins(0, 0, 0, 0)
-        plot_stats_layout.setSpacing(12)
+        # Plot area with statistics (vertical splitter for flexibility)
+        plot_stats_splitter = QSplitter(Qt.Vertical)
+        plot_stats_splitter.setHandleWidth(8)
+        plot_stats_splitter.setStyleSheet(
+            """
+            QSplitter::handle {
+                background: #E5E7EB;
+            }
+            QSplitter::handle:hover {
+                background: #3B82F6;
+            }
+            """
+        )
+
+        # Top section: Plot area
+        plot_container = QWidget()
+        plot_layout = QVBoxLayout(plot_container)
+        plot_layout.setContentsMargins(0, 0, 0, 0)
+        plot_layout.setSpacing(4)
 
         # Matplotlib figure (taller aspect ratio)
         self.figure = Figure(figsize=(10, 8), dpi=100)
         self.figure.patch.set_facecolor("#FFFFFF")
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.canvas.setMinimumHeight(500)
+        self.canvas.setMinimumHeight(400)
 
         # Enable mouse interaction and focus for pan/zoom controls
         self.canvas.setFocusPolicy(Qt.StrongFocus)
@@ -338,13 +352,28 @@ class QuickPlotterWindow(QMainWindow):
         self.toolbar = NavigationToolbar(self.canvas, self)
         self.toolbar.setStyleSheet("background: #F9FAFB; border: none; padding: 4px;")
 
-        plot_stats_layout.addWidget(self.toolbar)
-        plot_stats_layout.addWidget(self.canvas, stretch=3)
+        plot_layout.addWidget(self.toolbar)
+        plot_layout.addWidget(self.canvas)
 
-        # Statistics area (below plot)
+        # Bottom section: Statistics area
+        stats_container = QWidget()
+        stats_layout = QVBoxLayout(stats_container)
+        stats_layout.setContentsMargins(0, 0, 0, 0)
+        stats_layout.setSpacing(0)
+
         self.stats_area = StatisticsArea(self)
-        self.stats_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        plot_stats_layout.addWidget(self.stats_area, stretch=1)
+        self.stats_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.stats_area.setMinimumHeight(150)
+        stats_layout.addWidget(self.stats_area)
+
+        # Add to splitter
+        plot_stats_splitter.addWidget(plot_container)
+        plot_stats_splitter.addWidget(stats_container)
+
+        # Set initial sizes (70% plot, 30% statistics)
+        plot_stats_splitter.setSizes([600, 300])
+        plot_stats_splitter.setStretchFactor(0, 3)
+        plot_stats_splitter.setStretchFactor(1, 1)
 
         right_layout.addWidget(plot_stats_splitter)
 
@@ -568,7 +597,7 @@ class QuickPlotterWindow(QMainWindow):
             QMessageBox.warning(self, "Plotter", str(exc))
 
     def _plot_data(self, x_column: str, y_columns: List[str]) -> None:
-        """Plot data on the figure with improved spacing."""
+        """Plot data on the figure with dynamic margins for multiple y-axes."""
         if self._dataframe is None:
             raise ValueError("No data is loaded for plotting.")
 
@@ -584,24 +613,63 @@ class QuickPlotterWindow(QMainWindow):
 
         self.figure.clear()
 
-        # Create subplot with more bottom margin for xlabel
+        # Calculate number of axes needed
+        n_axes = len(y_columns)
+
+        # Calculate how many axes on each side (first axis is left, then alternate right/left)
+        # Index 0: left (primary)
+        # Index 1: right
+        # Index 2: left
+        # Index 3: right, etc.
+        n_left_axes = (n_axes + 1) // 2  # Axes at indices 0, 2, 4, ...
+        n_right_axes = n_axes // 2  # Axes at indices 1, 3, 5, ...
+
+        # Calculate dynamic margins (each additional axis needs ~0.1 width)
+        left_margin = 0.08 + (n_left_axes - 1) * 0.12
+        right_margin = 0.92 - (n_right_axes) * 0.12
+
+        # Ensure margins don't overlap
+        if left_margin >= right_margin:
+            raise ValueError(
+                f"Too many y-axes ({n_axes}) to display properly. "
+                "Consider plotting fewer columns at once."
+            )
+
+        # Create subplot
         ax = self.figure.add_subplot(111)
         ax.set_facecolor("#FFFFFF")
 
-        # Generate a color map with distinct colors
-        n_colors = len(y_columns)
-        color_map = plt.cm.get_cmap("jet")(np.linspace(0, 1, n_colors))
+        # Professional color palette (more distinct and pleasant than jet)
+        professional_colors = [
+            "#1f77b4",  # Blue
+            "#ff7f0e",  # Orange
+            "#2ca02c",  # Green
+            "#d62728",  # Red
+            "#9467bd",  # Purple
+            "#8c564b",  # Brown
+            "#e377c2",  # Pink
+            "#7f7f7f",  # Gray
+            "#bcbd22",  # Olive
+            "#17becf",  # Cyan
+        ]
+
+        # If we have more columns than colors, cycle through
+        color_map = []
+        for i in range(n_axes):
+            color_map.append(professional_colors[i % len(professional_colors)])
 
         axes = [ax]
         plotted_any = False
         all_lines = []
+        left_spine_offset = 0
+        right_spine_offset = 0
 
         # Determine if we should show markers
         show_markers = self.show_markers.isChecked()
         marker = "o" if show_markers else None
         markersize = 3 if show_markers else None
 
-        for i, (column, base_color) in enumerate(zip(y_columns, color_map)):
+        for i, (column, color) in enumerate(zip(y_columns, color_map)):
             series = pd.to_numeric(df[column], errors="coerce")
             if series.isna().all():
                 continue
@@ -610,68 +678,120 @@ class QuickPlotterWindow(QMainWindow):
                 continue
 
             # Create new axis for each y-column after the first
-            if i > 0:
+            if i == 0:
+                # First axis is the primary left axis
+                new_ax = ax
+                new_ax.spines["left"].set_color(color)
+                new_ax.spines["left"].set_linewidth(2)
+            elif i % 2 == 1:
+                # Odd indices (1, 3, 5, ...) go to the right side
                 new_ax = ax.twinx()
+                # Hide left spine, show right spine
+                new_ax.spines["left"].set_visible(False)
                 new_ax.spines["right"].set_visible(True)
-                if i % 2 == 0:  # Even indices go to the left side
-                    new_ax.spines["right"].set_visible(False)
-                    new_ax.spines["left"].set_position(("axes", -0.12 * (i // 2)))
-                    new_ax.yaxis.set_label_position("left")
-                    new_ax.yaxis.set_ticks_position("left")
-                else:  # Odd indices go to the right side
-                    new_ax.spines["left"].set_visible(False)
-                    new_ax.spines["right"].set_position(("axes", 1 + 0.12 * ((i - 1) // 2)))
-                    new_ax.yaxis.set_label_position("right")
-                    new_ax.yaxis.set_ticks_position("right")
+                new_ax.spines["right"].set_color(color)
+                new_ax.spines["right"].set_linewidth(2)
+
+                # Position the spine
+                new_ax.spines["right"].set_position(("axes", 1.0 + right_spine_offset))
+                new_ax.yaxis.set_label_position("right")
+                new_ax.yaxis.set_ticks_position("right")
+
+                right_spine_offset += 0.15
                 axes.append(new_ax)
             else:
-                new_ax = ax
+                # Even indices (2, 4, 6, ...) go to the left side
+                new_ax = ax.twinx()
+                # Hide right spine, show left spine
+                new_ax.spines["right"].set_visible(False)
+                new_ax.spines["left"].set_visible(True)
+                new_ax.spines["left"].set_color(color)
+                new_ax.spines["left"].set_linewidth(2)
+
+                # Position the spine
+                left_spine_offset += 0.15
+                new_ax.spines["left"].set_position(("axes", -left_spine_offset))
+                new_ax.yaxis.set_label_position("left")
+                new_ax.yaxis.set_ticks_position("left")
+
+                axes.append(new_ax)
 
             # Plot with colored line
             (line,) = new_ax.plot(
                 x_data[valid],
                 series[valid],
-                color=base_color,
+                color=color,
                 label=column,
                 marker=marker,
                 markersize=markersize,
-                linewidth=2,
+                linewidth=2.5,
+                alpha=0.9,
             )
             all_lines.append(line)
 
             # Style the y-axis with matching color
-            new_ax.set_ylabel(column, color=base_color, fontsize=11, fontweight="bold")
-            new_ax.tick_params(axis="y", colors=base_color, labelsize=10)
+            new_ax.set_ylabel(
+                column,
+                color=color,
+                fontsize=11,
+                fontweight="bold",
+                labelpad=10
+            )
+            new_ax.tick_params(
+                axis="y",
+                colors=color,
+                labelsize=9,
+                width=2,
+                length=6
+            )
 
             plotted_any = True
 
         if not plotted_any:
             raise ValueError("None of the selected y-axis columns contain numeric data.")
 
-        # Style X-axis with more padding
+        # Style X-axis
         ax.set_xlabel(x_column, fontsize=12, fontweight="bold", labelpad=15)
-        ax.tick_params(axis="x", labelsize=10)
+        ax.tick_params(axis="x", labelsize=10, width=1.5, length=6)
+        ax.spines["bottom"].set_linewidth(1.5)
+        ax.spines["top"].set_visible(False)
 
         # Grid toggle
         if self.grid_toggle.isChecked():
-            ax.grid(color="#E2E8F0", alpha=0.5, linestyle="--", linewidth=0.5)
+            ax.grid(
+                True,
+                color="#E2E8F0",
+                alpha=0.4,
+                linestyle="--",
+                linewidth=0.8,
+                zorder=0
+            )
+            ax.set_axisbelow(True)
 
-        # Create legend with better positioning (more space from xlabel)
+        # Create legend with better positioning
         labels = [line.get_label() for line in all_lines]
+        legend_ncol = min(len(labels), 4)
         ax.legend(
             all_lines,
             labels,
             loc="upper center",
-            bbox_to_anchor=(0.5, -0.15),  # More space from bottom
-            ncol=min(len(labels), 3),
+            bbox_to_anchor=(0.5, -0.12),
+            ncol=legend_ncol,
             frameon=True,
             fancybox=True,
             shadow=True,
-            fontsize=10,
+            fontsize=9,
+            edgecolor="#E5E7EB",
+            framealpha=0.95,
         )
 
-        # Adjust layout with more bottom space
-        self.figure.subplots_adjust(left=0.1, right=0.9, top=0.95, bottom=0.15)
+        # Adjust layout with dynamic margins
+        self.figure.subplots_adjust(
+            left=left_margin,
+            right=right_margin,
+            top=0.96,
+            bottom=0.12
+        )
 
         self.canvas.draw_idle()
 
