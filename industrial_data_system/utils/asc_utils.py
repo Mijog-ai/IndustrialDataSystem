@@ -37,20 +37,76 @@ def load_and_process_asc_file(file_name):
 
         lines = content.split("\n")
 
-        # Find the start of the data
-        data_start = 0
+        # Find the header line and data start
+        # DASYLab files have metadata lines, then a header with column names, then data rows
+        header_line_idx = None
+        data_start = None
+
         for i, line in enumerate(lines):
-            # Check if the line contains tab-separated values and starts with a number-like string
-            if "\t" in line and re.match(r"^[\d,.]+\t", line.strip()):
+            if not line.strip() or not "\t" in line:
+                continue
+
+            # Check if this looks like a data row (starts with a number)
+            if re.match(r"^[\d,.]+\t", line.strip()):
                 data_start = i
+                # Header should be the previous non-empty line
+                for j in range(i - 1, -1, -1):
+                    if lines[j].strip() and "\t" in lines[j]:
+                        header_line_idx = j
+                        break
                 break
 
-        if data_start == 0:
-            raise ValueError("Could not find the start of data in the file.")
+            # Check if this looks like a header line (contains units in brackets like [bar], [rpm], etc.)
+            # or ends with tab-separated text that doesn't start with a number
+            if "[" in line and "]" in line:
+                # Likely a header with units
+                header_line_idx = i
+                # Data would start on the next non-empty line
+                for j in range(i + 1, len(lines)):
+                    if lines[j].strip():
+                        if re.match(r"^[\d,.]+\t", lines[j].strip()):
+                            data_start = j
+                        break
+                # Even if no data found, we have a header
+                break
+
+        # If we didn't find a header with units, look for any tab-separated line that could be a header
+        if header_line_idx is None:
+            for i, line in enumerate(lines):
+                if "\t" in line and line.strip():
+                    # This could be a header - check if next line is data or nothing
+                    parts = line.split("\t")
+                    # If line has multiple parts and doesn't start with a pure number, treat as header
+                    if len(parts) > 1 and not re.match(r"^[\d,.]+$", parts[0].strip()):
+                        header_line_idx = i
+                        # Look for data after this
+                        for j in range(i + 1, len(lines)):
+                            if lines[j].strip() and "\t" in lines[j]:
+                                if re.match(r"^[\d,.]+\t", lines[j].strip()):
+                                    data_start = j
+                                    break
+                        break
+
+        if header_line_idx is None:
+            raise ValueError("Could not find header line in the file.")
 
         # Extract header and data
-        header = lines[data_start - 1].split("\t")
-        data = [line.split("\t") for line in lines[data_start:] if line.strip()]
+        header = lines[header_line_idx].split("\t")
+
+        # Remove trailing empty strings from header (caused by trailing tabs)
+        while header and header[-1].strip() == "":
+            header.pop()
+
+        if not header:
+            raise ValueError("Header line contains no valid column names.")
+
+        # Extract data rows if they exist
+        if data_start is not None:
+            data = [line.split("\t") for line in lines[data_start:] if line.strip()]
+        else:
+            # No data rows - create empty data with correct number of columns
+            data = []
+            logger.info("No data rows found in file - creating empty DataFrame with header columns")
 
         # Ensure all data rows have the same number of columns as the header
         max_columns = len(header)
@@ -81,10 +137,13 @@ def load_and_process_asc_file(file_name):
         # Empty columns without data cause dimension mismatches between files
         columns_to_keep = []
         for col in df.columns:
-            # Keep column if it has a non-empty name and has at least some non-NaN data
+            # Keep column if it has a non-empty name
             has_name = col.strip() != ""
+            # For DataFrames with data, also check if column has data
+            # For empty DataFrames (no rows), keep all columns with valid names
             has_data = not df[col].isna().all()
-            if has_name and has_data:
+
+            if has_name and (has_data or len(df) == 0):
                 columns_to_keep.append(col)
 
         if len(columns_to_keep) < len(df.columns):
@@ -93,11 +152,23 @@ def load_and_process_asc_file(file_name):
 
         df = df[columns_to_keep]
 
+        # Ensure we have at least some columns
+        if len(df.columns) == 0:
+            raise ValueError(
+                "No valid columns found in file. All columns were either empty or had invalid names."
+            )
+
         # CRITICAL: Fill remaining NaN values with 0 to maintain consistent structure
         df = df.fillna(0.0)
 
         logging.info(f"Successfully loaded ASC file. Shape: {df.shape}")
         logging.info(f"Columns: {df.columns.tolist()}")
+
+        if len(df) == 0:
+            logging.warning(
+                "ASC file contains only headers with no data rows. "
+                "Created empty DataFrame with column structure."
+            )
 
         return df
 
