@@ -457,6 +457,10 @@ class AnomalyDetectorWindow(QMainWindow):
             if numeric_df.empty:
                 raise ValueError("No numeric columns found in data")
 
+            # CRITICAL: Remove empty columns (all NaN) to match training behavior
+            # This prevents dimension mismatches when files have empty columns
+            numeric_df = numeric_df.dropna(axis=1, how="all")
+
             # Handle missing values
             numeric_df = numeric_df.fillna(0.0)
             numeric_df = numeric_df.replace([np.inf, -np.inf], 0.0)

@@ -76,7 +76,24 @@ def load_and_process_asc_file(file_name):
             df[col] = df[col].apply(lambda x: x.replace(",", ".") if isinstance(x, str) else x)
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        # CRITICAL: Fill NaN values with 0 to maintain consistent structure
+        # CRITICAL: Remove empty columns (all NaN or empty header names) BEFORE filling
+        # This matches the behavior in model training which uses .dropna(axis=1, how="all")
+        # Empty columns without data cause dimension mismatches between files
+        columns_to_keep = []
+        for col in df.columns:
+            # Keep column if it has a non-empty name and has at least some non-NaN data
+            has_name = col.strip() != ""
+            has_data = not df[col].isna().all()
+            if has_name and has_data:
+                columns_to_keep.append(col)
+
+        if len(columns_to_keep) < len(df.columns):
+            removed_count = len(df.columns) - len(columns_to_keep)
+            logger.info(f"Removed {removed_count} empty column(s) from the data")
+
+        df = df[columns_to_keep]
+
+        # CRITICAL: Fill remaining NaN values with 0 to maintain consistent structure
         df = df.fillna(0.0)
 
         logging.info(f"Successfully loaded ASC file. Shape: {df.shape}")
@@ -97,7 +114,22 @@ def load_and_process_asc_file(file_name):
 def load_and_process_csv_file(file_name):
     """Load CSV file with consistent handling."""
     df = pd.read_csv(file_name)
-    # Fill NaN to maintain consistency
+
+    # Remove empty columns (all NaN or empty names) to match training behavior
+    columns_to_keep = []
+    for col in df.columns:
+        has_name = str(col).strip() != "" and str(col) != "nan"
+        has_data = not df[col].isna().all()
+        if has_name and has_data:
+            columns_to_keep.append(col)
+
+    if len(columns_to_keep) < len(df.columns):
+        removed_count = len(df.columns) - len(columns_to_keep)
+        logger.info(f"Removed {removed_count} empty column(s) from CSV file")
+
+    df = df[columns_to_keep]
+
+    # Fill remaining NaN to maintain consistency
     df = df.fillna(0.0)
     return df
 
@@ -132,6 +164,21 @@ def load_and_process_tdms_file(file_name):
 
         # Create DataFrame
         df = pd.DataFrame(data_dict)
+
+        # Remove empty columns (all NaN) to match training behavior
+        columns_to_keep = []
+        for col in df.columns:
+            has_name = str(col).strip() != ""
+            has_data = not df[col].isna().all()
+            if has_name and has_data:
+                columns_to_keep.append(col)
+
+        if len(columns_to_keep) < len(df.columns):
+            removed_count = len(df.columns) - len(columns_to_keep)
+            logger.info(f"Removed {removed_count} empty column(s) from TDMS file")
+
+        df = df[columns_to_keep]
+
         df = df.fillna(0.0)
         return df
 
