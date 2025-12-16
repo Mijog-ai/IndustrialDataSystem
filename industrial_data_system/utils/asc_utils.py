@@ -1,13 +1,12 @@
 """Fixed ASC file processing and conversion to maintain consistent column structure."""
 
-import logging
-import re
+import pandas as pd
+import numpy as np
 from pathlib import Path
 from typing import Optional
-
+import logging
+import re
 import chardet
-import numpy as np
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -21,129 +20,36 @@ def load_and_process_asc_file(file_name):
     content = ""
     try:
         # Detect file encoding
-        with open(file_name, "rb") as file:
+        with open(file_name, 'rb') as file:
             raw_data = file.read()
         result = chardet.detect(raw_data)
-        file_encoding = result["encoding"]
+        file_encoding = result['encoding']
 
         # Try to read the file with the detected encoding
         try:
-            with open(file_name, "r", encoding=file_encoding) as file:
+            with open(file_name, 'r', encoding=file_encoding) as file:
                 content = file.read()
         except UnicodeDecodeError:
             # If that fails, try with 'latin-1' encoding
-            with open(file_name, "r", encoding="latin-1") as file:
+            with open(file_name, 'r', encoding='latin-1') as file:
                 content = file.read()
 
-        lines = content.split("\n")
+        lines = content.split('\n')
 
-        # Find the header line and data start
-        # DASYLab files have metadata lines, then a header with column names, then data rows
-        header_line_idx = None
-        data_start = None
-
+        # Find the start of the data
+        data_start = 0
         for i, line in enumerate(lines):
-            if not line.strip():
-                continue
-
-            if "\t" not in line:
-                continue
-
-            parts = line.split("\t")
-            if len(parts) < 2:
-                continue
-
-            # Try to detect if this is a data row by checking if first element is numeric
-            first_elem = parts[0].strip().replace(',', '.')
-            is_numeric = False
-            try:
-                float(first_elem)
-                is_numeric = True
-            except ValueError:
-                pass
-
-            if is_numeric:
-                # This is a data row
+            # Check if the line contains tab-separated values and starts with a number-like string
+            if '\t' in line and re.match(r'^[\d,.]+\t', line.strip()):
                 data_start = i
-                # Header should be the previous non-empty tabbed line
-                for j in range(i - 1, -1, -1):
-                    if lines[j].strip() and "\t" in lines[j]:
-                        header_line_idx = j
-                        break
                 break
 
-            # Check if this looks like a header line (contains units in brackets)
-            if "[" in line and "]" in line and header_line_idx is None:
-                header_line_idx = i
-                # Look for data after this
-                for j in range(i + 1, len(lines)):
-                    if not lines[j].strip():
-                        continue
-                    if "\t" not in lines[j]:
-                        continue
-                    test_parts = lines[j].split("\t")
-                    if len(test_parts) > 0:
-                        test_elem = test_parts[0].strip().replace(',', '.')
-                        try:
-                            float(test_elem)
-                            data_start = j
-                            break
-                        except ValueError:
-                            continue
-
-        # If still no header found, look for any tab-separated line that could be a header
-        if header_line_idx is None:
-            for i, line in enumerate(lines):
-                if not line.strip() or "\t" not in line:
-                    continue
-
-                parts = line.split("\t")
-                if len(parts) < 2:
-                    continue
-
-                # Check if first element is NOT numeric (so it's likely a header)
-                first_elem = parts[0].strip().replace(',', '.')
-                try:
-                    float(first_elem)
-                    continue  # Skip numeric lines
-                except ValueError:
-                    # Not numeric - treat as header
-                    header_line_idx = i
-                    # Look for data after this
-                    for j in range(i + 1, len(lines)):
-                        if not lines[j].strip() or "\t" not in lines[j]:
-                            continue
-                        test_parts = lines[j].split("\t")
-                        if len(test_parts) > 0:
-                            test_elem = test_parts[0].strip().replace(',', '.')
-                            try:
-                                float(test_elem)
-                                data_start = j
-                                break
-                            except ValueError:
-                                continue
-                    break
-
-        if header_line_idx is None:
-            raise ValueError("Could not find header line in the file.")
+        if data_start == 0:
+            raise ValueError("Could not find the start of data in the file.")
 
         # Extract header and data
-        header = lines[header_line_idx].split("\t")
-
-        # Remove trailing empty strings from header (caused by trailing tabs)
-        while header and header[-1].strip() == "":
-            header.pop()
-
-        if not header:
-            raise ValueError("Header line contains no valid column names.")
-
-        # Extract data rows if they exist
-        if data_start is not None:
-            data = [line.split("\t") for line in lines[data_start:] if line.strip()]
-        else:
-            # No data rows - create empty data with correct number of columns
-            data = []
-            logger.info("No data rows found in file - creating empty DataFrame with header columns")
+        header = lines[data_start - 1].split('\t')
+        data = [line.split('\t') for line in lines[data_start:] if line.strip()]
 
         # Ensure all data rows have the same number of columns as the header
         max_columns = len(header)
@@ -166,54 +72,21 @@ def load_and_process_asc_file(file_name):
 
         # Convert columns to appropriate types
         for col in df.columns:
-            df[col] = df[col].apply(lambda x: x.replace(",", ".") if isinstance(x, str) else x)
-            df[col] = pd.to_numeric(df[col], errors="coerce")
+            df[col] = df[col].apply(lambda x: x.replace(',', '.') if isinstance(x, str) else x)
+            df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # CRITICAL: Remove empty columns (all NaN or empty header names) BEFORE filling
-        # This matches the behavior in model training which uses .dropna(axis=1, how="all")
-        # Empty columns without data cause dimension mismatches between files
-        columns_to_keep = []
-        for col in df.columns:
-            # Keep column if it has a non-empty name
-            has_name = col.strip() != ""
-            # For DataFrames with data, also check if column has data
-            # For empty DataFrames (no rows), keep all columns with valid names
-            has_data = not df[col].isna().all()
-
-            if has_name and (has_data or len(df) == 0):
-                columns_to_keep.append(col)
-
-        if len(columns_to_keep) < len(df.columns):
-            removed_count = len(df.columns) - len(columns_to_keep)
-            logger.info(f"Removed {removed_count} empty column(s) from the data")
-
-        df = df[columns_to_keep]
-
-        # Ensure we have at least some columns
-        if len(df.columns) == 0:
-            raise ValueError(
-                "No valid columns found in file. All columns were either empty or had invalid names."
-            )
-
-        # CRITICAL: Fill remaining NaN values with 0 to maintain consistent structure
+        # CRITICAL: Fill NaN values with 0 to maintain consistent structure
         df = df.fillna(0.0)
 
         logging.info(f"Successfully loaded ASC file. Shape: {df.shape}")
         logging.info(f"Columns: {df.columns.tolist()}")
-
-        if len(df) == 0:
-            logging.warning(
-                "ASC file contains only headers with no data rows. "
-                "Created empty DataFrame with column structure."
-            )
 
         return df
 
     except Exception as e:
         logging.error(f"Error loading ASC file: {str(e)}")
         if content:
-            lines_list = content.split("\n")[:10]
-            logging.error(f"File content (first 10 lines): {lines_list}")
+            logging.error(f"File content (first 10 lines): {content.split('\\n')[:10]}")
         else:
             logging.error("Unable to read file content")
         raise
@@ -222,22 +95,7 @@ def load_and_process_asc_file(file_name):
 def load_and_process_csv_file(file_name):
     """Load CSV file with consistent handling."""
     df = pd.read_csv(file_name)
-
-    # Remove empty columns (all NaN or empty names) to match training behavior
-    columns_to_keep = []
-    for col in df.columns:
-        has_name = str(col).strip() != "" and str(col) != "nan"
-        has_data = not df[col].isna().all()
-        if has_name and has_data:
-            columns_to_keep.append(col)
-
-    if len(columns_to_keep) < len(df.columns):
-        removed_count = len(df.columns) - len(columns_to_keep)
-        logger.info(f"Removed {removed_count} empty column(s) from CSV file")
-
-    df = df[columns_to_keep]
-
-    # Fill remaining NaN to maintain consistency
+    # Fill NaN to maintain consistency
     df = df.fillna(0.0)
     return df
 
@@ -267,32 +125,22 @@ def load_and_process_tdms_file(file_name):
             if len(data_dict[key]) < max_length:
                 pad_length = max_length - len(data_dict[key])
                 data_dict[key] = np.pad(
-                    data_dict[key], (0, pad_length), "constant", constant_values=np.nan
+                    data_dict[key],
+                    (0, pad_length),
+                    'constant',
+                    constant_values=np.nan
                 )
 
         # Create DataFrame
         df = pd.DataFrame(data_dict)
-
-        # Remove empty columns (all NaN) to match training behavior
-        columns_to_keep = []
-        for col in df.columns:
-            has_name = str(col).strip() != ""
-            has_data = not df[col].isna().all()
-            if has_name and has_data:
-                columns_to_keep.append(col)
-
-        if len(columns_to_keep) < len(df.columns):
-            removed_count = len(df.columns) - len(columns_to_keep)
-            logger.info(f"Removed {removed_count} empty column(s) from TDMS file")
-
-        df = df[columns_to_keep]
-
         df = df.fillna(0.0)
         return df
 
 
 def convert_asc_to_parquet(
-    asc_path: Path, parquet_path: Optional[Path] = None, preserve_asc: bool = True
+    asc_path: Path,
+    parquet_path: Optional[Path] = None,
+    preserve_asc: bool = True
 ) -> Path:
     """Convert an ASC file to Parquet format with consistent column structure.
 
@@ -307,26 +155,61 @@ def convert_asc_to_parquet(
     Note:
         This function ensures that the Parquet file has the EXACT same columns
         as the ASC file to prevent dimension mismatches in model training.
+        Columns with all 0.0 values or without proper names are removed.
     """
-    # Defensive type checking
-    if not isinstance(asc_path, Path):
-        asc_path = Path(asc_path)
-
-    if not asc_path.exists():
-        raise FileNotFoundError(f"ASC file not found: {asc_path}")
-
     if parquet_path is None:
-        parquet_path = asc_path.with_suffix(".parquet")
-    elif not isinstance(parquet_path, Path):
-        parquet_path = Path(parquet_path)
+        parquet_path = asc_path.with_suffix('.parquet')
 
     # Load ASC file with careful column handling
     df = load_and_process_asc_file(str(asc_path))
 
-    # Log column information for debugging
+    # Log initial information
     logger.info(f"Converting {asc_path.name} to Parquet")
-    logger.info(f"DataFrame shape: {df.shape}")
-    logger.info(f"Columns ({len(df.columns)}): {df.columns.tolist()}")
+    logger.info(f"Initial DataFrame shape: {df.shape}")
+    logger.info(f"Initial columns ({len(df.columns)}): {df.columns.tolist()}")
+
+    # Store original column count for comparison
+    original_columns = df.columns.tolist()
+    columns_to_remove = []
+
+    # 1. Identify columns with no name or invalid names
+    for col in df.columns:
+        col_str = str(col).strip()
+        # Remove columns that are:
+        # - Empty strings
+        # - Just whitespace
+        # - Named like 'Unnamed: X' (pandas default for missing headers)
+        # - NaN or None
+        if (not col_str or
+            col_str == '' or
+            col_str.startswith('Unnamed:') or
+            col_str.lower() == 'nan' or
+            pd.isna(col)):
+            columns_to_remove.append(col)
+            logger.info(f"Removing column with invalid name: '{col}'")
+
+    # 2. Identify columns where ALL values are 0.0
+    for col in df.columns:
+        if col not in columns_to_remove:  # Don't check already marked columns
+            # Check if all non-NaN values are 0.0
+            if (df[col].notna()).any():  # If there are any non-NaN values
+                if (df[col].fillna(0) == 0.0).all():
+                    columns_to_remove.append(col)
+                    logger.info(f"Removing all-zero column: '{col}'")
+
+    # 3. Remove identified columns
+    if columns_to_remove:
+        df = df.drop(columns=columns_to_remove)
+        logger.info(f"Removed {len(columns_to_remove)} invalid columns")
+        logger.info(f"Remaining columns ({len(df.columns)}): {df.columns.tolist()}")
+    else:
+        logger.info("No invalid columns found")
+
+    # Check if dataframe is empty after filtering
+    if df.empty or len(df.columns) == 0:
+        logger.warning(f"After filtering, {asc_path.name} has no valid columns!")
+        logger.warning("Skipping Parquet conversion for empty dataset")
+        return None
 
     # CRITICAL: Verify no duplicate columns before saving
     if df.columns.duplicated().any():
@@ -336,7 +219,12 @@ def convert_asc_to_parquet(
         raise ValueError(f"Duplicate columns detected: {duplicates}")
 
     # Convert to Parquet with compression
-    df.to_parquet(parquet_path, engine="pyarrow", compression="snappy", index=False)
+    df.to_parquet(
+        parquet_path,
+        engine='pyarrow',
+        compression='snappy',
+        index=False
+    )
 
     # Verify the conversion
     verify_df = pd.read_parquet(parquet_path)
@@ -358,9 +246,11 @@ def convert_asc_to_parquet(
             logger.warning(f"Could not delete ASC file: {e}")
 
     logger.info(f"✓ Successfully converted {asc_path.name} to {parquet_path.name}")
-    logger.info(f"✓ Column count preserved: {df.shape[1]} columns")
+    logger.info(f"✓ Final shape: {df.shape}")
+    logger.info(f"✓ Column count: {len(original_columns)} → {df.shape[1]} (removed {len(columns_to_remove)})")
 
     return parquet_path
+
 
 
 def verify_file_compatibility(file1_path: Path, file2_path: Path) -> bool:
@@ -378,20 +268,20 @@ def verify_file_compatibility(file1_path: Path, file2_path: Path) -> bool:
         ext1 = file1_path.suffix.lower()
         ext2 = file2_path.suffix.lower()
 
-        if ext1 == ".parquet":
+        if ext1 == '.parquet':
             df1 = pd.read_parquet(file1_path)
-        elif ext1 == ".csv":
+        elif ext1 == '.csv':
             df1 = load_and_process_csv_file(str(file1_path))
-        elif ext1 == ".asc":
+        elif ext1 == '.asc':
             df1 = load_and_process_asc_file(str(file1_path))
         else:
             return False
 
-        if ext2 == ".parquet":
+        if ext2 == '.parquet':
             df2 = pd.read_parquet(file2_path)
-        elif ext2 == ".csv":
+        elif ext2 == '.csv':
             df2 = load_and_process_csv_file(str(file2_path))
-        elif ext2 == ".asc":
+        elif ext2 == '.asc':
             df2 = load_and_process_asc_file(str(file2_path))
         else:
             return False
@@ -432,11 +322,11 @@ def get_numeric_columns(file_path: Path) -> list:
     """
     ext = file_path.suffix.lower()
 
-    if ext == ".parquet":
+    if ext == '.parquet':
         df = pd.read_parquet(file_path)
-    elif ext == ".csv":
+    elif ext == '.csv':
         df = load_and_process_csv_file(str(file_path))
-    elif ext == ".asc":
+    elif ext == '.asc':
         df = load_and_process_asc_file(str(file_path))
     else:
         return []
