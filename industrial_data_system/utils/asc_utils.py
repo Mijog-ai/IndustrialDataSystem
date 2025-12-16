@@ -43,49 +43,86 @@ def load_and_process_asc_file(file_name):
         data_start = None
 
         for i, line in enumerate(lines):
-            if not line.strip() or not "\t" in line:
+            if not line.strip():
                 continue
 
-            # Check if this looks like a data row (starts with a number)
-            if re.match(r"^[\d,.]+\t", line.strip()):
+            if "\t" not in line:
+                continue
+
+            parts = line.split("\t")
+            if len(parts) < 2:
+                continue
+
+            # Try to detect if this is a data row by checking if first element is numeric
+            first_elem = parts[0].strip().replace(',', '.')
+            is_numeric = False
+            try:
+                float(first_elem)
+                is_numeric = True
+            except ValueError:
+                pass
+
+            if is_numeric:
+                # This is a data row
                 data_start = i
-                # Header should be the previous non-empty line
+                # Header should be the previous non-empty tabbed line
                 for j in range(i - 1, -1, -1):
                     if lines[j].strip() and "\t" in lines[j]:
                         header_line_idx = j
                         break
                 break
 
-            # Check if this looks like a header line (contains units in brackets like [bar], [rpm], etc.)
-            # or ends with tab-separated text that doesn't start with a number
-            if "[" in line and "]" in line:
-                # Likely a header with units
+            # Check if this looks like a header line (contains units in brackets)
+            if "[" in line and "]" in line and header_line_idx is None:
                 header_line_idx = i
-                # Data would start on the next non-empty line
+                # Look for data after this
                 for j in range(i + 1, len(lines)):
-                    if lines[j].strip():
-                        if re.match(r"^[\d,.]+\t", lines[j].strip()):
+                    if not lines[j].strip():
+                        continue
+                    if "\t" not in lines[j]:
+                        continue
+                    test_parts = lines[j].split("\t")
+                    if len(test_parts) > 0:
+                        test_elem = test_parts[0].strip().replace(',', '.')
+                        try:
+                            float(test_elem)
                             data_start = j
-                        break
-                # Even if no data found, we have a header
-                break
+                            break
+                        except ValueError:
+                            continue
 
-        # If we didn't find a header with units, look for any tab-separated line that could be a header
+        # If still no header found, look for any tab-separated line that could be a header
         if header_line_idx is None:
             for i, line in enumerate(lines):
-                if "\t" in line and line.strip():
-                    # This could be a header - check if next line is data or nothing
-                    parts = line.split("\t")
-                    # If line has multiple parts and doesn't start with a pure number, treat as header
-                    if len(parts) > 1 and not re.match(r"^[\d,.]+$", parts[0].strip()):
-                        header_line_idx = i
-                        # Look for data after this
-                        for j in range(i + 1, len(lines)):
-                            if lines[j].strip() and "\t" in lines[j]:
-                                if re.match(r"^[\d,.]+\t", lines[j].strip()):
-                                    data_start = j
-                                    break
-                        break
+                if not line.strip() or "\t" not in line:
+                    continue
+
+                parts = line.split("\t")
+                if len(parts) < 2:
+                    continue
+
+                # Check if first element is NOT numeric (so it's likely a header)
+                first_elem = parts[0].strip().replace(',', '.')
+                try:
+                    float(first_elem)
+                    continue  # Skip numeric lines
+                except ValueError:
+                    # Not numeric - treat as header
+                    header_line_idx = i
+                    # Look for data after this
+                    for j in range(i + 1, len(lines)):
+                        if not lines[j].strip() or "\t" not in lines[j]:
+                            continue
+                        test_parts = lines[j].split("\t")
+                        if len(test_parts) > 0:
+                            test_elem = test_parts[0].strip().replace(',', '.')
+                            try:
+                                float(test_elem)
+                                data_start = j
+                                break
+                            except ValueError:
+                                continue
+                    break
 
         if header_line_idx is None:
             raise ValueError("Could not find header line in the file.")
