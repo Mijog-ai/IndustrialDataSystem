@@ -1,4 +1,5 @@
 """SQLite database helpers for the Industrial Data System."""
+
 from __future__ import annotations
 
 import json
@@ -144,7 +145,6 @@ class SQLiteDatabase:
                 CREATE INDEX IF NOT EXISTS idx_security_audit_event ON security_audit_log(event_type);
                 CREATE INDEX IF NOT EXISTS idx_security_audit_created ON security_audit_log(created_at);
             """
-
             )
             cursor = connection.cursor()
             for statement in (

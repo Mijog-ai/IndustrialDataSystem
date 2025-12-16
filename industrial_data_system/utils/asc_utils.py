@@ -1,12 +1,13 @@
 """Fixed ASC file processing and conversion to maintain consistent column structure."""
 
-import pandas as pd
-import numpy as np
-from pathlib import Path
-from typing import Optional
 import logging
 import re
+from pathlib import Path
+from typing import Optional
+
 import chardet
+import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -20,27 +21,27 @@ def load_and_process_asc_file(file_name):
     content = ""
     try:
         # Detect file encoding
-        with open(file_name, 'rb') as file:
+        with open(file_name, "rb") as file:
             raw_data = file.read()
         result = chardet.detect(raw_data)
-        file_encoding = result['encoding']
+        file_encoding = result["encoding"]
 
         # Try to read the file with the detected encoding
         try:
-            with open(file_name, 'r', encoding=file_encoding) as file:
+            with open(file_name, "r", encoding=file_encoding) as file:
                 content = file.read()
         except UnicodeDecodeError:
             # If that fails, try with 'latin-1' encoding
-            with open(file_name, 'r', encoding='latin-1') as file:
+            with open(file_name, "r", encoding="latin-1") as file:
                 content = file.read()
 
-        lines = content.split('\n')
+        lines = content.split("\n")
 
         # Find the start of the data
         data_start = 0
         for i, line in enumerate(lines):
             # Check if the line contains tab-separated values and starts with a number-like string
-            if '\t' in line and re.match(r'^[\d,.]+\t', line.strip()):
+            if "\t" in line and re.match(r"^[\d,.]+\t", line.strip()):
                 data_start = i
                 break
 
@@ -48,8 +49,8 @@ def load_and_process_asc_file(file_name):
             raise ValueError("Could not find the start of data in the file.")
 
         # Extract header and data
-        header = lines[data_start - 1].split('\t')
-        data = [line.split('\t') for line in lines[data_start:] if line.strip()]
+        header = lines[data_start - 1].split("\t")
+        data = [line.split("\t") for line in lines[data_start:] if line.strip()]
 
         # Ensure all data rows have the same number of columns as the header
         max_columns = len(header)
@@ -72,8 +73,8 @@ def load_and_process_asc_file(file_name):
 
         # Convert columns to appropriate types
         for col in df.columns:
-            df[col] = df[col].apply(lambda x: x.replace(',', '.') if isinstance(x, str) else x)
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+            df[col] = df[col].apply(lambda x: x.replace(",", ".") if isinstance(x, str) else x)
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
         # CRITICAL: Fill NaN values with 0 to maintain consistent structure
         df = df.fillna(0.0)
@@ -86,7 +87,8 @@ def load_and_process_asc_file(file_name):
     except Exception as e:
         logging.error(f"Error loading ASC file: {str(e)}")
         if content:
-            logging.error(f"File content (first 10 lines): {content.split('\\n')[:10]}")
+            lines_list = content.split("\n")[:10]
+            logging.error(f"File content (first 10 lines): {lines_list}")
         else:
             logging.error("Unable to read file content")
         raise
@@ -125,10 +127,7 @@ def load_and_process_tdms_file(file_name):
             if len(data_dict[key]) < max_length:
                 pad_length = max_length - len(data_dict[key])
                 data_dict[key] = np.pad(
-                    data_dict[key],
-                    (0, pad_length),
-                    'constant',
-                    constant_values=np.nan
+                    data_dict[key], (0, pad_length), "constant", constant_values=np.nan
                 )
 
         # Create DataFrame
@@ -138,9 +137,7 @@ def load_and_process_tdms_file(file_name):
 
 
 def convert_asc_to_parquet(
-    asc_path: Path,
-    parquet_path: Optional[Path] = None,
-    preserve_asc: bool = True
+    asc_path: Path, parquet_path: Optional[Path] = None, preserve_asc: bool = True
 ) -> Path:
     """Convert an ASC file to Parquet format with consistent column structure.
 
@@ -157,7 +154,7 @@ def convert_asc_to_parquet(
         as the ASC file to prevent dimension mismatches in model training.
     """
     if parquet_path is None:
-        parquet_path = asc_path.with_suffix('.parquet')
+        parquet_path = asc_path.with_suffix(".parquet")
 
     # Load ASC file with careful column handling
     df = load_and_process_asc_file(str(asc_path))
@@ -175,12 +172,7 @@ def convert_asc_to_parquet(
         raise ValueError(f"Duplicate columns detected: {duplicates}")
 
     # Convert to Parquet with compression
-    df.to_parquet(
-        parquet_path,
-        engine='pyarrow',
-        compression='snappy',
-        index=False
-    )
+    df.to_parquet(parquet_path, engine="pyarrow", compression="snappy", index=False)
 
     # Verify the conversion
     verify_df = pd.read_parquet(parquet_path)
@@ -222,20 +214,20 @@ def verify_file_compatibility(file1_path: Path, file2_path: Path) -> bool:
         ext1 = file1_path.suffix.lower()
         ext2 = file2_path.suffix.lower()
 
-        if ext1 == '.parquet':
+        if ext1 == ".parquet":
             df1 = pd.read_parquet(file1_path)
-        elif ext1 == '.csv':
+        elif ext1 == ".csv":
             df1 = load_and_process_csv_file(str(file1_path))
-        elif ext1 == '.asc':
+        elif ext1 == ".asc":
             df1 = load_and_process_asc_file(str(file1_path))
         else:
             return False
 
-        if ext2 == '.parquet':
+        if ext2 == ".parquet":
             df2 = pd.read_parquet(file2_path)
-        elif ext2 == '.csv':
+        elif ext2 == ".csv":
             df2 = load_and_process_csv_file(str(file2_path))
-        elif ext2 == '.asc':
+        elif ext2 == ".asc":
             df2 = load_and_process_asc_file(str(file2_path))
         else:
             return False
@@ -276,11 +268,11 @@ def get_numeric_columns(file_path: Path) -> list:
     """
     ext = file_path.suffix.lower()
 
-    if ext == '.parquet':
+    if ext == ".parquet":
         df = pd.read_parquet(file_path)
-    elif ext == '.csv':
+    elif ext == ".csv":
         df = load_and_process_csv_file(str(file_path))
-    elif ext == '.asc':
+    elif ext == ".asc":
         df = load_and_process_asc_file(str(file_path))
     else:
         return []

@@ -1,6 +1,9 @@
 """Local file storage management for the shared drive."""
+
 from __future__ import annotations
 
+# Add after existing imports
+import logging
 import shutil
 import time
 from dataclasses import dataclass
@@ -10,10 +13,8 @@ from typing import List, Optional
 from industrial_data_system.core.config import AppConfig, get_config
 from industrial_data_system.core.db_manager import DatabaseManager
 from industrial_data_system.core.model_manager import EnhancedModelManager, ModelTrainingError
-# Add after existing imports
-import logging
-
 from industrial_data_system.utils.asc_utils import convert_asc_to_parquet
+
 # from industrial_data_system.core.model_manager import AutoencoderModelManager, ModelTrainingError
 
 # Add logger after imports
@@ -73,7 +74,9 @@ class LocalStorageManager:
         try:
             tests_folder.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            raise StorageError(f"Unable to create folder for pump series '{pump_series}': {exc}") from exc
+            raise StorageError(
+                f"Unable to create folder for pump series '{pump_series}': {exc}"
+            ) from exc
         return tests_folder
 
     def ensure_folder_exists(self, pump_series: str, test_type: str) -> Path:
@@ -134,12 +137,12 @@ class LocalStorageManager:
     # Public API
     # ------------------------------------------------------------------
     def upload_file(
-            self,
-            source_path: Path | str,
-            pump_series: str,
-            test_type: str,
-            filename: Optional[str] = None,
-            user_id: Optional[int] = None,  # Add this parameter
+        self,
+        source_path: Path | str,
+        pump_series: str,
+        test_type: str,
+        filename: Optional[str] = None,
+        user_id: Optional[int] = None,  # Add this parameter
     ) -> StoredFile:
         source = Path(source_path)
         if not source.is_file():
@@ -164,7 +167,7 @@ class LocalStorageManager:
 
         # NEW: Convert ASC to Parquet after successful upload
         final_destination = destination
-        if source.suffix.lower() == '.asc':
+        if source.suffix.lower() == ".asc":
             try:
                 parquet_path = convert_asc_to_parquet(destination)
                 logger.info(f"Created parquet conversion: {parquet_path.name}")

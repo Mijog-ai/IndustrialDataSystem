@@ -1,4 +1,5 @@
 """Database manager wrapping SQLite queries with retry logic."""
+
 from __future__ import annotations
 
 import json
@@ -7,9 +8,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
-import time
-from typing import Dict, Tuple, Any, Optional
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 from industrial_data_system.core.database import SQLiteDatabase, get_database
 
@@ -114,13 +113,13 @@ class DatabaseManager:
         self._cache[key] = (value, time.time())
 
     def list_uploads(
-            self,
-            *,
-            user_id: Optional[int] = None,
-            test_type: Optional[str] = None,
-            pump_series: Optional[str] = None,
-            start_date: Optional[str] = None,
-            end_date: Optional[str] = None,
+        self,
+        *,
+        user_id: Optional[int] = None,
+        test_type: Optional[str] = None,
+        pump_series: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> List[UploadRecord]:
         # Create cache key
         cache_key = f"uploads_{user_id}_{test_type}_{pump_series}_{start_date}_{end_date}"
@@ -167,11 +166,7 @@ class DatabaseManager:
 
     def get_upload_by_id(self, upload_id: int) -> Optional[Dict[str, Any]]:
         """Get a single upload record by ID."""
-        row = self._execute(
-            "SELECT * FROM uploads WHERE id = ?",
-            (upload_id,),
-            fetchone=True
-        )
+        row = self._execute("SELECT * FROM uploads WHERE id = ?", (upload_id,), fetchone=True)
         if not row:
             return None
         upload_record = self._row_to_upload(row)
@@ -716,17 +711,17 @@ class DatabaseManager:
     # Uploads
     # ------------------------------------------------------------------
     def create_upload(
-            self,
-            *,
-            user_id: int,
-            filename: str,
-            file_path: str,
-            pump_series: Optional[str],
-            test_type: str,
-            file_size: Optional[int],
-            mime_type: Optional[str],
-            pump_series_id: Optional[int],
-            test_type_id: Optional[int],
+        self,
+        *,
+        user_id: int,
+        filename: str,
+        file_path: str,
+        pump_series: Optional[str],
+        test_type: str,
+        file_size: Optional[int],
+        mime_type: Optional[str],
+        pump_series_id: Optional[int],
+        test_type_id: Optional[int],
     ) -> UploadRecord:
         self._execute(
             """
@@ -768,7 +763,7 @@ class DatabaseManager:
         assert row is not None
 
         # Clear cache after creating new upload
-        if hasattr(self, '_cache'):
+        if hasattr(self, "_cache"):
             self._cache.clear()
 
         return self._row_to_upload(row)
@@ -781,12 +776,10 @@ class DatabaseManager:
         test_type: str,
         pump_series: Optional[str] = None,
     ) -> Optional[UploadRecord]:
-        query = (
-            """
+        query = """
             SELECT * FROM uploads
             WHERE user_id = ? AND filename = ? AND test_type = ?
             """
-        )
         params: List[Any] = [user_id, filename, test_type]
         if pump_series:
             query += " AND pump_series = ?"
@@ -830,7 +823,6 @@ class DatabaseManager:
         query = "UPDATE uploads SET " + ", ".join(fields) + " WHERE id = ?"
         self._execute(query, params)
 
-
     def prune_missing_uploads(self, base_path: Path) -> int:
         """Remove upload records that no longer have files on disk.
 
@@ -863,16 +855,18 @@ class DatabaseManager:
         return removed
 
     def get_storage_usage(self) -> int:
-        row = self._execute("SELECT COALESCE(SUM(file_size), 0) AS usage FROM uploads", fetchone=True)
+        row = self._execute(
+            "SELECT COALESCE(SUM(file_size), 0) AS usage FROM uploads", fetchone=True
+        )
         if row is None:
             return 0
         return int(row[0])
 
     def record_login_attempt(
-            self,
-            email: str,
-            success: bool,
-            ip_address: Optional[str] = None,
+        self,
+        email: str,
+        success: bool,
+        ip_address: Optional[str] = None,
     ) -> None:
         """Record a login attempt."""
         self._execute(
@@ -902,12 +896,12 @@ class DatabaseManager:
         )
 
     def log_security_event(
-            self,
-            user_id: Optional[int],
-            event_type: str,
-            description: str,
-            ip_address: Optional[str] = None,
-            success: bool = True,
+        self,
+        user_id: Optional[int],
+        event_type: str,
+        description: str,
+        ip_address: Optional[str] = None,
+        success: bool = True,
     ) -> None:
         """Log security-related events for audit trail."""
         self._execute(

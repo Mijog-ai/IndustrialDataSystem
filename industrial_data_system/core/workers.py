@@ -1,8 +1,9 @@
 """Background workers for long-running tasks"""
 
-from PyQt5.QtCore import QThread, pyqtSignal
-from typing import List
 from pathlib import Path
+from typing import List
+
+from PyQt5.QtCore import QThread, pyqtSignal
 
 
 class FileUploadWorker(QThread):
@@ -12,8 +13,15 @@ class FileUploadWorker(QThread):
     finished = pyqtSignal(list, list)  # successful, failed
     error = pyqtSignal(str)
 
-    def __init__(self, file_paths: List[str], pump_series: str, test_type: str,
-                 storage_manager, history_store, user_id: int):
+    def __init__(
+        self,
+        file_paths: List[str],
+        pump_series: str,
+        test_type: str,
+        storage_manager,
+        history_store,
+        user_id: int,
+    ):
         super().__init__()
         self.file_paths = file_paths
         self.pump_series = pump_series
@@ -34,9 +42,7 @@ class FileUploadWorker(QThread):
 
                 # Upload file
                 stored = self.storage_manager.upload_file(
-                    file_path,
-                    self.pump_series,
-                    self.test_type
+                    file_path, self.pump_series, self.test_type
                 )
 
                 # Record in database

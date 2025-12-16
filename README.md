@@ -151,3 +151,212 @@ For a full end-to-end verification, exercise the upload and reader workflows
 against a real shared drive to confirm connectivity, preview rendering, and the
 database migration scripts.
 
+## Development Setup
+
+### Prerequisites for Development
+
+- Python 3.12+
+- Git
+- Access to the shared drive defined in your `.env`
+
+### Setting Up Development Environment
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd IndustrialDataSystem
+   ```
+
+2. **Create a virtual environment**
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   ```
+
+3. **Install dependencies**
+   ```bash
+   # Install production dependencies
+   pip install -r requirements.txt
+
+   # Install development dependencies
+   pip install -r requirements-dev.txt
+   ```
+
+4. **Set up pre-commit hooks**
+   ```bash
+   pre-commit install
+   ```
+
+### Code Quality Tools
+
+This project uses multiple tools to maintain code quality:
+
+#### Code Formatting
+
+- **Black**: Automatic code formatting
+  ```bash
+  black industrial_data_system/
+  ```
+
+- **isort**: Import statement sorting
+  ```bash
+  isort industrial_data_system/
+  ```
+
+- **autoflake**: Remove unused imports and variables
+  ```bash
+  autoflake --in-place --remove-all-unused-imports -r industrial_data_system/
+  ```
+
+#### Linting
+
+- **Flake8**: Style guide enforcement
+  ```bash
+  flake8 industrial_data_system/
+  ```
+
+- **Pylint**: Comprehensive code analysis
+  ```bash
+  pylint industrial_data_system/
+  ```
+
+- **Ruff**: Fast Python linter (alternative to flake8)
+  ```bash
+  ruff check industrial_data_system/
+  ```
+
+#### Type Checking
+
+- **mypy**: Static type checking
+  ```bash
+  mypy industrial_data_system/
+  ```
+
+#### Security Scanning
+
+- **Bandit**: Security issue detection
+  ```bash
+  bandit -r industrial_data_system/
+  ```
+
+- **Safety**: Dependency vulnerability scanning
+  ```bash
+  safety check --json
+  ```
+
+### Running All Checks
+
+Run all quality checks before committing:
+
+```bash
+# Format code
+black industrial_data_system/
+isort industrial_data_system/
+
+# Run linters
+flake8 industrial_data_system/
+pylint industrial_data_system/
+ruff check industrial_data_system/
+
+# Type checking
+mypy industrial_data_system/
+
+# Security checks
+bandit -r industrial_data_system/
+
+# Run tests (when available)
+pytest tests/
+```
+
+Or use pre-commit to run all checks:
+
+```bash
+pre-commit run --all-files
+```
+
+### Configuration Files
+
+- `pyproject.toml`: Configuration for Black, isort, mypy, pytest, coverage, and pylint
+- `.flake8`: Flake8 configuration
+- `.pre-commit-config.yaml`: Pre-commit hooks configuration
+- `requirements-dev.txt`: Development dependencies
+
+### Development Workflow
+
+1. Create a new branch for your feature/fix
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. Make your changes and ensure code quality
+   ```bash
+   # Format and check code
+   black industrial_data_system/
+   isort industrial_data_system/
+   pre-commit run --all-files
+   ```
+
+3. Run tests (when available)
+   ```bash
+   pytest tests/
+   ```
+
+4. Commit your changes
+   ```bash
+   git add .
+   git commit -m "Your descriptive commit message"
+   ```
+
+   Pre-commit hooks will automatically run and fix issues before the commit.
+
+5. Push to your branch
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+
+### Continuous Integration
+
+Pre-commit hooks will automatically run on every commit to ensure:
+- Code is properly formatted (Black, isort)
+- No linting errors (Flake8, Ruff, Pylint)
+- Type hints are correct (mypy)
+- No security issues (Bandit, Safety)
+- No secrets in code (detect-secrets)
+- Documentation standards met (pydocstyle)
+
+### IDE Setup
+
+#### VS Code
+
+Recommended extensions:
+- Python (Microsoft)
+- Pylance
+- Ruff
+- Black Formatter
+- isort
+
+Add to `.vscode/settings.json`:
+```json
+{
+  "python.formatting.provider": "black",
+  "python.linting.enabled": true,
+  "python.linting.flake8Enabled": true,
+  "python.linting.pylintEnabled": true,
+  "python.linting.mypyEnabled": true,
+  "editor.formatOnSave": true,
+  "python.sortImports.args": ["--profile", "black"],
+  "[python]": {
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": true
+    }
+  }
+}
+```
+
+#### PyCharm
+
+1. Enable Black formatter: Settings → Tools → Black → Enable
+2. Enable isort: Settings → Tools → External Tools → Add isort
+3. Enable Flake8: Settings → Editor → Inspections → Flake8
+4. Enable mypy: Settings → Editor → Inspections → Mypy
+

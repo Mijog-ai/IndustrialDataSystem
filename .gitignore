@@ -1,0 +1,237 @@
+# Industrial Data System - .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# PyInstaller
+*.manifest
+*.spec.bak
+
+# Virtual Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+.DS_Store
+Thumbs.db
+
+# PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Testing
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+*.cover
+*.py,cover
+.cache
+nosetests.xml
+coverage.xml
+*.coveragerc
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# Pytype
+.pytype/
+
+# Pylint
+.pylint.d/
+
+# Type checking
+.pyright/
+
+# Ruff
+.ruff_cache/
+
+# Profiling
+*.prof
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Environment variables (IMPORTANT: Keep this ignored for security)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+.env.test
+
+# Secrets
+secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+credentials.json
+service-account.json
+
+# Application-specific
+# Data directories (do not commit actual data)
+data/
+files/
+uploads/
+temp/
+tmp/
+*.tmp
+
+# Backup files
+*.bak
+*.backup
+*~.nib
+*.orig
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Documentation build
+docs/_build/
+docs/_static/
+docs/_templates/
+site/
+
+# Compiled documentation
+*.pdf
+*.html
+
+# Package files
+*.tar.gz
+*.zip
+*.7z
+*.rar
+
+# Model files (can be large)
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.hdf5
+*.pt
+*.pth
+models/
+*.onnx
+
+# Output files
+output/
+results/
+*.csv.bak
+*.xlsx.bak
+
+# Config backups
+config.backup.*
+*.conf.bak
+
+# Pre-commit
+.pre-commit-config.yaml.bak
+
+# Security scanning results
+.secrets.baseline
+bandit-report.json
+safety-report.json
+
+# Performance profiling
+*.prof
+*.lprof
+*.pstats
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.pyd
+
+# Temporary build directories
+.tmp/
+.temp/
+.build/
+
+# PyInstaller output
+build/
+dist/
+*.spec.bak
+
+# Local development
+local_settings.py
+.local/
+
+# Shared drive test data (do not commit)
+IndustrialData/
+SharedDrive/
+
+# Application data
+database/
+industrial_data.db
+*.db.backup

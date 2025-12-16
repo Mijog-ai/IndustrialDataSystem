@@ -1,0 +1,61 @@
+[flake8]
+max-line-length = 100
+max-complexity = 15
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    build,
+    dist,
+    *.egg-info,
+    .tox,
+    .mypy_cache,
+    .pytest_cache,
+    migrations,
+    .eggs
+
+# Error codes to ignore
+ignore =
+    # W503: line break before binary operator (conflicts with black)
+    W503,
+    # E203: whitespace before ':' (conflicts with black)
+    E203,
+    # E501: line too long (handled by black)
+    E501,
+    # E402: module level import not at top of file
+    E402,
+
+per-file-ignores =
+    __init__.py:F401,F403
+    tests/*:E402,F401
+
+# Select specific error/warning codes to check
+select =
+    E,  # pycodestyle errors
+    W,  # pycodestyle warnings
+    F,  # pyflakes
+    C,  # mccabe complexity
+    B,  # flake8-bugbear (if installed)
+
+# Plugins configuration
+# flake8-docstrings
+docstring-convention = google
+
+# flake8-quotes
+inline-quotes = double
+multiline-quotes = double
+docstring-quotes = double
+
+# flake8-import-order
+import-order-style = google
+application-import-names = industrial_data_system
+
+# Show source code for each error
+show-source = true
+# Show error codes in output
+show-pep8 = true
+# Count errors
+count = true
+# Show statistics
+statistics = true

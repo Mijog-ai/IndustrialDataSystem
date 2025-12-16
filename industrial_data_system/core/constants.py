@@ -22,7 +22,7 @@ DEFAULT_STORAGE_LIMIT_MB = 10240
 MIN_FREE_SPACE_MB = 100
 
 # Supported file extensions
-SUPPORTED_EXTENSIONS = {'.csv', '.xlsx', '.xlsm', '.xltx', '.xltm', '.asc', '.parquet'}
+SUPPORTED_EXTENSIONS = {".csv", ".xlsx", ".xlsm", ".xltx", ".xltm", ".asc", ".parquet"}
 
 # Model Training
 DEFAULT_MAX_EPOCHS = 10

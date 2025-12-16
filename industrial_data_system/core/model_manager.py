@@ -1,9 +1,10 @@
 """Enhanced model training that stores models alongside data files."""
+
 from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -50,7 +51,7 @@ class Autoencoder:
         input_dim: int,
         *,
         hidden_dim: Optional[int] = None,
-        rng: Optional[np.random.Generator] = None
+        rng: Optional[np.random.Generator] = None,
     ) -> None:
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim or max(4, input_dim // 2)
@@ -91,12 +92,7 @@ class Autoencoder:
         return loss
 
     def train(
-        self,
-        data: np.ndarray,
-        *,
-        epochs: int,
-        batch_size: int,
-        learning_rate: float
+        self, data: np.ndarray, *, epochs: int, batch_size: int, learning_rate: float
     ) -> Dict[str, float]:
         batch_size = max(1, min(batch_size, len(data)))
         losses: List[float] = []
@@ -157,11 +153,7 @@ class EnhancedModelManager:
         self._files_root = self.config.files_base_path
 
     def handle_new_dataset(
-        self,
-        dataset_path: Path | str,
-        *,
-        pump_series: str,
-        test_type: str
+        self, dataset_path: Path | str, *, pump_series: str, test_type: str
     ) -> ModelMetadata:
         """Train or fine-tune model when new data is uploaded.
 
@@ -195,7 +187,7 @@ class EnhancedModelManager:
         data_chunks = []
         for chunk in numeric_chunks:
             # Check if existing scaler has incompatible feature count
-            if scaler_existed and hasattr(scaler, 'n_features_in_'):
+            if scaler_existed and hasattr(scaler, "n_features_in_"):
                 if scaler.n_features_in_ != chunk.shape[1]:
                     self.logger.warning(
                         f"Feature count changed from {scaler.n_features_in_} to {chunk.shape[1]} "
@@ -312,34 +304,31 @@ class EnhancedModelManager:
         extension = dataset_path.suffix.lower()
         if extension not in self.SUPPORTED_EXTENSIONS:
             raise ModelTrainingError(
-                f"Unsupported dataset format '{dataset_path.suffix}'. "
-                f"Supported: csv, parquet."
+                f"Unsupported dataset format '{dataset_path.suffix}'. " f"Supported: csv, parquet."
             )
         return self.SUPPORTED_EXTENSIONS[extension]
 
-    def _load_numeric_chunks(
-        self,
-        dataset_path: Path,
-        file_type: str
-    ) -> Iterable[np.ndarray]:
+    def _load_numeric_chunks(self, dataset_path: Path, file_type: str) -> Iterable[np.ndarray]:
         if file_type == "csv":
             for chunk in pd.read_csv(dataset_path, chunksize=10_000):
-                numeric = chunk.select_dtypes(
-                    include=["float", "int", "bool"]
-                ).apply(pd.to_numeric, errors="coerce")
-                numeric = numeric.replace(
-                    [np.inf, -np.inf], np.nan
-                ).dropna(axis=1, how="all").fillna(0.0)
+                numeric = chunk.select_dtypes(include=["float", "int", "bool"]).apply(
+                    pd.to_numeric, errors="coerce"
+                )
+                numeric = (
+                    numeric.replace([np.inf, -np.inf], np.nan).dropna(axis=1, how="all").fillna(0.0)
+                )
                 if numeric.empty:
                     continue
                 yield numeric.to_numpy(dtype=np.float32)
         else:
-            dataframe = pd.read_parquet(dataset_path).select_dtypes(
-                include=["float", "int", "bool"]
-            ).apply(pd.to_numeric, errors="coerce")
-            dataframe = dataframe.replace(
-                [np.inf, -np.inf], np.nan
-            ).dropna(axis=1, how="all").fillna(0.0)
+            dataframe = (
+                pd.read_parquet(dataset_path)
+                .select_dtypes(include=["float", "int", "bool"])
+                .apply(pd.to_numeric, errors="coerce")
+            )
+            dataframe = (
+                dataframe.replace([np.inf, -np.inf], np.nan).dropna(axis=1, how="all").fillna(0.0)
+            )
             if not dataframe.empty:
                 yield dataframe.to_numpy(dtype=np.float32)
 
@@ -355,17 +344,11 @@ class EnhancedModelManager:
                 if isinstance(scaler, StandardScaler):
                     return scaler, True
             except Exception as exc:
-                self.logger.warning(
-                    f"Failed to load scaler from {scaler_path}: {exc}"
-                )
+                self.logger.warning(f"Failed to load scaler from {scaler_path}: {exc}")
         scaler = StandardScaler()
         return scaler, False
 
-    def _train_model(
-        self,
-        model: Autoencoder,
-        training_data: np.ndarray
-    ) -> Dict[str, float]:
+    def _train_model(self, model: Autoencoder, training_data: np.ndarray) -> Dict[str, float]:
         stats = model.train(
             training_data,
             epochs=self.max_epochs,

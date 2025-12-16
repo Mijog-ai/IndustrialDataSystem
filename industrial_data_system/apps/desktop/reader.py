@@ -9,39 +9,37 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional
 
-from PyQt5.QtCore import Qt, QUrl, pyqtSignal, QTimer
+from PyQt5.QtCore import Qt, QTimer, QUrl, pyqtSignal
 from PyQt5.QtGui import QDesktopServices, QFont, QPixmap
 from PyQt5.QtWidgets import (
     QApplication,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
+    QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
     QMessageBox,
-    QPushButton,
     QPlainTextEdit,
+    QPushButton,
+    QScrollArea,
     QSplitter,
     QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
     QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
-    QDialog,
-    QDialogButtonBox,
-    QFormLayout,
-    QTableWidgetItem,
-    QTableWidget,
-    QFrame,
-    QScrollArea,
 )
 
-from industrial_data_system.ai.toolkit import (
-    # run_ai_data_study,
+from industrial_data_system.ai.toolkit import (  # run_ai_data_study,; run_training_simulation,
+    run_anomaly_detector,
     run_plotter,
-    run_anomaly_detector
-    # run_training_simulation,
 )
 from industrial_data_system.apps.desktop.uploader import IndustrialTheme
 from industrial_data_system.core.auth import LocalAuthStore, LocalUser, SessionManager
@@ -135,9 +133,7 @@ class ReaderLoginPage(QWidget):
         form_layout.setContentsMargins(24, 24, 24, 24)
 
         email_label = QLabel("Email")
-        email_label.setStyleSheet(
-            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
-        )
+        email_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         form_layout.addWidget(email_label)
 
         self.email_input = QLineEdit()
@@ -145,9 +141,7 @@ class ReaderLoginPage(QWidget):
         form_layout.addWidget(self.email_input)
 
         password_label = QLabel("Password")
-        password_label.setStyleSheet(
-            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
-        )
+        password_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         form_layout.addWidget(password_label)
 
         self.password_input = QLineEdit()
@@ -156,9 +150,7 @@ class ReaderLoginPage(QWidget):
         form_layout.addWidget(self.password_input)
 
         code_label = QLabel("Security Code")
-        code_label.setStyleSheet(
-            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
-        )
+        code_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         form_layout.addWidget(code_label)
 
         self.security_input = QLineEdit()
@@ -389,7 +381,7 @@ class ReaderDashboard(QWidget):
 
         tool_buttons: List[tuple[str, Callable[..., Optional[str]], bool]] = [
             ("Plotter", run_plotter, True),
-            ("Anomaly Detector", run_anomaly_detector, True)
+            ("Anomaly Detector", run_anomaly_detector, True),
             # ("AI Data Lab", run_ai_data_study, False),
             # ("Train", run_training_simulation, False),
         ]
@@ -741,9 +733,7 @@ class ReaderApp(QMainWindow):
 
         self.config = get_config()
         self.db_manager = DatabaseManager()
-        self.storage_manager = LocalStorageManager(
-            config=self.config, database=self.db_manager
-        )
+        self.storage_manager = LocalStorageManager(config=self.config, database=self.db_manager)
         self.auth_store = LocalAuthStore(self.db_manager)
         self.current_user: Optional[LocalUser] = None
 
@@ -780,9 +770,7 @@ class ReaderApp(QMainWindow):
 
     def handle_login(self, email: str, password: str, security_code: str) -> None:
         if not email or not password or not security_code:
-            self.login_page.show_error(
-                "Email, password, and security code are required."
-            )
+            self.login_page.show_error("Email, password, and security code are required.")
             return
 
         try:
@@ -911,8 +899,7 @@ class ReaderApp(QMainWindow):
             return
 
         display_name = (
-            self.current_user.metadata.get("display_name")
-            or self.current_user.display_name()
+            self.current_user.metadata.get("display_name") or self.current_user.display_name()
         )
         self.dashboard.set_user_identity(display_name, self.current_user.email)
         self.dashboard.populate(resources)
