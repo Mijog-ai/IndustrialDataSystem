@@ -828,20 +828,18 @@ class AnomalyDetectorWindow(QMainWindow):
         )
 
         if show_comparison:
-            # 2x2 grid for comparison mode
-            ax1 = self.figure.add_subplot(221)
-            ax2 = self.figure.add_subplot(222)
-            ax3 = self.figure.add_subplot(223)
-            ax4 = self.figure.add_subplot(224)
+            # Single plot comparison mode - both models on same plots
+            ax1 = self.figure.add_subplot(211)
+            ax2 = self.figure.add_subplot(212)
 
-            # ====== Primary Model (Left Column) ======
-            # Top-left: Reconstruction error over data points
+            # ====== Top Plot: Reconstruction Error Comparison ======
+            # Primary model (blue)
             ax1.plot(
                 indices,
                 self._reconstruction_errors,
                 "b-",
                 linewidth=1,
-                label="Reconstruction Error",
+                label=f"v{self._current_version} Error",
                 alpha=0.7,
             )
             if self._anomaly_indices is not None and len(self._anomaly_indices) > 0:
@@ -851,7 +849,7 @@ class AnomalyDetectorWindow(QMainWindow):
                     c="red",
                     s=30,
                     marker="o",
-                    label=f"Anomalies ({len(self._anomaly_indices)})",
+                    label=f"v{self._current_version} Anomalies ({len(self._anomaly_indices)})",
                     zorder=5,
                 )
             ax1.axhline(
@@ -859,96 +857,88 @@ class AnomalyDetectorWindow(QMainWindow):
                 color="r",
                 linestyle="--",
                 linewidth=2,
-                label=f"Threshold = {self._threshold:.4f}",
+                label=f"v{self._current_version} Threshold = {self._threshold:.4f}",
             )
-            ax1.set_xlabel("Data Point Index", fontweight="bold")
-            ax1.set_ylabel("Reconstruction Error", fontweight="bold")
-            ax1.set_title(f"Model v{self._current_version} - Error vs Data Points", fontweight="bold", fontsize=10)
-            ax1.legend(loc="upper right", fontsize=8)
-            ax1.grid(True, alpha=0.3)
 
-            # Bottom-left: Histogram
-            ax3.hist(
-                self._reconstruction_errors,
-                bins=50,
-                color="skyblue",
-                edgecolor="black",
-                alpha=0.7,
-                label="Normal",
-            )
-            if self._anomaly_indices is not None and len(self._anomaly_indices) > 0:
-                ax3.hist(
-                    self._reconstruction_errors[self._anomaly_indices],
-                    bins=50,
-                    color="red",
-                    edgecolor="darkred",
-                    alpha=0.7,
-                    label="Anomalies",
-                )
-            ax3.axvline(x=self._threshold, color="r", linestyle="--", linewidth=2)
-            ax3.set_xlabel("Reconstruction Error", fontweight="bold")
-            ax3.set_ylabel("Frequency", fontweight="bold")
-            ax3.set_title(f"Model v{self._current_version} - Distribution", fontweight="bold", fontsize=10)
-            ax3.legend(loc="upper right", fontsize=8)
-            ax3.grid(True, alpha=0.3, axis="y")
-
-            # ====== Comparison Model (Right Column) ======
-            # Top-right: Reconstruction error over data points
-            ax2.plot(
+            # Comparison model (green)
+            ax1.plot(
                 indices,
                 self._compare_reconstruction_errors,
                 "g-",
                 linewidth=1,
-                label="Reconstruction Error",
+                label=f"v{self._compare_version} Error",
                 alpha=0.7,
             )
             if self._compare_anomaly_indices is not None and len(self._compare_anomaly_indices) > 0:
-                ax2.scatter(
+                ax1.scatter(
                     self._compare_anomaly_indices,
                     self._compare_reconstruction_errors[self._compare_anomaly_indices],
                     c="orange",
                     s=30,
-                    marker="o",
-                    label=f"Anomalies ({len(self._compare_anomaly_indices)})",
+                    marker="s",
+                    label=f"v{self._compare_version} Anomalies ({len(self._compare_anomaly_indices)})",
                     zorder=5,
                 )
-            ax2.axhline(
+            ax1.axhline(
                 y=self._compare_threshold,
                 color="orange",
                 linestyle="--",
                 linewidth=2,
-                label=f"Threshold = {self._compare_threshold:.4f}",
+                label=f"v{self._compare_version} Threshold = {self._compare_threshold:.4f}",
             )
-            ax2.set_xlabel("Data Point Index", fontweight="bold")
-            ax2.set_ylabel("Reconstruction Error", fontweight="bold")
-            ax2.set_title(f"Model v{self._compare_version} - Error vs Data Points", fontweight="bold", fontsize=10)
-            ax2.legend(loc="upper right", fontsize=8)
-            ax2.grid(True, alpha=0.3)
 
-            # Bottom-right: Histogram
-            ax4.hist(
+            ax1.set_xlabel("Data Point Index", fontweight="bold")
+            ax1.set_ylabel("Reconstruction Error", fontweight="bold")
+            ax1.set_title(f"Model Comparison: v{self._current_version} vs v{self._compare_version} - Reconstruction Error", fontweight="bold", fontsize=11)
+            ax1.legend(loc="upper right", fontsize=7, ncol=2)
+            ax1.grid(True, alpha=0.3)
+
+            # ====== Bottom Plot: Histogram Comparison ======
+            # Primary model histogram (blue/red)
+            ax2.hist(
+                self._reconstruction_errors,
+                bins=50,
+                color="skyblue",
+                edgecolor="blue",
+                alpha=0.5,
+                label=f"v{self._current_version} Normal",
+            )
+            if self._anomaly_indices is not None and len(self._anomaly_indices) > 0:
+                ax2.hist(
+                    self._reconstruction_errors[self._anomaly_indices],
+                    bins=50,
+                    color="red",
+                    edgecolor="darkred",
+                    alpha=0.5,
+                    label=f"v{self._current_version} Anomalies",
+                )
+            ax2.axvline(x=self._threshold, color="r", linestyle="--", linewidth=2, label=f"v{self._current_version} Threshold")
+
+            # Comparison model histogram (green/orange)
+            ax2.hist(
                 self._compare_reconstruction_errors,
                 bins=50,
                 color="lightgreen",
-                edgecolor="black",
-                alpha=0.7,
-                label="Normal",
+                edgecolor="green",
+                alpha=0.5,
+                label=f"v{self._compare_version} Normal",
             )
             if self._compare_anomaly_indices is not None and len(self._compare_anomaly_indices) > 0:
-                ax4.hist(
+                ax2.hist(
                     self._compare_reconstruction_errors[self._compare_anomaly_indices],
                     bins=50,
                     color="orange",
                     edgecolor="darkorange",
-                    alpha=0.7,
-                    label="Anomalies",
+                    alpha=0.5,
+                    label=f"v{self._compare_version} Anomalies",
                 )
-            ax4.axvline(x=self._compare_threshold, color="orange", linestyle="--", linewidth=2)
-            ax4.set_xlabel("Reconstruction Error", fontweight="bold")
-            ax4.set_ylabel("Frequency", fontweight="bold")
-            ax4.set_title(f"Model v{self._compare_version} - Distribution", fontweight="bold", fontsize=10)
-            ax4.legend(loc="upper right", fontsize=8)
-            ax4.grid(True, alpha=0.3, axis="y")
+            ax2.axvline(x=self._compare_threshold, color="orange", linestyle="--", linewidth=2, label=f"v{self._compare_version} Threshold")
+
+            ax2.set_xlabel("Reconstruction Error", fontweight="bold")
+            ax2.set_ylabel("Frequency", fontweight="bold")
+            ax2.set_title(f"Model Comparison: v{self._current_version} vs v{self._compare_version} - Error Distribution", fontweight="bold", fontsize=11)
+            ax2.legend(loc="upper right", fontsize=7, ncol=2)
+            ax2.grid(True, alpha=0.3, axis="y")
 
         else:
             # Standard 2-row layout (no comparison)
