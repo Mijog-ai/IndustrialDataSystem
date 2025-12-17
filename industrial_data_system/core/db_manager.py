@@ -379,6 +379,29 @@ class DatabaseManager:
             return None
         return self._row_to_model_registry(row)
 
+    def get_all_model_versions(
+        self,
+        pump_series: str,
+        test_type: str,
+        file_type: str,
+    ) -> List[ModelRegistryRecord]:
+        """Get all model versions for a given pump series, test type, and file type.
+
+        Returns list sorted by version descending (newest first).
+        """
+        rows = self._execute(
+            """
+            SELECT * FROM model_registry
+            WHERE pump_series = ? AND test_type = ? AND file_type = ?
+            ORDER BY version DESC
+            """,
+            (pump_series, test_type, file_type),
+            fetchall=True,
+        )
+        if rows is None:
+            return []
+        return [self._row_to_model_registry(row) for row in rows]
+
     def record_model_version(
         self,
         *,

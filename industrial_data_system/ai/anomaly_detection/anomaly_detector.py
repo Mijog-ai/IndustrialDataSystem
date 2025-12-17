@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import joblib
 import matplotlib.pyplot as plt
@@ -16,6 +17,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QGridLayout,
@@ -37,6 +39,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from industrial_data_system.core.db_manager import DatabaseManager, ModelRegistryRecord
 from industrial_data_system.utils.asc_utils import (
     load_and_process_asc_file,
     load_and_process_csv_file,
@@ -93,6 +96,25 @@ class AnomalyDetectorWindow(QMainWindow):
         self._anomaly_indices: Optional[np.ndarray] = None
         self._threshold: float = 0.0
 
+        # Model version management
+        self._database = DatabaseManager()
+        self._pump_series: str = ""
+        self._test_type: str = ""
+        self._file_type: str = ""
+        self._available_versions: List[ModelRegistryRecord] = []
+        self._current_version: Optional[int] = None
+        self._metadata: Dict[str, Any] = {}
+
+        # Comparison mode
+        self._comparison_mode: bool = False
+        self._compare_model = None
+        self._compare_scaler = None
+        self._compare_reconstruction_errors: Optional[np.ndarray] = None
+        self._compare_anomaly_indices: Optional[np.ndarray] = None
+        self._compare_threshold: float = 0.0
+        self._compare_version: Optional[int] = None
+        self._compare_metadata: Dict[str, Any] = {}
+
         self.setObjectName("anomaly-detector-window")
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.setWindowTitle(f"Anomaly Detection - {self._file_path.name}")
@@ -100,6 +122,8 @@ class AnomalyDetectorWindow(QMainWindow):
 
         self._build_ui()
         self._load_data()
+        self._extract_path_info()
+        self._load_available_versions()
         self._load_model()
 
     def _build_ui(self) -> None:
@@ -138,7 +162,50 @@ class AnomalyDetectorWindow(QMainWindow):
         self.model_info_table.setSelectionMode(QTableWidget.NoSelection)
         model_layout.addWidget(self.model_info_table)
 
+        # Version selection
+        version_layout = QHBoxLayout()
+        version_layout.addWidget(QLabel("Model Version:"))
+        self.version_combo = QComboBox()
+        self.version_combo.setMinimumWidth(150)
+        self.version_combo.currentIndexChanged.connect(self._on_version_changed)
+        version_layout.addWidget(self.version_combo)
+        version_layout.addStretch()
+        model_layout.addLayout(version_layout)
+
         left_layout.addWidget(model_group)
+
+        # Comparison mode group
+        compare_group = QGroupBox("Model Comparison")
+        compare_layout = QVBoxLayout(compare_group)
+
+        self.compare_checkbox = QCheckBox("Enable Comparison Mode")
+        self.compare_checkbox.stateChanged.connect(self._on_comparison_toggled)
+        compare_layout.addWidget(self.compare_checkbox)
+
+        compare_version_layout = QHBoxLayout()
+        compare_version_layout.addWidget(QLabel("Compare with:"))
+        self.compare_version_combo = QComboBox()
+        self.compare_version_combo.setMinimumWidth(150)
+        self.compare_version_combo.setEnabled(False)
+        self.compare_version_combo.currentIndexChanged.connect(self._on_compare_version_changed)
+        compare_version_layout.addWidget(self.compare_version_combo)
+        compare_version_layout.addStretch()
+        compare_layout.addLayout(compare_version_layout)
+
+        # Comparison info table
+        self.compare_info_table = QTableWidget()
+        self.compare_info_table.setRowCount(3)
+        self.compare_info_table.setColumnCount(2)
+        self.compare_info_table.setHorizontalHeaderLabels(["Property", "Value"])
+        self.compare_info_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.compare_info_table.verticalHeader().setVisible(False)
+        self.compare_info_table.setMaximumHeight(110)
+        self.compare_info_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.compare_info_table.setSelectionMode(QTableWidget.NoSelection)
+        self.compare_info_table.setEnabled(False)
+        compare_layout.addWidget(self.compare_info_table)
+
+        left_layout.addWidget(compare_group)
 
         # Detection settings group
         settings_group = QGroupBox("Detection Settings")
@@ -275,6 +342,37 @@ class AnomalyDetectorWindow(QMainWindow):
                 border: 1px solid #E5E7EB;
                 border-radius: 4px;
             }
+            QComboBox {
+                border: 1px solid #D1D5DB;
+                border-radius: 4px;
+                padding: 4px 8px;
+                background: #F9FAFB;
+                min-height: 24px;
+            }
+            QComboBox:hover {
+                border-color: #DC2626;
+            }
+            QComboBox::drop-down {
+                border: none;
+                padding-right: 8px;
+            }
+            QCheckBox {
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border: 2px solid #D1D5DB;
+                border-radius: 4px;
+                background: #FFFFFF;
+            }
+            QCheckBox::indicator:checked {
+                background: #DC2626;
+                border-color: #DC2626;
+            }
+            QCheckBox::indicator:hover {
+                border-color: #DC2626;
+            }
             """
             + self.BUTTON_STYLES
         )
@@ -307,39 +405,118 @@ class AnomalyDetectorWindow(QMainWindow):
 
         raise ValueError(f"Unsupported file type: {ext}")
 
-    def _load_model(self) -> None:
-        """Load the trained model for this file's test type."""
+    def _extract_path_info(self) -> None:
+        """Extract pump series, test type, and file type from file path."""
+        file_parts = self._file_path.parts
+
+        if "tests" not in file_parts:
+            raise ValueError("Could not determine test type from file path")
+
+        tests_index = file_parts.index("tests")
+        if tests_index + 1 >= len(file_parts):
+            raise ValueError("Invalid file path structure")
+
+        self._test_type = file_parts[tests_index + 1]
+        self._pump_series = file_parts[tests_index - 1] if tests_index > 0 else "General"
+
+        ext = self._file_path.suffix.lower()
+        self._file_type = "parquet" if ext == ".parquet" else "csv"
+
+    def _load_available_versions(self) -> None:
+        """Load all available model versions from database."""
         try:
-            # Determine test folder from file path
-            # Expected: files/pump_series/tests/test_type/data.csv
-            file_parts = self._file_path.parts
+            self._available_versions = self._database.get_all_model_versions(
+                self._pump_series, self._test_type, self._file_type
+            )
 
-            # Find 'tests' in the path
-            if "tests" not in file_parts:
-                raise ValueError("Could not determine test type from file path")
+            # Populate version combo boxes
+            self.version_combo.blockSignals(True)
+            self.compare_version_combo.blockSignals(True)
 
-            tests_index = file_parts.index("tests")
-            if tests_index + 1 >= len(file_parts):
-                raise ValueError("Invalid file path structure")
+            self.version_combo.clear()
+            self.compare_version_combo.clear()
 
-            test_type = file_parts[tests_index + 1]
-            pump_series = file_parts[tests_index - 1] if tests_index > 0 else "General"
+            if self._available_versions:
+                for record in self._available_versions:
+                    version_text = f"v{record.version} ({record.trained_at[:10]}, {record.file_count} files)"
+                    self.version_combo.addItem(version_text, record.version)
+                    self.compare_version_combo.addItem(version_text, record.version)
 
-            # Get test folder
+                # Select latest version by default
+                self.version_combo.setCurrentIndex(0)
+                # Select second version for comparison if available
+                if len(self._available_versions) > 1:
+                    self.compare_version_combo.setCurrentIndex(1)
+            else:
+                self.version_combo.addItem("No models available", None)
+                self.compare_version_combo.addItem("No models available", None)
+
+            self.version_combo.blockSignals(False)
+            self.compare_version_combo.blockSignals(False)
+
+        except Exception as exc:
+            self.status_label.setText(f"⚠ Failed to load model versions: {exc}")
+
+    def _get_version_paths(self, version: int) -> Tuple[Path, Path, Path]:
+        """Get model, scaler, and metadata paths for a specific version."""
+        test_folder = self._file_path.parent
+
+        # Find the record for this version
+        record = next(
+            (r for r in self._available_versions if r.version == version), None
+        )
+
+        if record:
+            # Use paths from database record
+            model_path = Path(record.model_path)
+            scaler_path = Path(record.scaler_path) if record.scaler_path else None
+            metadata_path = Path(record.metadata_path) if record.metadata_path else None
+        else:
+            # Fallback to versioned file naming convention
+            if version == self._available_versions[0].version if self._available_versions else 0:
+                # Latest version uses non-versioned filename
+                model_path = test_folder / f"model_{self._file_type}.pkl"
+                scaler_path = test_folder / f"scaler_{self._file_type}.pkl"
+                metadata_path = test_folder / f"metadata_{self._file_type}.json"
+            else:
+                # Older versions use versioned filename
+                model_path = test_folder / f"model_{self._file_type}_v{version:03d}.pkl"
+                scaler_path = test_folder / f"scaler_{self._file_type}_v{version:03d}.pkl"
+                metadata_path = test_folder / f"metadata_{self._file_type}_v{version:03d}.json"
+
+        return model_path, scaler_path, metadata_path
+
+    def _load_model(self, version: Optional[int] = None) -> None:
+        """Load the trained model for this file's test type.
+
+        Args:
+            version: Specific version to load. If None, loads the latest version.
+        """
+        try:
             test_folder = self._file_path.parent
 
-            # Determine file type
-            ext = self._file_path.suffix.lower()
-            file_type = "parquet" if ext == ".parquet" else "csv"
+            # Determine which version to load
+            if version is None:
+                if self._available_versions:
+                    version = self._available_versions[0].version
+                else:
+                    # Fallback: try to load default model file
+                    version = 1
 
-            # Load model and scaler
-            model_path = test_folder / f"model_{file_type}.pkl"
-            scaler_path = test_folder / f"scaler_{file_type}.pkl"
-            metadata_path = test_folder / f"metadata_{file_type}.json"
+            self._current_version = version
+
+            # Get paths for this version
+            model_path, scaler_path, metadata_path = self._get_version_paths(version)
+
+            # Fallback to non-versioned paths if versioned don't exist
+            if not model_path.exists():
+                model_path = test_folder / f"model_{self._file_type}.pkl"
+                scaler_path = test_folder / f"scaler_{self._file_type}.pkl"
+                metadata_path = test_folder / f"metadata_{self._file_type}.json"
 
             if not model_path.exists():
                 raise FileNotFoundError(
-                    f"No trained model found for {pump_series}/{test_type}. "
+                    f"No trained model found for {self._pump_series}/{self._test_type}. "
                     f"Upload training data first to create a model."
                 )
 
@@ -348,22 +525,22 @@ class AnomalyDetectorWindow(QMainWindow):
             self._model = self._create_model_from_state(model_state)
 
             # Load scaler
-            if scaler_path.exists():
+            if scaler_path and scaler_path.exists():
                 self._scaler = joblib.load(scaler_path)
             else:
                 raise FileNotFoundError("Scaler file not found")
 
             # Load metadata
-            metadata = {}
-            if metadata_path.exists():
-                import json
-
-                metadata = json.loads(metadata_path.read_text())
+            self._metadata = {}
+            if metadata_path and metadata_path.exists():
+                self._metadata = json.loads(metadata_path.read_text())
 
             # Update model info table
-            self._populate_model_info(pump_series, test_type, metadata)
+            self._populate_model_info()
 
-            self.status_label.setText(f"✓ Model loaded: {pump_series} / {test_type}")
+            self.status_label.setText(
+                f"✓ Model loaded: {self._pump_series} / {self._test_type} (v{version})"
+            )
             self.status_label.setStyleSheet(
                 "color: #0F172A; font-weight: 500; padding: 8px; "
                 "background: #D1FAE5; border-radius: 6px;"
@@ -380,6 +557,48 @@ class AnomalyDetectorWindow(QMainWindow):
                 "Model Loading Failed",
                 f"Could not load trained model:\n\n{exc}\n\n"
                 "Please ensure training data has been uploaded for this test type.",
+            )
+
+    def _load_compare_model(self, version: int) -> None:
+        """Load a model for comparison."""
+        try:
+            model_path, scaler_path, metadata_path = self._get_version_paths(version)
+
+            # Fallback to non-versioned paths if versioned don't exist
+            test_folder = self._file_path.parent
+            if not model_path.exists():
+                model_path = test_folder / f"model_{self._file_type}.pkl"
+                scaler_path = test_folder / f"scaler_{self._file_type}.pkl"
+                metadata_path = test_folder / f"metadata_{self._file_type}.json"
+
+            if not model_path.exists():
+                raise FileNotFoundError(f"Model file not found for version {version}")
+
+            # Load model state
+            model_state = joblib.load(model_path)
+            self._compare_model = self._create_model_from_state(model_state)
+
+            # Load scaler
+            if scaler_path and scaler_path.exists():
+                self._compare_scaler = joblib.load(scaler_path)
+            else:
+                raise FileNotFoundError("Scaler file not found")
+
+            # Load metadata
+            self._compare_metadata = {}
+            if metadata_path and metadata_path.exists():
+                self._compare_metadata = json.loads(metadata_path.read_text())
+
+            self._compare_version = version
+
+            # Update comparison info table
+            self._populate_compare_info()
+
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Comparison Model Loading Failed",
+                f"Could not load comparison model (v{version}):\n\n{exc}",
             )
 
     def _create_model_from_state(self, state: dict):
@@ -406,14 +625,14 @@ class AnomalyDetectorWindow(QMainWindow):
 
         return SimpleAutoencoder(state)
 
-    def _populate_model_info(self, pump_series: str, test_type: str, metadata: dict) -> None:
+    def _populate_model_info(self) -> None:
         """Populate model information table."""
         properties = [
-            ("Pump Series", pump_series),
-            ("Test Type", test_type),
-            ("Version", str(metadata.get("version", "Unknown"))),
-            ("Input Dimension", str(metadata.get("input_dim", "Unknown"))),
-            ("Files Trained", str(metadata.get("file_count", "Unknown"))),
+            ("Pump Series", self._pump_series),
+            ("Test Type", self._test_type),
+            ("Version", str(self._current_version or self._metadata.get("version", "Unknown"))),
+            ("Input Dimension", str(self._metadata.get("input_dim", "Unknown"))),
+            ("Files Trained", str(self._metadata.get("file_count", "Unknown"))),
         ]
 
         for row, (prop, value) in enumerate(properties):
@@ -428,6 +647,71 @@ class AnomalyDetectorWindow(QMainWindow):
                 prop_item.setFont(font)
 
         self.model_info_table.resizeColumnsToContents()
+
+    def _populate_compare_info(self) -> None:
+        """Populate comparison model information table."""
+        properties = [
+            ("Version", str(self._compare_version or "Unknown")),
+            ("Input Dimension", str(self._compare_metadata.get("input_dim", "Unknown"))),
+            ("Files Trained", str(self._compare_metadata.get("file_count", "Unknown"))),
+        ]
+
+        for row, (prop, value) in enumerate(properties):
+            self.compare_info_table.setItem(row, 0, QTableWidgetItem(prop))
+            self.compare_info_table.setItem(row, 1, QTableWidgetItem(value))
+
+            prop_item = self.compare_info_table.item(row, 0)
+            if prop_item:
+                prop_item.setForeground(Qt.darkGray)
+                font = prop_item.font()
+                font.setBold(True)
+                prop_item.setFont(font)
+
+        self.compare_info_table.resizeColumnsToContents()
+
+    def _on_version_changed(self, index: int) -> None:
+        """Handle version selection change."""
+        if index < 0:
+            return
+
+        version = self.version_combo.currentData()
+        if version is not None and version != self._current_version:
+            self._load_model(version)
+            # Clear previous detection results
+            self._reconstruction_errors = None
+            self._anomaly_indices = None
+            self.figure.clear()
+            self.canvas.draw_idle()
+
+    def _on_comparison_toggled(self, state: int) -> None:
+        """Handle comparison mode toggle."""
+        self._comparison_mode = state == Qt.Checked
+        self.compare_version_combo.setEnabled(self._comparison_mode)
+        self.compare_info_table.setEnabled(self._comparison_mode)
+
+        if self._comparison_mode:
+            # Load comparison model
+            compare_version = self.compare_version_combo.currentData()
+            if compare_version is not None:
+                self._load_compare_model(compare_version)
+        else:
+            # Clear comparison data
+            self._compare_model = None
+            self._compare_scaler = None
+            self._compare_reconstruction_errors = None
+            self._compare_anomaly_indices = None
+
+    def _on_compare_version_changed(self, index: int) -> None:
+        """Handle comparison version selection change."""
+        if index < 0 or not self._comparison_mode:
+            return
+
+        version = self.compare_version_combo.currentData()
+        if version is not None and version != self._compare_version:
+            self._load_compare_model(version)
+            # Clear previous comparison results
+            self._compare_reconstruction_errors = None
+            self._compare_anomaly_indices = None
 
     def _on_threshold_method_changed(self) -> None:
         """Handle threshold method selection change."""
@@ -472,17 +756,53 @@ class AnomalyDetectorWindow(QMainWindow):
                     f"{self._model.input_dim} columns"
                 )
 
-            # Scale data
+            # Scale data for primary model
             scaled_data = self._scaler.transform(numeric_df.values)
 
-            # Calculate reconstruction errors
+            # Calculate reconstruction errors for primary model
             self._reconstruction_errors = self._model.reconstruction_error(scaled_data)
 
             # Determine threshold
-            self._threshold = self._calculate_threshold()
+            self._threshold = self._calculate_threshold(self._reconstruction_errors)
 
             # Find anomalies
             self._anomaly_indices = np.where(self._reconstruction_errors > self._threshold)[0]
+
+            # If comparison mode is enabled, run detection on comparison model
+            if self._comparison_mode and self._compare_model is not None and self._compare_scaler is not None:
+                try:
+                    # Check dimension compatibility
+                    if numeric_df.shape[1] != self._compare_model.input_dim:
+                        QMessageBox.warning(
+                            self,
+                            "Comparison Warning",
+                            f"Comparison model expects {self._compare_model.input_dim} columns "
+                            f"but data has {numeric_df.shape[1]} columns. Skipping comparison.",
+                        )
+                    else:
+                        # Scale data for comparison model
+                        compare_scaled_data = self._compare_scaler.transform(numeric_df.values)
+
+                        # Calculate reconstruction errors for comparison model
+                        self._compare_reconstruction_errors = self._compare_model.reconstruction_error(
+                            compare_scaled_data
+                        )
+
+                        # Determine threshold for comparison
+                        self._compare_threshold = self._calculate_threshold(
+                            self._compare_reconstruction_errors
+                        )
+
+                        # Find anomalies for comparison
+                        self._compare_anomaly_indices = np.where(
+                            self._compare_reconstruction_errors > self._compare_threshold
+                        )[0]
+                except Exception as compare_exc:
+                    QMessageBox.warning(
+                        self,
+                        "Comparison Warning",
+                        f"Comparison model detection failed:\n{compare_exc}",
+                    )
 
             # Update statistics
             self._update_statistics()
@@ -490,9 +810,11 @@ class AnomalyDetectorWindow(QMainWindow):
             # Plot results
             self._plot_results()
 
-            self.status_label.setText(
-                f"✓ Detection complete: {len(self._anomaly_indices)} anomalies found"
-            )
+            status_msg = f"✓ Detection complete: {len(self._anomaly_indices)} anomalies found"
+            if self._comparison_mode and self._compare_anomaly_indices is not None:
+                status_msg += f" (comparison: {len(self._compare_anomaly_indices)})"
+
+            self.status_label.setText(status_msg)
             self.status_label.setStyleSheet(
                 "color: #0F172A; font-weight: 500; padding: 8px; "
                 "background: #D1FAE5; border-radius: 6px;"
@@ -501,24 +823,29 @@ class AnomalyDetectorWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Detection Failed", f"Anomaly detection failed:\n\n{exc}")
 
-    def _calculate_threshold(self) -> float:
-        """Calculate anomaly threshold based on selected method."""
-        if self._reconstruction_errors is None:
+    def _calculate_threshold(self, reconstruction_errors: Optional[np.ndarray] = None) -> float:
+        """Calculate anomaly threshold based on selected method.
+
+        Args:
+            reconstruction_errors: Array of reconstruction errors. If None, uses self._reconstruction_errors.
+        """
+        errors = reconstruction_errors if reconstruction_errors is not None else self._reconstruction_errors
+        if errors is None:
             return 0.0
 
         method = self.threshold_method.currentItem().text()
 
-        mean_error = np.mean(self._reconstruction_errors)
-        std_error = np.std(self._reconstruction_errors)
+        mean_error = np.mean(errors)
+        std_error = np.std(errors)
 
         if method == "Mean + 2×Std":
             return mean_error + 2 * std_error
         elif method == "Mean + 3×Std":
             return mean_error + 3 * std_error
         elif method == "95th Percentile":
-            return np.percentile(self._reconstruction_errors, 95)
+            return np.percentile(errors, 95)
         elif method == "99th Percentile":
-            return np.percentile(self._reconstruction_errors, 99)
+            return np.percentile(errors, 99)
         elif method == "Custom Value":
             return self.custom_threshold.value()
 
@@ -566,85 +893,216 @@ class AnomalyDetectorWindow(QMainWindow):
 
         self.figure.clear()
 
-        # Create subplots
-        ax1 = self.figure.add_subplot(211)
-        ax2 = self.figure.add_subplot(212)
-
         indices = np.arange(len(self._reconstruction_errors))
 
-        # Plot 1: Reconstruction error over data points
-        ax1.plot(
-            indices,
-            self._reconstruction_errors,
-            "b-",
-            linewidth=1,
-            label="Reconstruction Error",
-            alpha=0.7,
+        # Check if comparison mode with valid comparison data
+        show_comparison = (
+            self._comparison_mode
+            and self._compare_reconstruction_errors is not None
+            and len(self._compare_reconstruction_errors) == len(self._reconstruction_errors)
         )
 
-        # Highlight anomalies
-        if self._anomaly_indices is not None and len(self._anomaly_indices) > 0:
-            ax1.scatter(
-                self._anomaly_indices,
-                self._reconstruction_errors[self._anomaly_indices],
-                c="red",
-                s=50,
-                marker="o",
-                label="Anomalies",
-                zorder=5,
-            )
+        if show_comparison:
+            # 2x2 grid for comparison mode
+            ax1 = self.figure.add_subplot(221)
+            ax2 = self.figure.add_subplot(222)
+            ax3 = self.figure.add_subplot(223)
+            ax4 = self.figure.add_subplot(224)
 
-        # Threshold line
-        ax1.axhline(
-            y=self._threshold,
-            color="r",
-            linestyle="--",
-            linewidth=2,
-            label=f"Threshold = {self._threshold:.4f}",
-        )
-
-        ax1.set_xlabel("Data Point Index", fontweight="bold")
-        ax1.set_ylabel("Reconstruction Error", fontweight="bold")
-        ax1.set_title("Reconstruction Error vs Data Points", fontweight="bold", fontsize=12)
-        ax1.legend(loc="upper right")
-        ax1.grid(True, alpha=0.3)
-
-        # Plot 2: Histogram of reconstruction errors
-        ax2.hist(
-            self._reconstruction_errors,
-            bins=50,
-            color="skyblue",
-            edgecolor="black",
-            alpha=0.7,
-            label="Normal",
-        )
-
-        # Highlight anomaly region
-        if self._anomaly_indices is not None and len(self._anomaly_indices) > 0:
-            anomaly_errors = self._reconstruction_errors[self._anomaly_indices]
-            ax2.hist(
-                anomaly_errors,
-                bins=50,
-                color="red",
-                edgecolor="darkred",
+            # ====== Primary Model (Left Column) ======
+            # Top-left: Reconstruction error over data points
+            ax1.plot(
+                indices,
+                self._reconstruction_errors,
+                "b-",
+                linewidth=1,
+                label="Reconstruction Error",
                 alpha=0.7,
-                label="Anomalies",
+            )
+            if self._anomaly_indices is not None and len(self._anomaly_indices) > 0:
+                ax1.scatter(
+                    self._anomaly_indices,
+                    self._reconstruction_errors[self._anomaly_indices],
+                    c="red",
+                    s=30,
+                    marker="o",
+                    label=f"Anomalies ({len(self._anomaly_indices)})",
+                    zorder=5,
+                )
+            ax1.axhline(
+                y=self._threshold,
+                color="r",
+                linestyle="--",
+                linewidth=2,
+                label=f"Threshold = {self._threshold:.4f}",
+            )
+            ax1.set_xlabel("Data Point Index", fontweight="bold")
+            ax1.set_ylabel("Reconstruction Error", fontweight="bold")
+            ax1.set_title(f"Model v{self._current_version} - Error vs Data Points", fontweight="bold", fontsize=10)
+            ax1.legend(loc="upper right", fontsize=8)
+            ax1.grid(True, alpha=0.3)
+
+            # Bottom-left: Histogram
+            ax3.hist(
+                self._reconstruction_errors,
+                bins=50,
+                color="skyblue",
+                edgecolor="black",
+                alpha=0.7,
+                label="Normal",
+            )
+            if self._anomaly_indices is not None and len(self._anomaly_indices) > 0:
+                ax3.hist(
+                    self._reconstruction_errors[self._anomaly_indices],
+                    bins=50,
+                    color="red",
+                    edgecolor="darkred",
+                    alpha=0.7,
+                    label="Anomalies",
+                )
+            ax3.axvline(x=self._threshold, color="r", linestyle="--", linewidth=2)
+            ax3.set_xlabel("Reconstruction Error", fontweight="bold")
+            ax3.set_ylabel("Frequency", fontweight="bold")
+            ax3.set_title(f"Model v{self._current_version} - Distribution", fontweight="bold", fontsize=10)
+            ax3.legend(loc="upper right", fontsize=8)
+            ax3.grid(True, alpha=0.3, axis="y")
+
+            # ====== Comparison Model (Right Column) ======
+            # Top-right: Reconstruction error over data points
+            ax2.plot(
+                indices,
+                self._compare_reconstruction_errors,
+                "g-",
+                linewidth=1,
+                label="Reconstruction Error",
+                alpha=0.7,
+            )
+            if self._compare_anomaly_indices is not None and len(self._compare_anomaly_indices) > 0:
+                ax2.scatter(
+                    self._compare_anomaly_indices,
+                    self._compare_reconstruction_errors[self._compare_anomaly_indices],
+                    c="orange",
+                    s=30,
+                    marker="o",
+                    label=f"Anomalies ({len(self._compare_anomaly_indices)})",
+                    zorder=5,
+                )
+            ax2.axhline(
+                y=self._compare_threshold,
+                color="orange",
+                linestyle="--",
+                linewidth=2,
+                label=f"Threshold = {self._compare_threshold:.4f}",
+            )
+            ax2.set_xlabel("Data Point Index", fontweight="bold")
+            ax2.set_ylabel("Reconstruction Error", fontweight="bold")
+            ax2.set_title(f"Model v{self._compare_version} - Error vs Data Points", fontweight="bold", fontsize=10)
+            ax2.legend(loc="upper right", fontsize=8)
+            ax2.grid(True, alpha=0.3)
+
+            # Bottom-right: Histogram
+            ax4.hist(
+                self._compare_reconstruction_errors,
+                bins=50,
+                color="lightgreen",
+                edgecolor="black",
+                alpha=0.7,
+                label="Normal",
+            )
+            if self._compare_anomaly_indices is not None and len(self._compare_anomaly_indices) > 0:
+                ax4.hist(
+                    self._compare_reconstruction_errors[self._compare_anomaly_indices],
+                    bins=50,
+                    color="orange",
+                    edgecolor="darkorange",
+                    alpha=0.7,
+                    label="Anomalies",
+                )
+            ax4.axvline(x=self._compare_threshold, color="orange", linestyle="--", linewidth=2)
+            ax4.set_xlabel("Reconstruction Error", fontweight="bold")
+            ax4.set_ylabel("Frequency", fontweight="bold")
+            ax4.set_title(f"Model v{self._compare_version} - Distribution", fontweight="bold", fontsize=10)
+            ax4.legend(loc="upper right", fontsize=8)
+            ax4.grid(True, alpha=0.3, axis="y")
+
+        else:
+            # Standard 2-row layout (no comparison)
+            ax1 = self.figure.add_subplot(211)
+            ax2 = self.figure.add_subplot(212)
+
+            # Plot 1: Reconstruction error over data points
+            ax1.plot(
+                indices,
+                self._reconstruction_errors,
+                "b-",
+                linewidth=1,
+                label="Reconstruction Error",
+                alpha=0.7,
             )
 
-        # Threshold line
-        ax2.axvline(
-            x=self._threshold,
-            color="r",
-            linestyle="--",
-            linewidth=2,
-            label=f"Threshold = {self._threshold:.4f}",
-        )
+            # Highlight anomalies
+            if self._anomaly_indices is not None and len(self._anomaly_indices) > 0:
+                ax1.scatter(
+                    self._anomaly_indices,
+                    self._reconstruction_errors[self._anomaly_indices],
+                    c="red",
+                    s=50,
+                    marker="o",
+                    label="Anomalies",
+                    zorder=5,
+                )
 
-        ax2.set_xlabel("Reconstruction Error", fontweight="bold")
-        ax2.set_ylabel("Frequency", fontweight="bold")
-        ax2.set_title("Distribution of Reconstruction Errors", fontweight="bold", fontsize=12)
-        ax2.legend(loc="upper right")
-        ax2.grid(True, alpha=0.3, axis="y")
+            # Threshold line
+            ax1.axhline(
+                y=self._threshold,
+                color="r",
+                linestyle="--",
+                linewidth=2,
+                label=f"Threshold = {self._threshold:.4f}",
+            )
+
+            ax1.set_xlabel("Data Point Index", fontweight="bold")
+            ax1.set_ylabel("Reconstruction Error", fontweight="bold")
+            ax1.set_title("Reconstruction Error vs Data Points", fontweight="bold", fontsize=12)
+            ax1.legend(loc="upper right")
+            ax1.grid(True, alpha=0.3)
+
+            # Plot 2: Histogram of reconstruction errors
+            ax2.hist(
+                self._reconstruction_errors,
+                bins=50,
+                color="skyblue",
+                edgecolor="black",
+                alpha=0.7,
+                label="Normal",
+            )
+
+            # Highlight anomaly region
+            if self._anomaly_indices is not None and len(self._anomaly_indices) > 0:
+                anomaly_errors = self._reconstruction_errors[self._anomaly_indices]
+                ax2.hist(
+                    anomaly_errors,
+                    bins=50,
+                    color="red",
+                    edgecolor="darkred",
+                    alpha=0.7,
+                    label="Anomalies",
+                )
+
+            # Threshold line
+            ax2.axvline(
+                x=self._threshold,
+                color="r",
+                linestyle="--",
+                linewidth=2,
+                label=f"Threshold = {self._threshold:.4f}",
+            )
+
+            ax2.set_xlabel("Reconstruction Error", fontweight="bold")
+            ax2.set_ylabel("Frequency", fontweight="bold")
+            ax2.set_title("Distribution of Reconstruction Errors", fontweight="bold", fontsize=12)
+            ax2.legend(loc="upper right")
+            ax2.grid(True, alpha=0.3, axis="y")
 
         self.figure.tight_layout()
         self.canvas.draw_idle()
