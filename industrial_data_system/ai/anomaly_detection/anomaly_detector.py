@@ -441,6 +441,22 @@ class AnomalyDetectorWindow(QMainWindow):
             self._file_type = "parquet"  # Default to parquet for loaded files
             return
 
+        # Check if we're in standalone mode with a loaded file
+        # (i.e., pump series and test type are already selected from dropdowns)
+        pump_series_selected = self.pump_series_combo.currentText() and \
+                              self.pump_series_combo.currentText() != "Select Pump Series"
+        test_type_selected = self.test_type_combo.currentText() and \
+                            self.test_type_combo.currentText() != "Select Test Type"
+
+        if pump_series_selected and test_type_selected:
+            # Standalone mode with loaded file - use dropdown selections
+            self._pump_series = self.pump_series_combo.currentText()
+            self._test_type = self.test_type_combo.currentText()
+            ext = self._file_path.suffix.lower()
+            self._file_type = "parquet" if ext == ".parquet" else "csv"
+            return
+
+        # Regular mode - extract from file path
         file_parts = self._file_path.parts
 
         if "tests" not in file_parts:
