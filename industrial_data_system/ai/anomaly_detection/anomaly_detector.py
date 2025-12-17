@@ -578,6 +578,23 @@ class AnomalyDetectorWindow(QMainWindow):
             self._file_type = "parquet"  # Default to parquet
             self._load_available_versions()
 
+            # Enable controls and load model if versions are available
+            if self._available_versions:
+                self._enable_controls()
+                # Load the latest model version if data is available
+                if self._dataframe is not None:
+                    self._load_model()
+            else:
+                # Show a message if no models are available
+                self.status_label.setText(
+                    f"⚠ No trained models found for {self._pump_series}/{self._test_type}. "
+                    "Please train a model first or load a data file."
+                )
+                self.status_label.setStyleSheet(
+                    "color: #0F172A; font-weight: 500; padding: 8px; "
+                    "background: #FEF3C7; border-radius: 6px;"
+                )
+
     def _disable_controls(self) -> None:
         """Disable controls when no data is loaded."""
         self.version_combo.setEnabled(False)
