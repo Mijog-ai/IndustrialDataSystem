@@ -151,17 +151,6 @@ class AnomalyDetectorWindow(QMainWindow):
         model_group = QGroupBox("Model Information")
         model_layout = QVBoxLayout(model_group)
 
-        self.model_info_table = QTableWidget()
-        self.model_info_table.setRowCount(5)
-        self.model_info_table.setColumnCount(2)
-        self.model_info_table.setHorizontalHeaderLabels(["Property", "Value"])
-        self.model_info_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.model_info_table.verticalHeader().setVisible(False)
-        self.model_info_table.setMaximumHeight(180)
-        self.model_info_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.model_info_table.setSelectionMode(QTableWidget.NoSelection)
-        model_layout.addWidget(self.model_info_table)
-
         # Version selection
         version_layout = QHBoxLayout()
         version_layout.addWidget(QLabel("Model Version:"))
@@ -191,19 +180,6 @@ class AnomalyDetectorWindow(QMainWindow):
         compare_version_layout.addWidget(self.compare_version_combo)
         compare_version_layout.addStretch()
         compare_layout.addLayout(compare_version_layout)
-
-        # Comparison info table
-        self.compare_info_table = QTableWidget()
-        self.compare_info_table.setRowCount(3)
-        self.compare_info_table.setColumnCount(2)
-        self.compare_info_table.setHorizontalHeaderLabels(["Property", "Value"])
-        self.compare_info_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.compare_info_table.verticalHeader().setVisible(False)
-        self.compare_info_table.setMaximumHeight(110)
-        self.compare_info_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.compare_info_table.setSelectionMode(QTableWidget.NoSelection)
-        self.compare_info_table.setEnabled(False)
-        compare_layout.addWidget(self.compare_info_table)
 
         left_layout.addWidget(compare_group)
 
@@ -535,9 +511,6 @@ class AnomalyDetectorWindow(QMainWindow):
             if metadata_path and metadata_path.exists():
                 self._metadata = json.loads(metadata_path.read_text())
 
-            # Update model info table
-            self._populate_model_info()
-
             self.status_label.setText(
                 f"✓ Model loaded: {self._pump_series} / {self._test_type} (v{version})"
             )
@@ -591,9 +564,6 @@ class AnomalyDetectorWindow(QMainWindow):
 
             self._compare_version = version
 
-            # Update comparison info table
-            self._populate_compare_info()
-
         except Exception as exc:
             QMessageBox.warning(
                 self,
@@ -625,50 +595,6 @@ class AnomalyDetectorWindow(QMainWindow):
 
         return SimpleAutoencoder(state)
 
-    def _populate_model_info(self) -> None:
-        """Populate model information table."""
-        properties = [
-            ("Pump Series", self._pump_series),
-            ("Test Type", self._test_type),
-            ("Version", str(self._current_version or self._metadata.get("version", "Unknown"))),
-            ("Input Dimension", str(self._metadata.get("input_dim", "Unknown"))),
-            ("Files Trained", str(self._metadata.get("file_count", "Unknown"))),
-        ]
-
-        for row, (prop, value) in enumerate(properties):
-            self.model_info_table.setItem(row, 0, QTableWidgetItem(prop))
-            self.model_info_table.setItem(row, 1, QTableWidgetItem(value))
-
-            prop_item = self.model_info_table.item(row, 0)
-            if prop_item:
-                prop_item.setForeground(Qt.darkGray)
-                font = prop_item.font()
-                font.setBold(True)
-                prop_item.setFont(font)
-
-        self.model_info_table.resizeColumnsToContents()
-
-    def _populate_compare_info(self) -> None:
-        """Populate comparison model information table."""
-        properties = [
-            ("Version", str(self._compare_version or "Unknown")),
-            ("Input Dimension", str(self._compare_metadata.get("input_dim", "Unknown"))),
-            ("Files Trained", str(self._compare_metadata.get("file_count", "Unknown"))),
-        ]
-
-        for row, (prop, value) in enumerate(properties):
-            self.compare_info_table.setItem(row, 0, QTableWidgetItem(prop))
-            self.compare_info_table.setItem(row, 1, QTableWidgetItem(value))
-
-            prop_item = self.compare_info_table.item(row, 0)
-            if prop_item:
-                prop_item.setForeground(Qt.darkGray)
-                font = prop_item.font()
-                font.setBold(True)
-                prop_item.setFont(font)
-
-        self.compare_info_table.resizeColumnsToContents()
-
     def _on_version_changed(self, index: int) -> None:
         """Handle version selection change."""
         if index < 0:
@@ -687,7 +613,6 @@ class AnomalyDetectorWindow(QMainWindow):
         """Handle comparison mode toggle."""
         self._comparison_mode = state == Qt.Checked
         self.compare_version_combo.setEnabled(self._comparison_mode)
-        self.compare_info_table.setEnabled(self._comparison_mode)
 
         if self._comparison_mode:
             # Load comparison model
