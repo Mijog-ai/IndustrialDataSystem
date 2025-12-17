@@ -12,10 +12,12 @@ logger = logging.getLogger(__name__)
 
 
 def load_and_process_asc_file(file_name):
-    """Load ASC file and return DataFrame with consistent column structure.
+    """Load ASC or SC file and return DataFrame with consistent column structure.
 
     This function carefully preserves the original column structure to avoid
     dimension mismatches when loading into trained models.
+
+    Note: .sc files are treated identically to .asc files.
     """
     content = ""
     try:
@@ -142,20 +144,21 @@ def convert_asc_to_parquet(
     parquet_path: Optional[Path] = None,
     preserve_asc: bool = True
 ) -> Path:
-    """Convert an ASC file to Parquet format with consistent column structure.
+    """Convert an ASC or SC file to Parquet format with consistent column structure.
 
     Args:
-        asc_path: Path to the ASC file
+        asc_path: Path to the ASC or SC file
         parquet_path: Optional output path. If None, uses same name with .parquet extension
-        preserve_asc: If True, keeps the original ASC file. If False, deletes it.
+        preserve_asc: If True, keeps the original file. If False, deletes it.
 
     Returns:
         Path to the created parquet file
 
     Note:
         This function ensures that the Parquet file has the EXACT same columns
-        as the ASC file to prevent dimension mismatches in model training.
+        as the source file to prevent dimension mismatches in model training.
         Columns with all 0.0 values or without proper names are removed.
+        .sc files are treated identically to .asc files.
     """
     if parquet_path is None:
         parquet_path = asc_path.with_suffix('.parquet')

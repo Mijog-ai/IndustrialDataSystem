@@ -16,6 +16,7 @@ from matplotlib.figure import Figure
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QAction,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -29,6 +30,7 @@ from PyQt5.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenuBar,
     QMessageBox,
     QPushButton,
     QSizePolicy,
@@ -41,12 +43,13 @@ from PyQt5.QtWidgets import (
 
 from industrial_data_system.core.db_manager import DatabaseManager, ModelRegistryRecord
 from industrial_data_system.utils.asc_utils import (
+    convert_asc_to_parquet,
     load_and_process_asc_file,
     load_and_process_csv_file,
     load_and_process_tdms_file,
 )
 
-__all__ = ["run"]
+__all__ = ["run", "run_standalone"]
 
 
 class AnomalyDetectorWindow(QMainWindow):
@@ -86,9 +89,9 @@ class AnomalyDetectorWindow(QMainWindow):
         }
     """
 
-    def __init__(self, file_path: Path) -> None:
+    def __init__(self, file_path: Optional[Path] = None) -> None:
         super().__init__()
-        self._file_path = file_path
+        self._file_path: Optional[Path] = file_path
         self._dataframe: Optional[pd.DataFrame] = None
         self._model = None
         self._scaler = None
@@ -117,17 +120,39 @@ class AnomalyDetectorWindow(QMainWindow):
 
         self.setObjectName("anomaly-detector-window")
         self.setAttribute(Qt.WA_DeleteOnClose, True)
-        self.setWindowTitle(f"Anomaly Detection - {self._file_path.name}")
+        window_title = f"Anomaly Detection - {file_path.name}" if file_path else "Anomaly Detection"
+        self.setWindowTitle(window_title)
         self.resize(1600, 900)
 
         self._build_ui()
-        self._load_data()
-        self._extract_path_info()
-        self._load_available_versions()
-        self._load_model()
+
+        # Only load data if file_path is provided
+        if file_path:
+            self._load_data()
+            self._extract_path_info()
+            self._load_available_versions()
+            self._load_model()
+        else:
+            # Standalone mode: populate pump series and test types
+            self._populate_pump_series()
+            self._disable_controls()
 
     def _build_ui(self) -> None:
         """Build the main user interface."""
+        # ========== MENU BAR ==========
+        menubar = self.menuBar()
+        file_menu = menubar.addMenu("File")
+
+        load_action = QAction("Load Data File...", self)
+        load_action.triggered.connect(self._load_file_dialog)
+        file_menu.addAction(load_action)
+
+        file_menu.addSeparator()
+
+        exit_action = QAction("Exit", self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
 
@@ -146,6 +171,32 @@ class AnomalyDetectorWindow(QMainWindow):
         header = QLabel("Anomaly Detector")
         header.setStyleSheet("font-size: 20px; font-weight: 600; color: #DC2626;")
         left_layout.addWidget(header)
+
+        # Data selection group (for standalone mode)
+        self.data_selection_group = QGroupBox("Data Selection")
+        data_selection_layout = QVBoxLayout(self.data_selection_group)
+
+        # Pump series selection
+        pump_layout = QHBoxLayout()
+        pump_layout.addWidget(QLabel("Pump Series:"))
+        self.pump_series_combo = QComboBox()
+        self.pump_series_combo.setMinimumWidth(150)
+        self.pump_series_combo.currentIndexChanged.connect(self._on_pump_series_changed)
+        pump_layout.addWidget(self.pump_series_combo)
+        pump_layout.addStretch()
+        data_selection_layout.addLayout(pump_layout)
+
+        # Test type selection
+        test_layout = QHBoxLayout()
+        test_layout.addWidget(QLabel("Test Type:"))
+        self.test_type_combo = QComboBox()
+        self.test_type_combo.setMinimumWidth(150)
+        self.test_type_combo.currentIndexChanged.connect(self._on_test_type_changed)
+        test_layout.addWidget(self.test_type_combo)
+        test_layout.addStretch()
+        data_selection_layout.addLayout(test_layout)
+
+        left_layout.addWidget(self.data_selection_group)
 
         # Model info group
         model_group = QGroupBox("Model Information")
@@ -374,7 +425,7 @@ class AnomalyDetectorWindow(QMainWindow):
             return load_and_process_csv_file(str(path))
         if ext == ".tdms":
             return load_and_process_tdms_file(str(path))
-        if ext == ".asc":
+        if ext in {".asc", ".sc"}:  # .sc files treated same as .asc
             return load_and_process_asc_file(str(path))
         if ext in {".xls", ".xlsx", ".xlsm", ".xlsb"}:
             return pd.read_excel(path)
@@ -383,6 +434,13 @@ class AnomalyDetectorWindow(QMainWindow):
 
     def _extract_path_info(self) -> None:
         """Extract pump series, test type, and file type from file path."""
+        if not self._file_path:
+            # In standalone mode, use selected values from dropdowns
+            self._pump_series = self.pump_series_combo.currentText()
+            self._test_type = self.test_type_combo.currentText()
+            self._file_type = "parquet"  # Default to parquet for loaded files
+            return
+
         file_parts = self._file_path.parts
 
         if "tests" not in file_parts:
@@ -397,6 +455,127 @@ class AnomalyDetectorWindow(QMainWindow):
 
         ext = self._file_path.suffix.lower()
         self._file_type = "parquet" if ext == ".parquet" else "csv"
+
+    def _load_file_dialog(self) -> None:
+        """Open file dialog to load a new data file."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Data File",
+            "",
+            "All Supported Files (*.sc *.asc *.parquet *.csv *.tdms);;SC Files (*.sc);;ASC Files (*.asc);;Parquet Files (*.parquet);;CSV Files (*.csv);;TDMS Files (*.tdms);;All Files (*.*)"
+        )
+
+        if not file_path:
+            return  # User cancelled
+
+        file_path = Path(file_path)
+
+        # Check if pump series and test type are selected
+        if not self.pump_series_combo.currentText() or not self.test_type_combo.currentText():
+            QMessageBox.warning(
+                self,
+                "Selection Required",
+                "Please select Pump Series and Test Type before loading a file."
+            )
+            return
+
+        try:
+            # Convert .sc or .asc files to parquet first
+            if file_path.suffix.lower() in {'.sc', '.asc'}:
+                self.status_label.setText("Converting file to Parquet format...")
+                parquet_path = convert_asc_to_parquet(file_path, preserve_asc=True)
+                if parquet_path is None:
+                    QMessageBox.critical(
+                        self,
+                        "Conversion Failed",
+                        "The file could not be converted to Parquet format. It may be empty or invalid."
+                    )
+                    return
+                file_path = parquet_path
+
+            # Load the data
+            self._file_path = file_path
+            self._load_data()
+            self._extract_path_info()
+            self._load_available_versions()
+
+            if self._available_versions:
+                self._load_model()
+                self._enable_controls()
+                self.setWindowTitle(f"Anomaly Detection - {file_path.name}")
+            else:
+                QMessageBox.warning(
+                    self,
+                    "No Models Available",
+                    f"No trained models found for {self._pump_series}/{self._test_type}. Please train a model first."
+                )
+
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Load Failed",
+                f"Failed to load file:\n{exc}"
+            )
+
+    def _populate_pump_series(self) -> None:
+        """Populate pump series dropdown from database."""
+        try:
+            pump_series_records = self._database.list_pump_series()
+            self.pump_series_combo.clear()
+            self.pump_series_combo.addItem("Select Pump Series", None)
+
+            for record in pump_series_records:
+                self.pump_series_combo.addItem(record.name, record.name)
+
+        except Exception as exc:
+            self.status_label.setText(f"⚠ Failed to load pump series: {exc}")
+
+    def _on_pump_series_changed(self, index: int) -> None:
+        """Handle pump series selection change."""
+        pump_series = self.pump_series_combo.currentData()
+
+        if pump_series:
+            # Load test types for this pump series
+            try:
+                test_type_records = self._database.list_test_types(pump_series=pump_series)
+                self.test_type_combo.clear()
+                self.test_type_combo.addItem("Select Test Type", None)
+
+                for record in test_type_records:
+                    self.test_type_combo.addItem(record.name, record.name)
+
+            except Exception as exc:
+                self.status_label.setText(f"⚠ Failed to load test types: {exc}")
+        else:
+            self.test_type_combo.clear()
+            self.test_type_combo.addItem("Select Test Type", None)
+
+    def _on_test_type_changed(self, index: int) -> None:
+        """Handle test type selection change."""
+        test_type = self.test_type_combo.currentData()
+        pump_series = self.pump_series_combo.currentData()
+
+        if test_type and pump_series:
+            # Update model versions for this combination
+            self._pump_series = pump_series
+            self._test_type = test_type
+            self._file_type = "parquet"  # Default to parquet
+            self._load_available_versions()
+
+    def _disable_controls(self) -> None:
+        """Disable controls when no data is loaded."""
+        self.version_combo.setEnabled(False)
+        self.compare_checkbox.setEnabled(False)
+        self.compare_version_combo.setEnabled(False)
+        self.threshold_method.setEnabled(False)
+        self.custom_threshold.setEnabled(False)
+        self.status_label.setText("Load a data file from File menu to begin")
+
+    def _enable_controls(self) -> None:
+        """Enable controls when data is loaded."""
+        self.version_combo.setEnabled(True)
+        self.compare_checkbox.setEnabled(True)
+        self.threshold_method.setEnabled(True)
 
     def _load_available_versions(self) -> None:
         """Load all available model versions from database."""
@@ -435,8 +614,6 @@ class AnomalyDetectorWindow(QMainWindow):
 
     def _get_version_paths(self, version: int) -> Tuple[Path, Path, Path]:
         """Get model, scaler, and metadata paths for a specific version."""
-        test_folder = self._file_path.parent
-
         # Find the record for this version
         record = next(
             (r for r in self._available_versions if r.version == version), None
@@ -447,7 +624,12 @@ class AnomalyDetectorWindow(QMainWindow):
             model_path = Path(record.model_path)
             scaler_path = Path(record.scaler_path) if record.scaler_path else None
             metadata_path = Path(record.metadata_path) if record.metadata_path else None
-        else:
+            return model_path, scaler_path, metadata_path
+
+        # Fallback: try to construct paths from file path if available
+        if self._file_path:
+            test_folder = self._file_path.parent
+
             # Fallback to versioned file naming convention
             if version == self._available_versions[0].version if self._available_versions else 0:
                 # Latest version uses non-versioned filename
@@ -460,7 +642,10 @@ class AnomalyDetectorWindow(QMainWindow):
                 scaler_path = test_folder / f"scaler_{self._file_type}_v{version:03d}.pkl"
                 metadata_path = test_folder / f"metadata_{self._file_type}_v{version:03d}.json"
 
-        return model_path, scaler_path, metadata_path
+            return model_path, scaler_path, metadata_path
+
+        # No paths available
+        raise ValueError("Cannot determine model paths: no database record or file path available")
 
     def _load_model(self, version: Optional[int] = None) -> None:
         """Load the trained model for this file's test type.
@@ -469,8 +654,6 @@ class AnomalyDetectorWindow(QMainWindow):
             version: Specific version to load. If None, loads the latest version.
         """
         try:
-            test_folder = self._file_path.parent
-
             # Determine which version to load
             if version is None:
                 if self._available_versions:
@@ -484,8 +667,9 @@ class AnomalyDetectorWindow(QMainWindow):
             # Get paths for this version
             model_path, scaler_path, metadata_path = self._get_version_paths(version)
 
-            # Fallback to non-versioned paths if versioned don't exist
-            if not model_path.exists():
+            # Fallback to non-versioned paths if versioned don't exist (only if we have a file path)
+            if not model_path.exists() and self._file_path:
+                test_folder = self._file_path.parent
                 model_path = test_folder / f"model_{self._file_type}.pkl"
                 scaler_path = test_folder / f"scaler_{self._file_type}.pkl"
                 metadata_path = test_folder / f"metadata_{self._file_type}.json"
@@ -1105,6 +1289,30 @@ def run(file_path: Path | str, parent: Optional[QWidget] = None) -> None:
     except ValueError as exc:
         QMessageBox.warning(None, "Anomaly Detector", str(exc))
         return
+    except Exception as exc:
+        QMessageBox.critical(None, "Anomaly Detector", f"Unable to open detector: {exc}")
+        return
+
+    window.show()
+    window.raise_()
+    window.activateWindow()
+    _open_windows.append(window)
+
+
+def run_standalone(parent: Optional[QWidget] = None) -> None:
+    """Launch the anomaly detector window in standalone mode without a file.
+
+    This allows users to:
+    1. Select pump series and test type from dropdowns
+    2. Load a data file (.sc, .asc, or parquet) via File menu
+    3. Automatically convert .sc/.asc files to parquet
+    4. Analyze the data with trained models for the selected pump/test type
+
+    Args:
+        parent: Optional parent widget
+    """
+    try:
+        window = AnomalyDetectorWindow(file_path=None)
     except Exception as exc:
         QMessageBox.critical(None, "Anomaly Detector", f"Unable to open detector: {exc}")
         return
