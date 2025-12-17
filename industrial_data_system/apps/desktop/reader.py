@@ -38,7 +38,7 @@ from PyQt5.QtWidgets import (
 )
 
 from industrial_data_system.ai.toolkit import (  # run_ai_data_study,; run_training_simulation,
-    run_anomaly_detector,
+    run_anomaly_detector_standalone,
     run_plotter,
 )
 from industrial_data_system.apps.desktop.uploader import IndustrialTheme
@@ -383,7 +383,7 @@ class ReaderDashboard(QWidget):
 
         tool_buttons: List[tuple[str, Callable[..., Optional[str]], bool]] = [
             ("Plotter", run_plotter, True),
-            ("Anomaly Detector", run_anomaly_detector, True),
+            ("Anomaly Detector", run_anomaly_detector_standalone, False),  # Standalone mode - no file required
             # ("AI Data Lab", run_ai_data_study, False),
             # ("Train", run_training_simulation, False),
         ]
