@@ -56,10 +56,12 @@ class Autoencoder:
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim or max(4, input_dim // 2)
         self.rng = rng or np.random.default_rng()
+        # model_manager.py:59-63
         scale = 1.0 / max(1, self.hidden_dim)
         self.W1 = self.rng.normal(scale=scale, size=(input_dim, self.hidden_dim))
-        self.b1 = np.zeros(self.hidden_dim, dtype=np.float32)
         self.W2 = self.rng.normal(scale=scale, size=(self.hidden_dim, input_dim))
+        self.b1 = np.zeros(self.hidden_dim, dtype=np.float32)
+        # self.W2 = self.rng.normal(scale=scale, size=(self.hidden_dim, input_dim))
         self.b2 = np.zeros(input_dim, dtype=np.float32)
 
     def forward(self, features: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:

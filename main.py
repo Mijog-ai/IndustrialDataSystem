@@ -23,7 +23,7 @@ class GatewayWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Industrial Data System")
+        self.setWindowTitle("Inline Data System")
         self.setMinimumSize(520, 360)
 
         container = QWidget()

@@ -752,7 +752,7 @@ class ReaderApp(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Industrial Data Reader")
+        self.setWindowTitle("Inline Data Reader")
         self.setMinimumSize(1100, 700)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 

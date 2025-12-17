@@ -491,7 +491,7 @@ class LoginPage(QWidget):
         header_layout.setSpacing(8)
         header_layout.setAlignment(Qt.AlignCenter)
 
-        title = QLabel("Industrial Data System")
+        title = QLabel("Inline Data System")
         title.setProperty("heading", True)
         header_layout.addWidget(title, alignment=Qt.AlignCenter)
 
@@ -690,7 +690,7 @@ class LoginPage(QWidget):
         if not identifier or not password:
             QMessageBox.warning(
                 self,
-                "Industrial Data System",
+                "Inline Data System",
                 "Username/Email and password are required.",
             )
             return
@@ -703,11 +703,11 @@ class LoginPage(QWidget):
         confirm = self.signup_confirm_input.text()
 
         if not email or not username or not password or not confirm:
-            QMessageBox.warning(self, "Industrial Data System", "All signup fields are required.")
+            QMessageBox.warning(self, "Inline Data System", "All signup fields are required.")
             return
 
         if password != confirm:
-            QMessageBox.warning(self, "Industrial Data System", "Passwords do not match.")
+            QMessageBox.warning(self, "Inline Data System", "Passwords do not match.")
             return
 
         self.signup_requested.emit(email, username, password)
@@ -1117,7 +1117,7 @@ class DashboardPage(QWidget):
         if not pump_series:
             QMessageBox.warning(
                 self,
-                "Industrial Data System",
+                "Inline Data System",
                 "Please select or create a pump series before adding a test type.",
             )
             return
@@ -1139,7 +1139,7 @@ class DashboardPage(QWidget):
                 else:
                     QMessageBox.information(
                         self,
-                        "Industrial Data System",
+                        "Inline Data System",
                         f"Test type '{test_type}' already exists.",
                     )
 
@@ -1152,7 +1152,7 @@ class DashboardPage(QWidget):
                 if series_name in self.catalog:
                     QMessageBox.information(
                         self,
-                        "Industrial Data System",
+                        "Inline Data System",
                         f"Pump series '{series_name}' already exists.",
                     )
                     return
@@ -1176,7 +1176,7 @@ class DashboardPage(QWidget):
 
         else:
             self.welcome_label.setText("Dashboard")
-            self.subtitle_label.setText("Manage your industrial test data")
+            self.subtitle_label.setText("Manage your industrial data")
 
     # def update_files(self, files: List[Dict[str, Any]]) -> None:
     #     self.file_records = files
@@ -1261,11 +1261,11 @@ class DashboardPage(QWidget):
     def _open_selected_file(self) -> None:
         record = self._get_selected_record()
         if not record:
-            QMessageBox.information(self, "Industrial Data System", "Select a file first.")
+            QMessageBox.information(self, "Inline Data System", "Select a file first.")
             return
         path_value = record.get("absolute_path") or record.get("file_path")
         if not path_value:
-            QMessageBox.warning(self, "Industrial Data System", "No file path available.")
+            QMessageBox.warning(self, "Inline Data System", "No file path available.")
             return
         path = Path(path_value)
         if not path.is_absolute():
@@ -1273,18 +1273,18 @@ class DashboardPage(QWidget):
             if base_path:
                 path = Path(base_path) / path
         if not path.exists():
-            QMessageBox.warning(self, "Industrial Data System", f"File not found: {path}")
+            QMessageBox.warning(self, "Inline Data System", f"File not found: {path}")
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     def _open_selected_folder(self) -> None:
         record = self._get_selected_record()
         if not record:
-            QMessageBox.information(self, "Industrial Data System", "Select a file first.")
+            QMessageBox.information(self, "Inline Data System", "Select a file first.")
             return
         path_value = record.get("absolute_path") or record.get("file_path")
         if not path_value:
-            QMessageBox.warning(self, "Industrial Data System", "No file path available.")
+            QMessageBox.warning(self, "Inline Data System", "No file path available.")
             return
         path = Path(path_value)
         if not path.is_absolute():
@@ -1292,18 +1292,18 @@ class DashboardPage(QWidget):
             if base_path:
                 path = Path(base_path) / path
         if not path.exists():
-            QMessageBox.warning(self, "Industrial Data System", f"File not found: {path}")
+            QMessageBox.warning(self, "Inline Data System", f"File not found: {path}")
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent)))
 
     def _copy_selected_path(self) -> None:
         record = self._get_selected_record()
         if not record:
-            QMessageBox.information(self, "Industrial Data System", "Select a file first.")
+            QMessageBox.information(self, "Inline Data System", "Select a file first.")
             return
         path_value = record.get("absolute_path") or record.get("file_path")
         if not path_value:
-            QMessageBox.warning(self, "Industrial Data System", "No file path available.")
+            QMessageBox.warning(self, "Inline Data System", "No file path available.")
             return
         path = Path(path_value)
         if not path.is_absolute():
@@ -1311,7 +1311,7 @@ class DashboardPage(QWidget):
             if base_path:
                 path = Path(base_path) / path
         QApplication.clipboard().setText(str(path))
-        QMessageBox.information(self, "Industrial Data System", "File path copied to clipboard.")
+        QMessageBox.information(self, "Inline Data System", "File path copied to clipboard.")
 
     def _load_next_page(self):
         """Load next page"""
@@ -1329,11 +1329,11 @@ class DashboardPage(QWidget):
     def _show_selected_properties(self) -> None:
         record = self._get_selected_record()
         if not record:
-            QMessageBox.information(self, "Industrial Data System", "Select a file first.")
+            QMessageBox.information(self, "Inline Data System", "Select a file first.")
             return
         path_value = record.get("absolute_path") or record.get("file_path")
         if not path_value:
-            QMessageBox.warning(self, "Industrial Data System", "No file path available.")
+            QMessageBox.warning(self, "Inline Data System", "No file path available.")
             return
         path = Path(path_value)
         if not path.is_absolute():
@@ -1341,7 +1341,7 @@ class DashboardPage(QWidget):
             if base_path:
                 path = Path(base_path) / path
         if not path.exists():
-            QMessageBox.warning(self, "Industrial Data System", f"File not found: {path}")
+            QMessageBox.warning(self, "Inline Data System", f"File not found: {path}")
             return
         stat = path.stat()
         size_mb = stat.st_size / (1024 * 1024)
@@ -1349,7 +1349,7 @@ class DashboardPage(QWidget):
         created = datetime.fromtimestamp(stat.st_ctime).strftime("%Y-%m-%d %H:%M:%S")
         QMessageBox.information(
             self,
-            "Industrial Data System",
+            "Inline Data System",
             (
                 f"Location: {path}\n"
                 f"Size: {size_mb:.2f} MB\n"
@@ -1363,7 +1363,7 @@ class DashboardPage(QWidget):
         if not pump_series or pump_series == "No pump series available":
             QMessageBox.warning(
                 self,
-                "Industrial Data System",
+                "Inline Data System",
                 "Please select or create a pump series before uploading files.",
             )
             return
@@ -1371,7 +1371,7 @@ class DashboardPage(QWidget):
         if not test_type or test_type == "No test types available":
             QMessageBox.warning(
                 self,
-                "Industrial Data System",
+                "Inline Data System",
                 "Please select or create a test type before uploading files.",
             )
             return
@@ -1469,7 +1469,7 @@ class DashboardPage(QWidget):
         """Delete all selected files"""
         checked_records = self._get_checked_records()
         if not checked_records:
-            QMessageBox.information(self, "Industrial Data System", "No files selected.")
+            QMessageBox.information(self, "Inline Data System", "No files selected.")
             return
 
         # Confirm deletion
@@ -1490,7 +1490,7 @@ class DashboardPage(QWidget):
         """Move all selected files to a new pump series/test type"""
         checked_records = self._get_checked_records()
         if not checked_records:
-            QMessageBox.information(self, "Industrial Data System", "No files selected.")
+            QMessageBox.information(self, "Inline Data System", "No files selected.")
             return
 
         # Create dialog for selecting new location
@@ -1667,7 +1667,7 @@ class IndustrialDataApp(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Industrial Data System")
+        self.setWindowTitle("Inline Data System")
         self.resize(1200, 800)
         self.setMinimumSize(900, 600)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
@@ -2225,7 +2225,7 @@ class IndustrialDataApp(QMainWindow):
         dialog = QMessageBox(self)
         dialog.setIcon(icon)
         dialog.setText(message)
-        dialog.setWindowTitle("Industrial Data System")
+        dialog.setWindowTitle("Inline Data System")
         dialog.setStyleSheet(
             f"""
             QMessageBox {{
