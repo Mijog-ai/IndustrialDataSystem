@@ -42,6 +42,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from industrial_data_system.ai.anomaly_detection import anomaly_prediction_plotter
 from industrial_data_system.core.config import get_config
 from industrial_data_system.core.db_manager import DatabaseManager, ModelRegistryRecord
 from industrial_data_system.utils.asc_utils import (
@@ -330,6 +331,11 @@ class AnomalyDetectorWindow(QMainWindow):
         export_plot_btn.setProperty("secondary", True)
         export_plot_btn.clicked.connect(self._export_plot)
         export_layout.addWidget(export_plot_btn)
+
+        decode_predict_btn = QPushButton("Decode & Predict")
+        decode_predict_btn.setProperty("primary", True)
+        decode_predict_btn.clicked.connect(self._decode_and_predict)
+        export_layout.addWidget(decode_predict_btn)
 
         close_btn = QPushButton("Close")
         close_btn.setProperty("secondary", True)
@@ -1376,6 +1382,86 @@ class AnomalyDetectorWindow(QMainWindow):
                 QMessageBox.information(self, "Export Success", f"Plot saved to:\n{file_path}")
             except Exception as exc:
                 QMessageBox.critical(self, "Export Failed", f"Failed to export plot:\n{exc}")
+
+    def _decode_and_predict(self) -> None:
+        """Decode the data using the model and open prediction plotter."""
+        if self._model is None or self._scaler is None:
+            QMessageBox.warning(
+                self,
+                "Decode & Predict",
+                "No model is loaded. Cannot decode predictions."
+            )
+            return
+
+        if self._dataframe is None:
+            QMessageBox.warning(
+                self,
+                "Decode & Predict",
+                "No data is loaded."
+            )
+            return
+
+        try:
+            # Prepare data (same as in _detect_anomalies)
+            df = self._dataframe.copy()
+            numeric_df = df.select_dtypes(include=[np.number])
+
+            if numeric_df.empty:
+                raise ValueError("No numeric columns found in data")
+
+            # Remove empty columns (all NaN) to match training behavior
+            numeric_df = numeric_df.dropna(axis=1, how="all")
+
+            # Handle missing values
+            numeric_df = numeric_df.fillna(0.0)
+            numeric_df = numeric_df.replace([np.inf, -np.inf], 0.0)
+
+            # Check if columns match model input
+            if numeric_df.shape[1] != self._model.input_dim:
+                raise ValueError(
+                    f"Data has {numeric_df.shape[1]} columns but model expects "
+                    f"{self._model.input_dim} columns"
+                )
+
+            # Scale data
+            scaled_data = self._scaler.transform(numeric_df.values)
+
+            # Get predictions (reconstructions) from the model
+            reconstructed_data, _ = self._model.forward(scaled_data)
+
+            # Inverse transform to get predictions in original scale
+            predictions = self._scaler.inverse_transform(reconstructed_data)
+
+            # Create DataFrames for predictions and actual data
+            predictions_df = pd.DataFrame(
+                predictions,
+                columns=numeric_df.columns,
+                index=numeric_df.index
+            )
+
+            # Determine file name
+            file_name = self._file_path.name if self._file_path else "New Dataset"
+
+            # Open the prediction plotter window
+            anomaly_prediction_plotter.run(
+                actual_data=numeric_df,
+                predictions=predictions_df,
+                file_name=file_name
+            )
+
+            # Update status
+            self.status_label.setText("✓ Prediction plotter opened")
+            self.status_label.setStyleSheet(
+                "color: #0F172A; font-weight: 500; padding: 8px; "
+                "background: #D1FAE5; border-radius: 6px;"
+            )
+
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Decode Failed",
+                f"Failed to decode predictions:\n\n{exc}"
+            )
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         """Handle window close event."""
