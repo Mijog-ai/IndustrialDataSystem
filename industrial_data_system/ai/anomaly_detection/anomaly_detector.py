@@ -580,7 +580,7 @@ class AnomalyDetectorWindow(QMainWindow):
 
                 # Construct path: files_base_path / pump_series / tests / test_type / newdatasets
                 config = get_config()
-                newdatasets_dir = config.files_base_path / pump_series / "tests" / test_type / "newdatasets"
+                newdatasets_dir = config.files_base_path / pump_series / "tests" / "newdatasets"
 
                 # Create the directory if it doesn't exist
                 newdatasets_dir.mkdir(parents=True, exist_ok=True)
