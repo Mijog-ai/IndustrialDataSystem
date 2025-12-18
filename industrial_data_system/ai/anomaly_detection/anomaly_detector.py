@@ -184,12 +184,28 @@ class AnomalyDetectorWindow(QMainWindow):
         left_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 8, 0)
-        left_layout.setSpacing(12)
+        left_layout.setSpacing(0)
 
         # Header
         header = QLabel("Anomaly Detector")
-        header.setStyleSheet("font-size: 20px; font-weight: 600; color: #DC2626;")
+        header.setStyleSheet("font-size: 20px; font-weight: 600; color: #DC2626; margin-bottom: 12px;")
         left_layout.addWidget(header)
+
+        # Create vertical splitter for resizable group boxes
+        left_splitter = QSplitter(Qt.Vertical)
+        left_splitter.setHandleWidth(6)
+        left_splitter.setStyleSheet(
+            """
+            QSplitter::handle {
+                background: #E5E7EB;
+                margin: 2px 0px;
+            }
+            QSplitter::handle:hover {
+                background: #DC2626;
+            }
+            """
+        )
+        left_layout.addWidget(left_splitter)
 
         # Data selection group (for standalone mode)
         self.data_selection_group = QGroupBox("Data Selection")
@@ -215,7 +231,7 @@ class AnomalyDetectorWindow(QMainWindow):
         test_layout.addStretch()
         data_selection_layout.addLayout(test_layout)
 
-        left_layout.addWidget(self.data_selection_group)
+        left_splitter.addWidget(self.data_selection_group)
 
         # Model info group
         model_group = QGroupBox("Model Information")
@@ -231,7 +247,7 @@ class AnomalyDetectorWindow(QMainWindow):
         version_layout.addStretch()
         model_layout.addLayout(version_layout)
 
-        left_layout.addWidget(model_group)
+        left_splitter.addWidget(model_group)
 
         # Comparison mode group
         compare_group = QGroupBox("Model Comparison")
@@ -251,7 +267,7 @@ class AnomalyDetectorWindow(QMainWindow):
         compare_version_layout.addStretch()
         compare_layout.addLayout(compare_version_layout)
 
-        left_layout.addWidget(compare_group)
+        left_splitter.addWidget(compare_group)
 
         # Detection settings group
         settings_group = QGroupBox("Detection Settings")
@@ -280,7 +296,7 @@ class AnomalyDetectorWindow(QMainWindow):
         detect_btn.clicked.connect(self._detect_anomalies)
         settings_layout.addWidget(detect_btn, 3, 0, 1, 2)
 
-        left_layout.addWidget(settings_group)
+        left_splitter.addWidget(settings_group)
 
         # Statistics group
         stats_group = QGroupBox("Detection Results")
@@ -297,25 +313,45 @@ class AnomalyDetectorWindow(QMainWindow):
         self.stats_table.setSelectionMode(QTableWidget.NoSelection)
         stats_layout.addWidget(self.stats_table)
 
-        left_layout.addWidget(stats_group)
+        left_splitter.addWidget(stats_group)
 
-        # Export buttons
+        # Export buttons container
+        export_container = QWidget()
+        export_layout = QVBoxLayout(export_container)
+        export_layout.setContentsMargins(0, 0, 0, 0)
+        export_layout.setSpacing(8)
+
         export_anomalies_btn = QPushButton("Export Anomalies")
         export_anomalies_btn.setProperty("secondary", True)
         export_anomalies_btn.clicked.connect(self._export_anomalies)
-        left_layout.addWidget(export_anomalies_btn)
+        export_layout.addWidget(export_anomalies_btn)
 
         export_plot_btn = QPushButton("Export Plot")
         export_plot_btn.setProperty("secondary", True)
         export_plot_btn.clicked.connect(self._export_plot)
-        left_layout.addWidget(export_plot_btn)
+        export_layout.addWidget(export_plot_btn)
 
         close_btn = QPushButton("Close")
         close_btn.setProperty("secondary", True)
         close_btn.clicked.connect(self.close)
-        left_layout.addWidget(close_btn)
+        export_layout.addWidget(close_btn)
 
-        left_layout.addStretch()
+        export_layout.addStretch()
+
+        left_splitter.addWidget(export_container)
+
+        # Configure splitter stretch factors
+        # Make stats and export container take minimal space by default
+        left_splitter.setStretchFactor(0, 1)  # Data Selection
+        left_splitter.setStretchFactor(1, 0)  # Model Information
+        left_splitter.setStretchFactor(2, 0)  # Model Comparison
+        left_splitter.setStretchFactor(3, 1)  # Detection Settings
+        left_splitter.setStretchFactor(4, 2)  # Detection Results
+        left_splitter.setStretchFactor(5, 0)  # Export buttons
+
+        # Set collapsible behavior for all sections
+        for i in range(left_splitter.count()):
+            left_splitter.setCollapsible(i, False)
 
         # ========== RIGHT PANEL: Plots ==========
         right_panel = QWidget()
