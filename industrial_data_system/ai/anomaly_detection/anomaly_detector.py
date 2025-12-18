@@ -41,6 +41,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from industrial_data_system.core.config import get_config
 from industrial_data_system.core.db_manager import DatabaseManager, ModelRegistryRecord
 from industrial_data_system.utils.asc_utils import (
     convert_asc_to_parquet,
@@ -499,7 +500,24 @@ class AnomalyDetectorWindow(QMainWindow):
             # Convert .sc or .asc files to parquet first
             if file_path.suffix.lower() in {'.sc', '.asc'}:
                 self.status_label.setText("Converting file to Parquet format...")
-                parquet_path = convert_asc_to_parquet(file_path, preserve_asc=True)
+
+                # Get pump series and test type from selections
+                pump_series = self.pump_series_combo.currentText()
+                test_type = self.test_type_combo.currentText()
+
+                # Construct path: files_base_path / pump_series / tests / test_type / newdatasets
+                config = get_config()
+                newdatasets_dir = config.files_base_path / pump_series / "tests" / test_type / "newdatasets"
+
+                # Create the directory if it doesn't exist
+                newdatasets_dir.mkdir(parents=True, exist_ok=True)
+
+                # Construct the target parquet file path
+                parquet_filename = file_path.stem + ".parquet"
+                target_parquet_path = newdatasets_dir / parquet_filename
+
+                # Convert to parquet at the new location
+                parquet_path = convert_asc_to_parquet(file_path, parquet_path=target_parquet_path, preserve_asc=True)
                 if parquet_path is None:
                     QMessageBox.critical(
                         self,
