@@ -188,6 +188,7 @@ class QuickPlotterWindow(QMainWindow):
         # ========== LEFT PANEL: Controls ==========
         left_panel = QWidget()
         left_panel.setMinimumWidth(250)
+        left_panel.setMaximumWidth(500)  # Prevent left panel from growing too large
         left_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 8, 0)
@@ -382,7 +383,13 @@ class QuickPlotterWindow(QMainWindow):
         self.main_splitter.addWidget(right_panel)
 
         # Set initial splitter sizes (25% left, 75% right)
-        self.main_splitter.setSizes([350, 1050])
+        # Using proportional sizes that adapt to window size
+        self.main_splitter.setStretchFactor(0, 1)  # Left panel
+        self.main_splitter.setStretchFactor(1, 3)  # Right panel gets more space
+
+        # Set collapsible behavior - left panel can be collapsed
+        self.main_splitter.setCollapsible(0, False)
+        self.main_splitter.setCollapsible(1, False)
 
         # Add splitter to main layout
         main_layout.addWidget(self.main_splitter)

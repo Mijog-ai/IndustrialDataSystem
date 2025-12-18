@@ -35,6 +35,7 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSpinBox,
+    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -157,15 +158,32 @@ class AnomalyDetectorWindow(QMainWindow):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
 
+        # Main horizontal layout to hold the splitter
         main_layout = QHBoxLayout(self.central_widget)
         main_layout.setContentsMargins(16, 16, 16, 16)
-        main_layout.setSpacing(16)
+        main_layout.setSpacing(0)
+
+        # Create horizontal splitter for resizable panels
+        self.main_splitter = QSplitter(Qt.Horizontal)
+        self.main_splitter.setHandleWidth(8)
+        self.main_splitter.setStyleSheet(
+            """
+            QSplitter::handle {
+                background: #E5E7EB;
+            }
+            QSplitter::handle:hover {
+                background: #DC2626;
+            }
+            """
+        )
 
         # ========== LEFT PANEL: Controls ==========
         left_panel = QWidget()
-        left_panel.setMaximumWidth(400)
+        left_panel.setMinimumWidth(300)
+        left_panel.setMaximumWidth(600)  # Increased max width, but still constrained
+        left_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setContentsMargins(0, 0, 8, 0)
         left_layout.setSpacing(12)
 
         # Header
@@ -301,6 +319,7 @@ class AnomalyDetectorWindow(QMainWindow):
 
         # ========== RIGHT PANEL: Plots ==========
         right_panel = QWidget()
+        right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(12)
@@ -326,9 +345,21 @@ class AnomalyDetectorWindow(QMainWindow):
         right_layout.addWidget(self.toolbar)
         right_layout.addWidget(self.canvas)
 
-        # Add panels to main layout
-        main_layout.addWidget(left_panel, stretch=1)
-        main_layout.addWidget(right_panel, stretch=3)
+        # Add panels to splitter
+        self.main_splitter.addWidget(left_panel)
+        self.main_splitter.addWidget(right_panel)
+
+        # Set initial splitter sizes (25% left, 75% right)
+        # Using proportional sizes that adapt to window size
+        self.main_splitter.setStretchFactor(0, 1)  # Left panel
+        self.main_splitter.setStretchFactor(1, 3)  # Right panel gets more space
+
+        # Set collapsible behavior
+        self.main_splitter.setCollapsible(0, False)
+        self.main_splitter.setCollapsible(1, False)
+
+        # Add splitter to main layout
+        main_layout.addWidget(self.main_splitter)
 
         # Apply styles
         self.setStyleSheet(
