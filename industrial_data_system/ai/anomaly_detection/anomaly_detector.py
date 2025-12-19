@@ -61,35 +61,39 @@ class AnomalyDetectorWindow(QMainWindow):
 
     BUTTON_STYLES = """
         QPushButton {
-            background-color: #DC2626;
+            background-color: #E81123;
             color: #FFFFFF;
             padding: 8px 18px;
             border: none;
-            border-radius: 6px;
+            border-radius: 4px;
             font-weight: 600;
             min-height: 32px;
         }
         QPushButton:disabled {
-            background-color: #94A3B8;
-            color: #FFFFFF;
+            background-color: #6B6B6B;
+            color: #8B8B8B;
         }
         QPushButton:hover:!disabled {
-            background-color: #B91C1C;
+            background-color: #C50F1F;
         }
         QPushButton:pressed:!disabled {
-            background-color: #991B1B;
+            background-color: #A00E1A;
         }
         QPushButton[secondary="true"] {
-            background-color: #6B7280;
+            background-color: #3A3A3A;
+            color: #FFFFFF;
+            border: 1px solid #3E3E3E;
         }
         QPushButton[secondary="true"]:hover:!disabled {
-            background-color: #4B5563;
+            background-color: #2E2E2E;
+            border: 1px solid #F2C80F;
         }
         QPushButton[primary="true"] {
-            background-color: #1D4ED8;
+            background-color: #F2C80F;
+            color: #1E1E1E;
         }
         QPushButton[primary="true"]:hover:!disabled {
-            background-color: #1E40AF;
+            background-color: #FFC700;
         }
     """
 
@@ -171,10 +175,10 @@ class AnomalyDetectorWindow(QMainWindow):
         self.main_splitter.setStyleSheet(
             """
             QSplitter::handle {
-                background: #E5E7EB;
+                background: #3E3E3E;
             }
             QSplitter::handle:hover {
-                background: #DC2626;
+                background: #F2C80F;
             }
             """
         )
@@ -190,7 +194,7 @@ class AnomalyDetectorWindow(QMainWindow):
 
         # Header
         header = QLabel("Anomaly Detector")
-        header.setStyleSheet("font-size: 20px; font-weight: 600; color: #DC2626; margin-bottom: 12px;")
+        header.setStyleSheet("font-size: 20px; font-weight: 600; color: #FFFFFF; margin-bottom: 12px;")
         left_layout.addWidget(header)
 
         # Create vertical splitter for resizable group boxes
@@ -199,11 +203,11 @@ class AnomalyDetectorWindow(QMainWindow):
         left_splitter.setStyleSheet(
             """
             QSplitter::handle {
-                background: #E5E7EB;
+                background: #3E3E3E;
                 margin: 2px 0px;
             }
             QSplitter::handle:hover {
-                background: #DC2626;
+                background: #F2C80F;
             }
             """
         )
@@ -370,8 +374,8 @@ class AnomalyDetectorWindow(QMainWindow):
         # Status label
         self.status_label = QLabel("Loading model...")
         self.status_label.setStyleSheet(
-            "color: #0F172A; font-weight: 500; padding: 8px; "
-            "background: #FEF3C7; border-radius: 6px;"
+            "color: #1E1E1E; font-weight: 500; padding: 8px; "
+            "background: #FFB900; border-radius: 6px;"
         )
         self.status_label.setAlignment(Qt.AlignCenter)
         right_layout.addWidget(self.status_label)
@@ -380,13 +384,15 @@ class AnomalyDetectorWindow(QMainWindow):
         # Get device pixel ratio for proper scaling across different screen sizes
         pixel_ratio = QApplication.instance().devicePixelRatio() if QApplication.instance() else 1.0
         dpi = int(100 * pixel_ratio)
+        # Configure matplotlib dark theme
+        plt.style.use('dark_background')
         self.figure = Figure(figsize=(12, 10), dpi=dpi)
-        self.figure.patch.set_facecolor("#FFFFFF")
+        self.figure.patch.set_facecolor("#2E2E2E")
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.toolbar = NavigationToolbar(self.canvas, self)
-        self.toolbar.setStyleSheet("background: #F9FAFB; border: none; padding: 4px;")
+        self.toolbar.setStyleSheet("background: #1E1E1E; border: none; padding: 4px; color: #FFFFFF;")
 
         right_layout.addWidget(self.toolbar)
         right_layout.addWidget(self.canvas)
@@ -407,22 +413,23 @@ class AnomalyDetectorWindow(QMainWindow):
         # Add splitter to main layout
         main_layout.addWidget(self.main_splitter)
 
-        # Apply styles
+        # Apply styles (Power BI dark theme)
         self.setStyleSheet(
             """
             QMainWindow#anomaly-detector-window {
-                background: #FFFFFF;
+                background: #252423;
             }
             QWidget {
-                background: #FFFFFF;
-                color: #0F172A;
+                background: #252423;
+                color: #FFFFFF;
             }
             QGroupBox {
                 font-weight: 600;
-                border: 2px solid #FCA5A5;
+                border: 2px solid #E81123;
                 border-radius: 8px;
                 margin-top: 12px;
                 padding-top: 8px;
+                color: #FFFFFF;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
@@ -430,53 +437,66 @@ class AnomalyDetectorWindow(QMainWindow):
                 padding: 0 5px;
             }
             QListWidget {
-                border: 1px solid #D1D5DB;
+                border: 1px solid #3E3E3E;
                 border-radius: 6px;
                 padding: 4px;
-                background: #F9FAFB;
+                background: #2E2E2E;
+                color: #FFFFFF;
             }
             QListWidget::item:selected {
-                background: #FEE2E2;
-                color: #991B1B;
+                background: rgba(232, 17, 35, 0.3);
+                color: #FFFFFF;
             }
             QListWidget::item:hover {
-                background: #FEF2F2;
+                background: #3A3A3A;
             }
             QTableWidget {
-                background: #F9FAFB;
-                border: 1px solid #E5E7EB;
+                background: #2E2E2E;
+                border: 1px solid #3E3E3E;
                 border-radius: 4px;
+                color: #FFFFFF;
             }
             QComboBox {
-                border: 1px solid #D1D5DB;
+                border: 1px solid #3E3E3E;
                 border-radius: 4px;
                 padding: 4px 8px;
-                background: #F9FAFB;
+                background: #2E2E2E;
+                color: #FFFFFF;
                 min-height: 24px;
             }
             QComboBox:hover {
-                border-color: #DC2626;
+                border-color: #F2C80F;
             }
             QComboBox::drop-down {
                 border: none;
                 padding-right: 8px;
             }
+            QComboBox QAbstractItemView {
+                background-color: #2E2E2E;
+                border: 1px solid #3E3E3E;
+                color: #FFFFFF;
+                selection-background-color: rgba(242, 200, 15, 0.3);
+            }
             QCheckBox {
                 spacing: 8px;
+                color: #FFFFFF;
             }
             QCheckBox::indicator {
                 width: 18px;
                 height: 18px;
-                border: 2px solid #D1D5DB;
+                border: 2px solid #3E3E3E;
                 border-radius: 4px;
-                background: #FFFFFF;
+                background: #2E2E2E;
             }
             QCheckBox::indicator:checked {
-                background: #DC2626;
-                border-color: #DC2626;
+                background: #E81123;
+                border-color: #E81123;
             }
             QCheckBox::indicator:hover {
-                border-color: #DC2626;
+                border-color: #F2C80F;
+            }
+            QLabel {
+                color: #FFFFFF;
             }
             """
             + self.BUTTON_STYLES
@@ -686,8 +706,8 @@ class AnomalyDetectorWindow(QMainWindow):
                     "Please train a model first or load a data file."
                 )
                 self.status_label.setStyleSheet(
-                    "color: #0F172A; font-weight: 500; padding: 8px; "
-                    "background: #FEF3C7; border-radius: 6px;"
+                    "color: #1E1E1E; font-weight: 500; padding: 8px; "
+                    "background: #FFB900; border-radius: 6px;"
                 )
 
     def _disable_controls(self) -> None:
@@ -827,15 +847,15 @@ class AnomalyDetectorWindow(QMainWindow):
                 f"✓ Model loaded: {self._pump_series} / {self._test_type} (v{version})"
             )
             self.status_label.setStyleSheet(
-                "color: #0F172A; font-weight: 500; padding: 8px; "
-                "background: #D1FAE5; border-radius: 6px;"
+                "color: #FFFFFF; font-weight: 500; padding: 8px; "
+                "background: #00B294; border-radius: 6px;"
             )
 
         except Exception as exc:
             self.status_label.setText(f"⚠ Model loading failed: {exc}")
             self.status_label.setStyleSheet(
-                "color: #0F172A; font-weight: 500; padding: 8px; "
-                "background: #FEE2E2; border-radius: 6px;"
+                "color: #FFFFFF; font-weight: 500; padding: 8px; "
+                "background: #E81123; border-radius: 6px;"
             )
             QMessageBox.warning(
                 self,
@@ -1053,8 +1073,8 @@ class AnomalyDetectorWindow(QMainWindow):
 
             self.status_label.setText(status_msg)
             self.status_label.setStyleSheet(
-                "color: #0F172A; font-weight: 500; padding: 8px; "
-                "background: #D1FAE5; border-radius: 6px;"
+                "color: #FFFFFF; font-weight: 500; padding: 8px; "
+                "background: #00B294; border-radius: 6px;"
             )
 
         except Exception as exc:
@@ -1456,8 +1476,8 @@ class AnomalyDetectorWindow(QMainWindow):
             # Update status
             self.status_label.setText("✓ Prediction plotter opened")
             self.status_label.setStyleSheet(
-                "color: #0F172A; font-weight: 500; padding: 8px; "
-                "background: #D1FAE5; border-radius: 6px;"
+                "color: #FFFFFF; font-weight: 500; padding: 8px; "
+                "background: #00B294; border-radius: 6px;"
             )
 
         except Exception as exc:

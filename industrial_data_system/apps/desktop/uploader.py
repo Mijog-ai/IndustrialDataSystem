@@ -84,245 +84,263 @@ CONFIG = get_config()
 
 
 class IndustrialTheme:
-    """Industrial design system color palette and styles."""
+    """Power BI inspired design system color palette and styles."""
 
-    # Color Palette
-    PRIMARY = "#1E3A8A"  # Deep Blue
-    PRIMARY_LIGHT = "#3B82F6"  # Light Blue
-    PRIMARY_DARK = "#1E40AF"  # Darker Blue
+    # Power BI Color Palette
+    PRIMARY = "#F2C80F"  # Power BI Yellow/Gold
+    PRIMARY_LIGHT = "#FFC700"  # Bright Yellow
+    PRIMARY_DARK = "#D4A600"  # Darker Gold
 
-    SECONDARY = "#64748B"  # Slate Gray
-    SECONDARY_LIGHT = "#94A3B8"
+    SECONDARY = "#6B6B6B"  # Medium Gray
+    SECONDARY_LIGHT = "#8B8B8B"
 
-    SUCCESS = "#10B981"  # Green
-    WARNING = "#F59E0B"  # Amber
-    ERROR = "#EF4444"  # Red
+    SUCCESS = "#00B294"  # Teal Green
+    WARNING = "#FFB900"  # Amber
+    ERROR = "#E81123"  # Red
 
-    BACKGROUND = "#F8FAFC"  # Light Gray
-    SURFACE = "#FFFFFF"  # White
-    SURFACE_DARK = "#F1F5F9"
+    BACKGROUND = "#252423"  # Dark Background (Power BI)
+    SURFACE = "#2E2E2E"  # Dark Surface
+    SURFACE_DARK = "#1E1E1E"  # Darker Surface
+    SURFACE_LIGHT = "#3A3A3A"  # Lighter Surface for cards
 
-    TEXT_PRIMARY = "#0F172A"  # Dark Slate
-    TEXT_SECONDARY = "#475569"  # Medium Slate
-    TEXT_HINT = "#94A3B8"  # Light Slate
+    TEXT_PRIMARY = "#FFFFFF"  # White Text
+    TEXT_SECONDARY = "#D0D0D0"  # Light Gray Text
+    TEXT_HINT = "#8B8B8B"  # Hint Gray
 
-    BORDER = "#E2E8F0"
-    BORDER_FOCUS = "#3B82F6"
+    BORDER = "#3E3E3E"
+    BORDER_FOCUS = "#F2C80F"  # Yellow focus
 
     @staticmethod
     def get_stylesheet():
-        """Return complete application stylesheet."""
+        """Return complete application stylesheet with Power BI dark theme."""
         return f"""
             QMainWindow {{
                 background-color: {IndustrialTheme.BACKGROUND};
             }}
-            
+
             QWidget {{
                 font-family: 'Segoe UI', 'San Francisco', 'Helvetica Neue', Arial, sans-serif;
                 font-size: 14px;
                 color: {IndustrialTheme.TEXT_PRIMARY};
+                background-color: {IndustrialTheme.BACKGROUND};
             }}
-            
+
             QLabel {{
                 color: {IndustrialTheme.TEXT_PRIMARY};
+                background-color: transparent;
             }}
-            
+
             QLabel[heading="true"] {{
                 font-size: 28px;
                 font-weight: 600;
                 color: {IndustrialTheme.TEXT_PRIMARY};
                 padding: 8px 0px;
             }}
-            
+
             QLabel[subheading="true"] {{
                 font-size: 18px;
                 font-weight: 500;
                 color: {IndustrialTheme.TEXT_PRIMARY};
                 padding: 4px 0px;
             }}
-            
+
             QLabel[caption="true"] {{
                 font-size: 12px;
                 color: {IndustrialTheme.TEXT_SECONDARY};
             }}
-            
+
             QLineEdit {{
                 padding: 12px 16px;
-                border: 2px solid {IndustrialTheme.BORDER};
-                border-radius: 8px;
+                border: 1px solid {IndustrialTheme.BORDER};
+                border-radius: 4px;
                 background-color: {IndustrialTheme.SURFACE};
                 color: {IndustrialTheme.TEXT_PRIMARY};
                 font-size: 14px;
             }}
-            
-            
-            
+
+            QLineEdit:focus {{
+                border: 2px solid {IndustrialTheme.BORDER_FOCUS};
+            }}
+
             QLineEdit:disabled {{
                 background-color: {IndustrialTheme.SURFACE_DARK};
                 color: {IndustrialTheme.TEXT_HINT};
             }}
-            
+
             QComboBox {{
                 padding: 12px 16px;
-                border: 2px solid {IndustrialTheme.BORDER};
-                border-radius: 8px;
+                border: 1px solid {IndustrialTheme.BORDER};
+                border-radius: 4px;
                 background-color: {IndustrialTheme.SURFACE};
                 color: {IndustrialTheme.TEXT_PRIMARY};
                 font-size: 14px;
                 min-height: 44px;
             }}
-            
-           
-            
+
+            QComboBox:focus {{
+                border: 2px solid {IndustrialTheme.BORDER_FOCUS};
+            }}
+
             QComboBox::drop-down {{
                 border: none;
                 width: 30px;
             }}
-            
+
             QComboBox QAbstractItemView {{
                 background-color: {IndustrialTheme.SURFACE};
-                border: 2px solid {IndustrialTheme.BORDER};
-                border-radius: 8px;
-                selection-background-color: {IndustrialTheme.PRIMARY_LIGHT};
+                border: 1px solid {IndustrialTheme.BORDER};
+                border-radius: 4px;
+                selection-background-color: {IndustrialTheme.PRIMARY};
+                selection-color: {IndustrialTheme.SURFACE_DARK};
+                color: {IndustrialTheme.TEXT_PRIMARY};
                 padding: 4px;
             }}
-            
+
             QPushButton {{
                 padding: 12px 24px;
                 border: none;
-                border-radius: 8px;
+                border-radius: 4px;
                 font-size: 14px;
-                font-weight: 500;
+                font-weight: 600;
                 min-height: 44px;
             }}
-            
+
             QPushButton[primary="true"] {{
                 background-color: {IndustrialTheme.PRIMARY};
-                color: white;
+                color: {IndustrialTheme.SURFACE_DARK};
             }}
-            
+
             QPushButton[primary="true"]:hover {{
-                background-color: {IndustrialTheme.PRIMARY_DARK};
+                background-color: {IndustrialTheme.PRIMARY_LIGHT};
             }}
-            
+
             QPushButton[primary="true"]:pressed {{
                 background-color: {IndustrialTheme.PRIMARY_DARK};
             }}
-            
+
             QPushButton[secondary="true"] {{
-                background-color: {IndustrialTheme.SURFACE};
+                background-color: {IndustrialTheme.SURFACE_LIGHT};
                 color: {IndustrialTheme.TEXT_PRIMARY};
-                border: 2px solid {IndustrialTheme.BORDER};
+                border: 1px solid {IndustrialTheme.BORDER};
             }}
-            
+
             QPushButton[secondary="true"]:hover {{
-                background-color: {IndustrialTheme.SURFACE_DARK};
-                border: 2px solid {IndustrialTheme.SECONDARY};
+                background-color: {IndustrialTheme.SURFACE};
+                border: 1px solid {IndustrialTheme.BORDER_FOCUS};
             }}
-            
+
             QPushButton[danger="true"] {{
                 background-color: {IndustrialTheme.ERROR};
                 color: white;
             }}
-            
+
             QPushButton[danger="true"]:hover {{
-                background-color: #DC2626;
+                background-color: #C50F1F;
             }}
-            
+
             QPushButton[flat="true"] {{
                 background-color: transparent;
                 color: {IndustrialTheme.PRIMARY};
                 padding: 8px 16px;
             }}
-            
+
             QPushButton[flat="true"]:hover {{
-                background-color: rgba(59, 130, 246, 0.1);
+                background-color: rgba(242, 200, 15, 0.1);
             }}
-            
+
             QPushButton:disabled {{
                 background-color: {IndustrialTheme.SURFACE_DARK};
                 color: {IndustrialTheme.TEXT_HINT};
             }}
-            
+
             QTableWidget {{
-                background-color: {IndustrialTheme.SURFACE};
+                background-color: {IndustrialTheme.SURFACE_LIGHT};
                 border: 1px solid {IndustrialTheme.BORDER};
-                border-radius: 8px;
+                border-radius: 4px;
                 gridline-color: {IndustrialTheme.BORDER};
+                color: {IndustrialTheme.TEXT_PRIMARY};
             }}
-            
+
             QTableWidget::item {{
                 padding: 12px;
                 border-bottom: 1px solid {IndustrialTheme.BORDER};
-            }}
-            
-            QTableWidget::item:selected {{
-                background-color: rgba(59, 130, 246, 0.1);
                 color: {IndustrialTheme.TEXT_PRIMARY};
             }}
-            
+
+            QTableWidget::item:selected {{
+                background-color: rgba(242, 200, 15, 0.2);
+                color: {IndustrialTheme.TEXT_PRIMARY};
+            }}
+
             QHeaderView::section {{
-                background-color: {IndustrialTheme.SURFACE_DARK};
+                background-color: {IndustrialTheme.SURFACE};
                 padding: 12px;
                 border: none;
                 border-bottom: 2px solid {IndustrialTheme.BORDER};
                 font-weight: 600;
                 color: {IndustrialTheme.TEXT_PRIMARY};
             }}
-            
+
             QFrame[card="true"] {{
-                background-color: {IndustrialTheme.SURFACE};
+                background-color: {IndustrialTheme.SURFACE_LIGHT};
                 border: 1px solid {IndustrialTheme.BORDER};
-                border-radius: 12px;
+                border-radius: 8px;
                 padding: 24px;
             }}
-            
+
             QDialog {{
                 background-color: {IndustrialTheme.SURFACE};
             }}
-            
+
             QScrollBar:vertical {{
                 border: none;
                 background-color: {IndustrialTheme.SURFACE_DARK};
                 width: 12px;
                 border-radius: 6px;
             }}
-            
+
             QScrollBar::handle:vertical {{
-                background-color: {IndustrialTheme.SECONDARY_LIGHT};
+                background-color: {IndustrialTheme.SECONDARY};
                 border-radius: 6px;
                 min-height: 30px;
             }}
-            
+
             QScrollBar::handle:vertical:hover {{
-                background-color: {IndustrialTheme.SECONDARY};
+                background-color: {IndustrialTheme.SECONDARY_LIGHT};
             }}
-            
+
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
             }}
+
+            QCheckBox {{
+                color: {IndustrialTheme.TEXT_PRIMARY};
+                spacing: 8px;
+            }}
+
             QCheckBox::indicator {{
                 width: 18px;
                 height: 18px;
-                border: 2px solid #000000;
+                border: 2px solid {IndustrialTheme.BORDER};
                 border-radius: 3px;
                 background-color: {IndustrialTheme.SURFACE};
             }}
-            
+
             QCheckBox::indicator:hover {{
-                border-color: #000000;
-                background-color: {IndustrialTheme.SURFACE_DARK};
+                border-color: {IndustrialTheme.PRIMARY};
+                background-color: {IndustrialTheme.SURFACE_LIGHT};
             }}
-            
+
             QCheckBox::indicator:checked {{
-                background-color: #000000;
-                border-color: #000000;
+                background-color: {IndustrialTheme.PRIMARY};
+                border-color: {IndustrialTheme.PRIMARY};
+                image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTMuNSA0TDYgMTEuNSAyLjUgOCIgc3Ryb2tlPSIjMUUxRTFFIiBzdHJva2Utd2lkdGg9IjIiIGZpbGw9Im5vbmUiLz48L3N2Zz4=);
             }}
 
             QTabWidget::pane {{
                 border: 1px solid {IndustrialTheme.BORDER};
-                border-radius: 8px;
-                background-color: {IndustrialTheme.SURFACE};
+                border-radius: 4px;
+                background-color: {IndustrialTheme.SURFACE_LIGHT};
                 padding: 8px;
             }}
 
@@ -331,32 +349,37 @@ class IndustrialTheme:
             }}
 
             QTabBar::tab {{
-                background-color: {IndustrialTheme.SURFACE_DARK};
+                background-color: {IndustrialTheme.SURFACE};
                 color: {IndustrialTheme.TEXT_SECONDARY};
                 border: 1px solid {IndustrialTheme.BORDER};
                 border-bottom: none;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
                 padding: 12px 24px;
                 margin-right: 4px;
                 min-width: 100px;
                 font-size: 14px;
-                font-weight: 500;
+                font-weight: 600;
             }}
 
             QTabBar::tab:selected {{
-                background-color: {IndustrialTheme.SURFACE};
+                background-color: {IndustrialTheme.SURFACE_LIGHT};
                 color: {IndustrialTheme.PRIMARY};
-                border-bottom: 2px solid {IndustrialTheme.PRIMARY};
+                border-bottom: 3px solid {IndustrialTheme.PRIMARY};
             }}
 
             QTabBar::tab:hover:!selected {{
-                background-color: {IndustrialTheme.SURFACE};
+                background-color: {IndustrialTheme.SURFACE_LIGHT};
                 color: {IndustrialTheme.TEXT_PRIMARY};
             }}
 
             QTabBar::tab:first {{
                 margin-left: 0px;
+            }}
+
+            QScrollArea {{
+                border: none;
+                background-color: {IndustrialTheme.BACKGROUND};
             }}
         """
 

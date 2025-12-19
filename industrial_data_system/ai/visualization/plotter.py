@@ -57,7 +57,7 @@ class StatisticsArea(QWidget):
     def setup_ui(self):
         """Initialize the statistics table UI."""
         header = QLabel("Statistics")
-        header.setStyleSheet("font-weight: 600; color: #1F2937; font-size: 14px;")
+        header.setStyleSheet("font-weight: 600; color: #FFFFFF; font-size: 14px;")
         self.layout.addWidget(header)
 
         self.stats_table = QTableWidget()
@@ -123,29 +123,32 @@ class QuickPlotterWindow(QMainWindow):
 
     BUTTON_STYLES = """
         QPushButton {
-            background-color: #1D4ED8;
-            color: #FFFFFF;
+            background-color: #F2C80F;
+            color: #1E1E1E;
             padding: 8px 18px;
             border: none;
-            border-radius: 6px;
+            border-radius: 4px;
             font-weight: 600;
             min-height: 32px;
         }
         QPushButton:disabled {
-            background-color: #94A3B8;
-            color: #FFFFFF;
+            background-color: #6B6B6B;
+            color: #8B8B8B;
         }
         QPushButton:hover:!disabled {
-            background-color: #1E40AF;
+            background-color: #FFC700;
         }
         QPushButton:pressed:!disabled {
-            background-color: #1E3A8A;
+            background-color: #D4A600;
         }
         QPushButton[secondary="true"] {
-            background-color: #6B7280;
+            background-color: #3A3A3A;
+            color: #FFFFFF;
+            border: 1px solid #3E3E3E;
         }
         QPushButton[secondary="true"]:hover:!disabled {
-            background-color: #4B5563;
+            background-color: #2E2E2E;
+            border: 1px solid #F2C80F;
         }
     """
 
@@ -178,10 +181,10 @@ class QuickPlotterWindow(QMainWindow):
         self.main_splitter.setStyleSheet(
             """
             QSplitter::handle {
-                background: #E5E7EB;
+                background: #3E3E3E;
             }
             QSplitter::handle:hover {
-                background: #3B82F6;
+                background: #F2C80F;
             }
             """
         )
@@ -197,7 +200,7 @@ class QuickPlotterWindow(QMainWindow):
 
         # Header
         header = QLabel("Quick Plotter")
-        header.setStyleSheet("font-size: 20px; font-weight: 600; color: #0F172A;")
+        header.setStyleSheet("font-size: 20px; font-weight: 600; color: #FFFFFF;")
         left_layout.addWidget(header)
 
         # Metadata table
@@ -341,8 +344,12 @@ class QuickPlotterWindow(QMainWindow):
         # Get device pixel ratio for proper scaling across different screen sizes
         pixel_ratio = QApplication.instance().devicePixelRatio() if QApplication.instance() else 1.0
         dpi = int(100 * pixel_ratio)
+
+        # Configure matplotlib dark theme (Power BI style)
+        plt.style.use('dark_background')
+
         self.figure = Figure(figsize=(10, 8), dpi=dpi)
-        self.figure.patch.set_facecolor("#FFFFFF")
+        self.figure.patch.set_facecolor("#2E2E2E")  # Dark surface
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.canvas.setMinimumHeight(400)
@@ -355,7 +362,7 @@ class QuickPlotterWindow(QMainWindow):
         self.canvas.mpl_connect("scroll_event", self._on_scroll)
 
         self.toolbar = NavigationToolbar(self.canvas, self)
-        self.toolbar.setStyleSheet("background: #F9FAFB; border: none; padding: 4px;")
+        self.toolbar.setStyleSheet("background: #1E1E1E; border: none; padding: 4px; color: #FFFFFF;")
 
         plot_layout.addWidget(self.toolbar)
         plot_layout.addWidget(self.canvas)
@@ -648,7 +655,7 @@ class QuickPlotterWindow(QMainWindow):
 
         # Create subplot
         ax = self.figure.add_subplot(111)
-        ax.set_facecolor("#FFFFFF")
+        ax.set_facecolor("#1E1E1E")  # Dark background for plot area
 
         # Professional color palette (more distinct and pleasant than jet)
         professional_colors = [
