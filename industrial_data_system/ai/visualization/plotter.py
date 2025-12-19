@@ -14,6 +14,7 @@ from matplotlib.figure import Figure
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QFileDialog,
     QGridLayout,
@@ -336,8 +337,11 @@ class QuickPlotterWindow(QMainWindow):
         plot_layout.setContentsMargins(0, 0, 0, 0)
         plot_layout.setSpacing(4)
 
-        # Matplotlib figure (taller aspect ratio)
-        self.figure = Figure(figsize=(10, 8), dpi=100)
+        # Matplotlib figure (taller aspect ratio) with dynamic DPI based on device pixel ratio
+        # Get device pixel ratio for proper scaling across different screen sizes
+        pixel_ratio = QApplication.instance().devicePixelRatio() if QApplication.instance() else 1.0
+        dpi = int(100 * pixel_ratio)
+        self.figure = Figure(figsize=(10, 8), dpi=dpi)
         self.figure.patch.set_facecolor("#FFFFFF")
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
