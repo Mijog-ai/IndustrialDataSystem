@@ -318,6 +318,46 @@ class IndustrialTheme:
                 background-color: #000000;
                 border-color: #000000;
             }}
+
+            QTabWidget::pane {{
+                border: 1px solid {IndustrialTheme.BORDER};
+                border-radius: 8px;
+                background-color: {IndustrialTheme.SURFACE};
+                padding: 8px;
+            }}
+
+            QTabWidget::tab-bar {{
+                alignment: left;
+            }}
+
+            QTabBar::tab {{
+                background-color: {IndustrialTheme.SURFACE_DARK};
+                color: {IndustrialTheme.TEXT_SECONDARY};
+                border: 1px solid {IndustrialTheme.BORDER};
+                border-bottom: none;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                padding: 12px 24px;
+                margin-right: 4px;
+                min-width: 100px;
+                font-size: 14px;
+                font-weight: 500;
+            }}
+
+            QTabBar::tab:selected {{
+                background-color: {IndustrialTheme.SURFACE};
+                color: {IndustrialTheme.PRIMARY};
+                border-bottom: 2px solid {IndustrialTheme.PRIMARY};
+            }}
+
+            QTabBar::tab:hover:!selected {{
+                background-color: {IndustrialTheme.SURFACE};
+                color: {IndustrialTheme.TEXT_PRIMARY};
+            }}
+
+            QTabBar::tab:first {{
+                margin-left: 0px;
+            }}
         """
 
 
