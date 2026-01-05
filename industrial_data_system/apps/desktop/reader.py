@@ -703,16 +703,41 @@ class ReaderDashboard(QWidget):
 
 
 def _collect_resources(
-    db_manager: DatabaseManager,
-    storage_manager: LocalStorageManager,
+        db_manager: DatabaseManager,
+        storage_manager: LocalStorageManager,
 ) -> List[LocalResource]:
     """Collect all uploaded resources from the shared drive."""
     resources: List[LocalResource] = []
     upload_records = db_manager.list_uploads()
 
     for record in upload_records:
-        absolute_path = storage_manager.base_path / record.pump_series / record.test_type / record.filename
-        relative_path = Path(record.pump_series) / record.test_type / record.filename
+        # Get the file path from the database record
+        # The file_path in the database should be relative to base_path
+        if hasattr(record, 'file_path') and record.file_path:
+            # Use the stored file_path
+            absolute_path = storage_manager.base_path / record.file_path
+            relative_path = Path(record.file_path)
+        else:
+            # Fallback to constructing path from pump_series/test_type/filename
+            # Check if there's a 'tests' subdirectory (legacy structure)
+            pump_series_dir = storage_manager.base_path / record.pump_series
+
+            # Try both structures: pump_series/tests/test_type and pump_series/test_type
+            possible_paths = [
+                pump_series_dir / "tests" / record.test_type / record.filename,
+                pump_series_dir / record.test_type / record.filename,
+            ]
+
+            absolute_path = None
+            for path in possible_paths:
+                if path.exists():
+                    absolute_path = path
+                    relative_path = path.relative_to(storage_manager.base_path)
+                    break
+
+            if absolute_path is None:
+                # File doesn't exist in any expected location, skip it
+                continue
 
         if not absolute_path.exists():
             continue
@@ -895,6 +920,15 @@ class ReaderApp(QMainWindow):
             return
 
         base_path = self.storage_manager.base_path
+        print(f"\n=== REFRESH RESOURCES DEBUG ===")
+        print(f"Base path: {base_path}")
+        print(f"Base path exists: {base_path.exists()}")
+
+        if base_path.exists():
+            print(f"Base path contents:")
+            for item in base_path.iterdir():
+                print(f"  - {item.name} ({'dir' if item.is_dir() else 'file'})")
+
         if not base_path.exists():
             QMessageBox.critical(
                 self,
@@ -908,6 +942,8 @@ class ReaderApp(QMainWindow):
         try:
             resources = _collect_resources(self.db_manager, self.storage_manager)
         except Exception as exc:
+            import traceback
+            traceback.print_exc()
             QMessageBox.critical(
                 self,
                 "Shared Drive Error",
@@ -916,7 +952,7 @@ class ReaderApp(QMainWindow):
             return
 
         display_name = (
-            self.current_user.metadata.get("display_name") or self.current_user.display_name()
+                self.current_user.metadata.get("display_name") or self.current_user.display_name()
         )
         self.dashboard.set_user_identity(display_name, self.current_user.email)
         self.dashboard.populate(resources)

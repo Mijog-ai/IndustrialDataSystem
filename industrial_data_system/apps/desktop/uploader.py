@@ -1988,6 +1988,64 @@ class IndustrialDataApp(QMainWindow):
 
         metadata = user.get("metadata") or {}
         username = (
+                user.get("username")
+                or metadata.get("username")
+                or metadata.get("username_normalized")
+                or self.current_username
+                or ""
+        ).strip()
+        self.current_username = username
+
+        self.dashboard_page.set_user_identity(
+            self.current_username,
+            user.get("email", ""),
+        )
+
+        user_id = user.get("id")
+        if user_id is None:
+            self._alert("Session error: missing user identifier.", QMessageBox.Warning)
+            self._initialize_gateway_session()
+            return
+
+        base_path = self.storage_manager.base_path
+        if base_path.exists():
+            self.db_manager.prune_missing_uploads(base_path)
+
+        # Get selected pump series and test type for filtering
+        selected_pump_series = self.dashboard_page.get_selected_pump_series()
+        selected_test_type = self.dashboard_page.get_selected_test_type()
+
+        records = []
+        for record in self.history_store.get_records_for_user(int(user_id)):
+            relative_path = record.get("file_path")
+            absolute_path = None
+            if relative_path:
+                absolute_candidate = (CONFIG.files_base_path / Path(relative_path)).resolve()
+                absolute_path = str(absolute_candidate)
+            record["absolute_path"] = absolute_path
+            record["base_path"] = str(CONFIG.files_base_path)
+
+            # Ensure pump_series has a value
+            record["pump_series"] = record.get("pump_series") or self.default_pump_series
+
+            # Filter by selected pump series and test type
+            record_pump_series = record.get("pump_series")
+            record_test_type = record.get("test_type")
+
+            # Only include records that match the selected filters
+            if selected_pump_series and record_pump_series != selected_pump_series:
+                continue
+            if selected_test_type and record_test_type != selected_test_type:
+                continue
+
+            records.append(record)
+
+        self.dashboard_page.update_files(records)
+        # Update catalog without triggering another refresh to avoid infinite loop
+        self.load_test_types(emit_change=False)
+
+        metadata = user.get("metadata") or {}
+        username = (
             user.get("username")
             or metadata.get("username")
             or metadata.get("username_normalized")

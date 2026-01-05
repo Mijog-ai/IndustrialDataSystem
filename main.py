@@ -38,8 +38,9 @@ class TabbedDesktopApp(QMainWindow):
         self._upload_tab_counter = 0
         self._reader_tab_counter = 0
 
-        # Track tab widgets and their associated reader apps
+        # Track tab widgets and their associated apps
         self._tab_reader_apps: Dict[int, ReaderApp] = {}
+        self._tab_upload_apps: Dict[int, IndustrialDataApp] = {}  # ADD THIS LINE
 
         # Create central tab widget
         self.tab_widget = QTabWidget()
@@ -169,7 +170,17 @@ class TabbedDesktopApp(QMainWindow):
                 f"Upload {self._upload_tab_counter}"
             )
 
+            # Store reference to upload app to prevent garbage collection
+            if not hasattr(self, '_tab_upload_apps'):
+                self._tab_upload_apps: Dict[int, IndustrialDataApp] = {}
+            self._tab_upload_apps[tab_index] = upload_app
+
             self.tab_widget.setCurrentIndex(tab_index)
+
+            # IMPORTANT: Trigger refresh after tab is shown
+            # Use QTimer to ensure the widget is fully initialized
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(100, upload_app.refresh_files)
 
         except Exception as e:
             print(f"Error creating upload tab: {e}")
@@ -224,18 +235,30 @@ class TabbedDesktopApp(QMainWindow):
                         reader_app.dashboard.open_tool_in_tab.disconnect(self.create_tool_tab)
                     except:
                         pass
-                    # Don't call close() on reader_app, just let it be garbage collected
+
+                # Clean up upload app if this was an upload tab
+                if hasattr(self, '_tab_upload_apps') and index in self._tab_upload_apps:
+                    self._tab_upload_apps.pop(index)
 
                 self.tab_widget.removeTab(index)
 
-                # Update remaining tab indices in the dictionary
-                updated_apps = {}
+                # Update remaining tab indices in the dictionaries
+                updated_reader_apps = {}
                 for tab_idx, app in self._tab_reader_apps.items():
                     if tab_idx > index:
-                        updated_apps[tab_idx - 1] = app
+                        updated_reader_apps[tab_idx - 1] = app
                     else:
-                        updated_apps[tab_idx] = app
-                self._tab_reader_apps = updated_apps
+                        updated_reader_apps[tab_idx] = app
+                self._tab_reader_apps = updated_reader_apps
+
+                if hasattr(self, '_tab_upload_apps'):
+                    updated_upload_apps = {}
+                    for tab_idx, app in self._tab_upload_apps.items():
+                        if tab_idx > index:
+                            updated_upload_apps[tab_idx - 1] = app
+                        else:
+                            updated_upload_apps[tab_idx] = app
+                    self._tab_upload_apps = updated_upload_apps
 
                 # Show welcome tab if all tabs are closed
                 if self.tab_widget.count() == 0:
@@ -290,13 +313,17 @@ class TabbedDesktopApp(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:
         """Clean up all tabs when the main window is closed."""
         try:
-            # Disconnect all signals
+            # Disconnect all reader signals
             for reader_app in list(self._tab_reader_apps.values()):
                 try:
                     reader_app.dashboard.open_tool_in_tab.disconnect(self.create_tool_tab)
                 except:
                     pass
             self._tab_reader_apps.clear()
+
+            # Clear upload apps
+            if hasattr(self, '_tab_upload_apps'):
+                self._tab_upload_apps.clear()
         except Exception as e:
             print(f"Error during cleanup: {e}")
         event.accept()
