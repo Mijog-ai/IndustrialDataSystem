@@ -29,6 +29,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMenuBar,
     QMessageBox,
     QProgressDialog,
@@ -1874,15 +1875,13 @@ class IndustrialDataApp(QMainWindow):
         # File Menu
         file_menu = menubar.addMenu("&File")
 
-        new_pump_action = QAction("New &Pump Series...", self)
-        new_pump_action.setShortcut(QKeySequence("Ctrl+P"))
-        new_pump_action.triggered.connect(lambda: self.dashboard_page.create_pump_series_clicked.emit())
-        file_menu.addAction(new_pump_action)
+        # Pump Series submenu
+        self.pump_series_menu = file_menu.addMenu("&Pump Series")
+        self._populate_pump_series_menu()
 
-        new_test_action = QAction("New &Test Type...", self)
-        new_test_action.setShortcut(QKeySequence("Ctrl+T"))
-        new_test_action.triggered.connect(lambda: self.dashboard_page.create_test_type_clicked.emit())
-        file_menu.addAction(new_test_action)
+        # Test Type submenu
+        self.test_type_menu = file_menu.addMenu("&Test Type")
+        self._populate_test_type_menu()
 
         file_menu.addSeparator()
 
@@ -1971,6 +1970,72 @@ class IndustrialDataApp(QMainWindow):
             "<p>Version 1.0</p>"
             "<p>Industrial data management and analysis system.</p>"
         )
+
+    def _populate_pump_series_menu(self) -> None:
+        """Populate the pump series dropdown menu."""
+        self.pump_series_menu.clear()
+
+        # Add existing pump series
+        pump_series_list = self.dashboard_page.pump_series_options
+        if pump_series_list:
+            for series in pump_series_list:
+                action = QAction(series, self)
+                action.triggered.connect(
+                    lambda checked, s=series: self._select_pump_series(s)
+                )
+                self.pump_series_menu.addAction(action)
+
+            self.pump_series_menu.addSeparator()
+
+        # Add "Add New Pump Series..." option
+        add_new_action = QAction("Add New Pump Series...", self)
+        add_new_action.setShortcut(QKeySequence("Ctrl+P"))
+        add_new_action.triggered.connect(
+            lambda: self.dashboard_page.create_pump_series_clicked.emit()
+        )
+        self.pump_series_menu.addAction(add_new_action)
+
+    def _populate_test_type_menu(self) -> None:
+        """Populate the test type dropdown menu."""
+        self.test_type_menu.clear()
+
+        # Get current pump series
+        current_pump_series = self.dashboard_page.get_selected_pump_series()
+
+        # Add existing test types for current pump series
+        if current_pump_series and current_pump_series in self.dashboard_page.catalog:
+            test_types = self.dashboard_page.catalog[current_pump_series]
+            if test_types:
+                for test_type in test_types:
+                    action = QAction(test_type, self)
+                    action.triggered.connect(
+                        lambda checked, t=test_type: self._select_test_type(t)
+                    )
+                    self.test_type_menu.addAction(action)
+
+                self.test_type_menu.addSeparator()
+
+        # Add "Add New Test Type..." option
+        add_new_action = QAction("Add New Test Type...", self)
+        add_new_action.setShortcut(QKeySequence("Ctrl+T"))
+        add_new_action.triggered.connect(
+            lambda: self.dashboard_page.create_test_type_clicked.emit()
+        )
+        self.test_type_menu.addAction(add_new_action)
+
+    def _select_pump_series(self, series: str) -> None:
+        """Select a pump series in the dashboard."""
+        index = self.dashboard_page.pump_series_combo.findText(series)
+        if index >= 0:
+            self.dashboard_page.pump_series_combo.setCurrentIndex(index)
+        # Update test type menu when pump series changes
+        self._populate_test_type_menu()
+
+    def _select_test_type(self, test_type: str) -> None:
+        """Select a test type in the dashboard."""
+        index = self.dashboard_page.test_type_combo.findText(test_type)
+        if index >= 0:
+            self.dashboard_page.test_type_combo.setCurrentIndex(index)
 
     def _initialize_gateway_session(self) -> None:
         gateway_user = self._ensure_gateway_user()
@@ -2085,8 +2150,14 @@ class IndustrialDataApp(QMainWindow):
 
             normalized_catalog = {name: sorted(types) for name, types in catalog.items()}
             self.dashboard_page.set_catalog(normalized_catalog)
+            # Refresh menus after catalog is updated
+            self._populate_pump_series_menu()
+            self._populate_test_type_menu()
         except Exception:
             self.dashboard_page.set_catalog({})
+            # Refresh menus even on exception
+            self._populate_pump_series_menu()
+            self._populate_test_type_menu()
 
     def handle_new_pump_series(self, name: str, description: str) -> None:
         name = name.strip()
@@ -2107,6 +2178,9 @@ class IndustrialDataApp(QMainWindow):
         index = self.dashboard_page.pump_series_combo.findText(record.name)
         if index >= 0:
             self.dashboard_page.pump_series_combo.setCurrentIndex(index)
+        # Refresh menus
+        self._populate_pump_series_menu()
+        self._populate_test_type_menu()
 
     def handle_new_test_type(self, pump_series: str, name: str, description: str) -> None:
         pump_series = pump_series.strip()
@@ -2132,6 +2206,9 @@ class IndustrialDataApp(QMainWindow):
         index = self.dashboard_page.test_type_combo.findText(record.name)
         if index >= 0:
             self.dashboard_page.test_type_combo.setCurrentIndex(index)
+        # Refresh menus
+        self._populate_pump_series_menu()
+        self._populate_test_type_menu()
 
     def handle_delete_files(self, file_ids: List[int]) -> None:
         """Handle deletion of files from storage and database."""
