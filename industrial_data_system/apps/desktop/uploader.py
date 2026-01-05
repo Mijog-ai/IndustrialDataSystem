@@ -1095,8 +1095,13 @@ class DashboardPage(QWidget):
         self.catalog: Dict[str, List[str]] = {}
         self.pump_series_options: List[str] = []
 
-    def set_catalog(self, catalog: Dict[str, List[str]]) -> None:
-        """Update pump series and test type selections."""
+    def set_catalog(self, catalog: Dict[str, List[str]], emit_change: bool = True) -> None:
+        """Update pump series and test type selections.
+
+        Args:
+            catalog: Dictionary mapping pump series names to lists of test types
+            emit_change: Whether to emit selection_changed signal after updating (default True)
+        """
         previous_series = self.get_selected_pump_series()
         self.catalog = {name: sorted(types) for name, types in catalog.items()}
         self.pump_series_options = sorted(self.catalog.keys())
@@ -1112,6 +1117,9 @@ class DashboardPage(QWidget):
             self.pump_series_combo.addItem("No pump series available")
         self.pump_series_combo.blockSignals(False)
         self._populate_test_types(self.get_selected_pump_series())
+        # Emit selection_changed to trigger file list refresh after catalog update
+        if emit_change:
+            self.selection_changed.emit()
 
     def _populate_test_types(self, pump_series: Optional[str]) -> None:
         # Save the previously selected test type
@@ -1728,6 +1736,7 @@ class IndustrialDataApp(QMainWindow):
         self.storage_manager = LocalStorageManager(config=CONFIG, database=self.db_manager)
         self.current_username: str = ""
         self.default_pump_series = "General"
+        self._is_refreshing = False  # Flag to prevent infinite loop in refresh_files
 
         self.dashboard_page = DashboardPage()
         self.setCentralWidget(self.dashboard_page)
@@ -1811,8 +1820,12 @@ class IndustrialDataApp(QMainWindow):
                 created_at=fallback.created_at,
             )
 
-    def load_test_types(self) -> None:
-        """Load available test types from the database and shared drive."""
+    def load_test_types(self, emit_change: bool = True) -> None:
+        """Load available test types from the database and shared drive.
+
+        Args:
+            emit_change: Whether to emit selection_changed after updating catalog (default True)
+        """
         try:
             catalog: Dict[str, set[str]] = {}
 
@@ -1853,9 +1866,9 @@ class IndustrialDataApp(QMainWindow):
                 ensure_series(self.default_pump_series)
 
             normalized_catalog = {name: sorted(types) for name, types in catalog.items()}
-            self.dashboard_page.set_catalog(normalized_catalog)
+            self.dashboard_page.set_catalog(normalized_catalog, emit_change=emit_change)
         except Exception:
-            self.dashboard_page.set_catalog({})
+            self.dashboard_page.set_catalog({}, emit_change=emit_change)
 
     def handle_new_pump_series(self, name: str, description: str) -> None:
         name = name.strip()
@@ -2026,7 +2039,8 @@ class IndustrialDataApp(QMainWindow):
             records.append(record)
 
         self.dashboard_page.update_files(records)
-        self.load_test_types()
+        # Update catalog without triggering another refresh to avoid infinite loop
+        self.load_test_types(emit_change=False)
 
     def handle_upload(
         self,
