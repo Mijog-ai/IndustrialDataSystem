@@ -1114,6 +1114,9 @@ class DashboardPage(QWidget):
         self._populate_test_types(self.get_selected_pump_series())
 
     def _populate_test_types(self, pump_series: Optional[str]) -> None:
+        # Save the previously selected test type
+        previous_test_type = self.get_selected_test_type()
+
         self.test_type_combo.blockSignals(True)
         self.test_type_combo.clear()
         if not pump_series or pump_series not in self.catalog:
@@ -1122,6 +1125,11 @@ class DashboardPage(QWidget):
             test_types = self.catalog.get(pump_series, [])
             if test_types:
                 self.test_type_combo.addItems(test_types)
+                # Restore the previous test type selection if it's still available
+                if previous_test_type in test_types:
+                    index = self.test_type_combo.findText(previous_test_type)
+                    if index >= 0:
+                        self.test_type_combo.setCurrentIndex(index)
             else:
                 self.test_type_combo.addItem("No test types available")
         self.test_type_combo.blockSignals(False)
