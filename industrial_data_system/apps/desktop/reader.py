@@ -711,8 +711,8 @@ def _collect_resources(
     upload_records = db_manager.list_uploads()
 
     for record in upload_records:
-        absolute_path = storage_manager.base_path / record.pump_series / record.test_type / record.file_name
-        relative_path = Path(record.pump_series) / record.test_type / record.file_name
+        absolute_path = storage_manager.base_path / record.pump_series / record.test_type / record.filename
+        relative_path = Path(record.pump_series) / record.test_type / record.filename
 
         if not absolute_path.exists():
             continue
@@ -720,7 +720,7 @@ def _collect_resources(
         file_size = absolute_path.stat().st_size if absolute_path.exists() else None
         resources.append(
             LocalResource(
-                name=record.file_name,
+                name=record.filename,
                 absolute_path=absolute_path,
                 relative_path=relative_path,
                 test_type=record.test_type,
