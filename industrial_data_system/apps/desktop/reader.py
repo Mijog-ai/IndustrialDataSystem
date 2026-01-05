@@ -224,21 +224,18 @@ class ReaderSignupDialog(QDialog):
         form_layout.addRow("Email", self.email_input)
 
         self.display_name_input = QLineEdit()
-        self.display_name_input.setPlaceholderText("Display name (optional)")
+        self.display_name_input.setPlaceholderText("Reader Name (optional)")
         form_layout.addRow("Display Name", self.display_name_input)
 
         self.password_input = QLineEdit()
         self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setPlaceholderText("Password")
         form_layout.addRow("Password", self.password_input)
 
-        self.confirm_input = QLineEdit()
-        self.confirm_input.setEchoMode(QLineEdit.Password)
-        form_layout.addRow("Confirm Password", self.confirm_input)
-
-        self.code_input = QLineEdit()
-        self.code_input.setEchoMode(QLineEdit.Password)
-        self.code_input.setPlaceholderText("Security code")
-        form_layout.addRow("Security Code", self.code_input)
+        self.confirm_password_input = QLineEdit()
+        self.confirm_password_input.setEchoMode(QLineEdit.Password)
+        self.confirm_password_input.setPlaceholderText("Confirm Password")
+        form_layout.addRow("Confirm", self.confirm_password_input)
 
         layout.addLayout(form_layout)
 
@@ -247,119 +244,115 @@ class ReaderSignupDialog(QDialog):
         self.error_label.hide()
         layout.addWidget(self.error_label)
 
-        button_box = QDialogButtonBox(QDialogButtonBox.Cancel | QDialogButtonBox.Ok)
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        layout.addWidget(button_box)
-
-        self._result: Optional[Dict[str, str]] = None
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
 
     def accept(self) -> None:
+        self.error_label.hide()
         email = self.email_input.text().strip().lower()
-        password = self.password_input.text()
-        confirm = self.confirm_input.text()
-        security_code = self.code_input.text().strip()
         display_name = self.display_name_input.text().strip()
+        password = self.password_input.text()
+        confirm_password = self.confirm_password_input.text()
 
-        if not email or not password or not security_code:
-            self._show_error("Email, password, and security code are required.")
+        if not email or not password:
+            self.error_label.setText("Email and password are required.")
+            self.error_label.show()
             return
 
-        if password != confirm:
-            self._show_error("Passwords do not match.")
+        if password != confirm_password:
+            self.error_label.setText("Passwords do not match.")
+            self.error_label.show()
             return
 
-        try:
-            expected_code = get_reader_security_code()
-            if security_code != expected_code:
-                self._show_error("Invalid security code.")
-                return
-        except RuntimeError as exc:
-            self._show_error(f"Configuration error: {exc}")
-            return
-
-        self._result = {
-            "email": email,
-            "password": password,
-            "display_name": display_name,
-        }
-        self._show_error("")
         super().accept()
 
-    def _show_error(self, message: str) -> None:
-        if message:
-            self.error_label.setText(message)
-            self.error_label.show()
-        else:
-            self.error_label.hide()
-
     def get_result(self) -> Optional[Dict[str, str]]:
-        return self._result
+        if self.result() != QDialog.Accepted:
+            return None
+        return {
+            "email": self.email_input.text().strip().lower(),
+            "password": self.password_input.text(),
+            "display_name": self.display_name_input.text().strip(),
+        }
 
 
 class ReaderDashboard(QWidget):
-    """Dashboard that renders shared-drive folders and file previews."""
+    """Main dashboard for browsing local resources."""
 
     logout_requested = pyqtSignal()
     refresh_requested = pyqtSignal()
+    open_tool_in_tab = pyqtSignal(str, QWidget)  # Signal to open tool in new tab
 
     def __init__(self) -> None:
         super().__init__()
-
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(24, 24, 24, 24)
-        main_layout.setSpacing(16)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(12)
+        # Top bar
+        top_bar = QWidget()
+        top_bar.setFixedHeight(60)
+        top_bar.setStyleSheet(f"background-color: {IndustrialTheme.SURFACE}; border-bottom: 1px solid #E5E7EB;")
+        top_bar_layout = QHBoxLayout(top_bar)
+        top_bar_layout.setContentsMargins(16, 0, 16, 0)
 
-        self.user_label = QLabel()
-        self.user_label.setProperty("heading", True)
-        header_layout.addWidget(self.user_label)
-        header_layout.addStretch()
+        self.user_label = QLabel("Reader Dashboard")
+        self.user_label.setStyleSheet(f"font-size: 16px; font-weight: 600; color: {IndustrialTheme.TEXT_PRIMARY};")
+        top_bar_layout.addWidget(self.user_label)
+        top_bar_layout.addStretch()
 
         refresh_button = QPushButton("Refresh")
         refresh_button.setProperty("secondary", True)
         refresh_button.clicked.connect(self.refresh_requested.emit)
-        header_layout.addWidget(refresh_button)
+        top_bar_layout.addWidget(refresh_button)
 
-        logout_button = QPushButton("Sign Out")
-        logout_button.setProperty("danger", True)
+        logout_button = QPushButton("Logout")
+        logout_button.setProperty("secondary", True)
         logout_button.clicked.connect(self.logout_requested.emit)
-        header_layout.addWidget(logout_button)
+        top_bar_layout.addWidget(logout_button)
 
-        main_layout.addLayout(header_layout)
+        main_layout.addWidget(top_bar)
 
-        splitter = QSplitter()
-        splitter.setOrientation(Qt.Horizontal)
+        # File browser
+        splitter = QSplitter(Qt.Horizontal)
+
+        tree_container = QWidget()
+        tree_layout = QVBoxLayout(tree_container)
+        tree_layout.setContentsMargins(16, 16, 8, 16)
+
+        tree_header = QLabel("Files & Folders")
+        tree_header.setStyleSheet(f"font-weight: 600; font-size: 14px; color: {IndustrialTheme.TEXT_PRIMARY};")
+        tree_layout.addWidget(tree_header)
 
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Name", "Type", "Pump Series", "Folder"])
-        self.tree.setColumnWidth(0, 280)
-        self.tree.setColumnWidth(2, 150)
-        splitter.addWidget(self.tree)
+        self.tree.setHeaderLabels(["Name", "Type", "Series", "Path"])
+        self.tree.setAlternatingRowColors(True)
+        self.tree.header().setSectionResizeMode(0, self.tree.header().Stretch)
+        tree_layout.addWidget(self.tree)
+
+        splitter.addWidget(tree_container)
 
         preview_container = QWidget()
         preview_layout = QVBoxLayout(preview_container)
-        preview_layout.setContentsMargins(12, 12, 12, 12)
-        preview_layout.setSpacing(12)
+        preview_layout.setContentsMargins(8, 16, 16, 16)
+
+        preview_header = QLabel("Preview & Tools")
+        preview_header.setStyleSheet(f"font-weight: 600; font-size: 14px; color: {IndustrialTheme.TEXT_PRIMARY};")
+        preview_layout.addWidget(preview_header)
 
         content_layout = QHBoxLayout()
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(24)
 
+        # Preview area
         preview_content = QWidget()
         preview_content_layout = QVBoxLayout(preview_content)
         preview_content_layout.setContentsMargins(0, 0, 0, 0)
-        preview_content_layout.setSpacing(12)
 
-        self.preview_title = QLabel("Select a file to preview")
-        self.preview_title.setProperty("subheading", True)
-        preview_content_layout.addWidget(self.preview_title)
-
-        self.preview_message = QLabel()
-        self.preview_message.setWordWrap(True)
-        preview_content_layout.addWidget(self.preview_message)
+        self.message_label = QLabel("Select a file to preview")
+        self.message_label.setAlignment(Qt.AlignCenter)
+        self.message_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-size: 14px;")
+        preview_content_layout.addWidget(self.message_label)
 
         self.image_preview = QLabel()
         self.image_preview.setAlignment(Qt.AlignCenter)
@@ -369,34 +362,35 @@ class ReaderDashboard(QWidget):
         self.text_preview = QPlainTextEdit()
         self.text_preview.setReadOnly(True)
         self.text_preview.hide()
-        preview_content_layout.addWidget(self.text_preview, stretch=1)
+        preview_content_layout.addWidget(self.text_preview)
 
+        # Table preview for parquet files
         self.table_preview = QTableWidget()
+        self.table_preview.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table_preview.setAlternatingRowColors(True)
         self.table_preview.hide()
-        self.table_preview.setMinimumHeight(400)  # ADD THIS LINE
-        preview_content_layout.addWidget(self.table_preview, stretch=1)  # ADD stretch=1
+        preview_content_layout.addWidget(self.table_preview)
 
+        # Tools panel
         tools_container = QWidget()
+        tools_container.setMaximumWidth(200)
         tools_layout = QVBoxLayout(tools_container)
-        tools_layout.setContentsMargins(0, 0, 0, 0)
+        tools_layout.setContentsMargins(8, 0, 0, 0)
         tools_layout.setSpacing(8)
 
-        tool_buttons: List[tuple[str, Callable[..., Optional[str]], bool]] = [
-            ("Plotter", run_plotter, True),
-            ("Anomaly Detector", run_anomaly_detector_standalone, False),  # Standalone mode - no file required
-            # ("AI Data Lab", run_ai_data_study, False),
-            # ("Train", run_training_simulation, False),
-        ]
+        tools_label = QLabel("AI Tools")
+        tools_label.setStyleSheet(f"font-weight: 600; color: {IndustrialTheme.TEXT_PRIMARY};")
+        tools_layout.addWidget(tools_label)
 
-        for label, callback, requires_resource in tool_buttons:
-            button = QPushButton(label)
-            button.setProperty("secondary", True)
-            button.clicked.connect(
-                lambda _, name=label, runner=callback, needs_resource=requires_resource: self._launch_tool(
-                    name, runner, needs_resource
-                )
-            )
-            tools_layout.addWidget(button)
+        self.plotter_button = QPushButton("Plotter")
+        self.plotter_button.setProperty("secondary", True)
+        self.plotter_button.clicked.connect(lambda: self._launch_tool("Plotter", run_plotter, True))
+        tools_layout.addWidget(self.plotter_button)
+
+        self.anomaly_button = QPushButton("Anomaly Detector")
+        self.anomaly_button.setProperty("secondary", True)
+        self.anomaly_button.clicked.connect(lambda: self._launch_tool("Anomaly Detector", run_anomaly_detector_standalone, False))
+        tools_layout.addWidget(self.anomaly_button)
 
         tools_layout.addStretch()
 
@@ -531,10 +525,10 @@ class ReaderDashboard(QWidget):
         self._preview_resource(resource)
 
     def _launch_tool(
-        self,
-        title: str,
-        runner: Callable[..., Optional[str]],
-        requires_resource: bool = False,
+            self,
+            title: str,
+            runner: Callable[..., Optional[str]],
+            requires_resource: bool = False,
     ) -> None:
         path: Optional[Path] = None
         if requires_resource:
@@ -546,14 +540,41 @@ class ReaderDashboard(QWidget):
                 )
                 return
             path = self._current_resource.absolute_path
+
+        # Handle Plotter - create widget
+        if title == "Plotter" and path:
+            try:
+                from industrial_data_system.ai.visualization.plotter import create_plotter_widget
+                plotter_widget = create_plotter_widget(path)
+                if plotter_widget:
+                    self.open_tool_in_tab.emit(f"Plotter - {path.name}", plotter_widget)
+                return
+            except Exception as exc:
+                import traceback
+                traceback.print_exc()
+                QMessageBox.critical(self, "Plotter Error", f"Failed to create plotter: {exc}")
+                return
+
+        # Handle Anomaly Detector - create widget
+        if title == "Anomaly Detector":
+            try:
+                from industrial_data_system.ai.anomaly_detection.anomaly_detector import create_anomaly_widget
+                anomaly_widget = create_anomaly_widget(path)  # path can be None for standalone
+                if anomaly_widget:
+                    tab_title = f"Anomaly Detector - {path.name}" if path else "Anomaly Detector"
+                    self.open_tool_in_tab.emit(tab_title, anomaly_widget)
+                return
+            except Exception as exc:
+                import traceback
+                traceback.print_exc()
+                QMessageBox.critical(self, "Anomaly Detector Error", f"Failed to create anomaly detector: {exc}")
+                return
+
+        # For any other tools that return text output
         try:
             if requires_resource:
                 assert path is not None
-                # Pass self as parent for plotter to close with main window
-                if title == "Plotter":
-                    output = runner(path, self)
-                else:
-                    output = runner(path)
+                output = runner(path)
             else:
                 output = runner()
         except Exception as exc:
@@ -562,18 +583,9 @@ class ReaderDashboard(QWidget):
         if output is None:
             return
 
-        if title in self._tool_outputs:
-            text_edit = self._tool_outputs[title]
-            text_edit.setPlainText(output)
-            container = text_edit.parentWidget()
-            index = self.tool_tabs.indexOf(container)
-            if index != -1:
-                self.tool_tabs.setCurrentIndex(index)
-            self.tool_tabs.show()
-            return
-
-        container = QWidget()
-        layout = QVBoxLayout(container)
+        # Create a widget for text output
+        tool_widget = QWidget()
+        layout = QVBoxLayout(tool_widget)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
 
@@ -582,14 +594,12 @@ class ReaderDashboard(QWidget):
         text_edit.setPlainText(output)
         layout.addWidget(text_edit)
 
-        self.tool_tabs.addTab(container, title)
-        self.tool_tabs.show()
-        self.tool_tabs.setCurrentWidget(container)
-        self._tool_outputs[title] = text_edit
+        self.open_tool_in_tab.emit(title, tool_widget)
 
     def _preview_resource(self, resource: LocalResource) -> None:
         self.image_preview.hide()
         self.text_preview.hide()
+        self.table_preview.hide()
 
         path = resource.absolute_path
         if not path.exists():
@@ -626,7 +636,7 @@ class ReaderDashboard(QWidget):
             self._show_message("Text preview")
             return
 
-        # Add parquet preview (replaces ASC preview)
+        # Add parquet preview
         if suffix == ".parquet":
             try:
                 import pandas as pd
@@ -638,152 +648,134 @@ class ReaderDashboard(QWidget):
 
             # Check if DataFrame is empty
             if len(df) == 0:
-                self.table_preview.hide()
-                self.text_preview.hide()
-                self.image_preview.hide()
-                self._show_message(
-                    "This file contains column headers but no data rows. "
-                    "The file was successfully converted to Parquet format, but the original file had no data."
-                )
+                self._show_message("Parquet file is empty.")
                 return
 
-            # Show first 300 rows as a table
-            self._show_table(df.head(300))
-            self._show_message("Parquet Table Preview")
+            # Limit preview to first 1000 rows
+            df_preview = df.head(1000)
+            self._show_table(df_preview)
+            self._show_message(f"Parquet preview (showing {len(df_preview)} of {len(df)} rows)")
             return
 
-        # CSV or ASC → show as table
-        if suffix in {".csv", ".asc"}:
-            try:
-                import pandas as pd
+        self._show_message("No preview available for this file type.")
 
-                df = pd.read_csv(path)
-            except Exception as exc:
-                self._show_message(f"Unable to read table file: {exc}")
-                return
-
-            # Check if DataFrame is empty
-            if len(df) == 0:
-                self.table_preview.hide()
-                self.text_preview.hide()
-                self.image_preview.hide()
-                self._show_message(
-                    "This file contains column headers but no data rows."
-                )
-                return
-
-            self._show_table(df.head(300))
-            self._show_message("Table Preview")
-            return
-
-        self._show_message("Preview is not available. Use Download to open the file.")
-
-    def _show_message(self, message: str) -> None:
-        self.preview_message.setText(message)
-        if not self.preview_message.isVisible():
-            self.preview_message.show()
+    def _show_message(self, text: str) -> None:
+        self.message_label.setText(text)
+        self.message_label.show()
 
     def download_current(self) -> None:
         if not self._current_resource:
+            QMessageBox.information(self, "Download", "No file is selected.")
             return
 
-        default_name = self._current_resource.display_name or "download"
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save File", default_name)
-        if not file_path:
-            return
-
-        source = self._current_resource.absolute_path
-        if not source.exists():
-            QMessageBox.critical(
+        src_path = self._current_resource.absolute_path
+        if not src_path.exists():
+            QMessageBox.warning(
                 self,
-                "Download Failed",
-                "The source file is not accessible on the shared drive.",
+                "Download",
+                "The selected file could not be found on the shared drive.",
             )
+            return
+
+        dest_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save File",
+            src_path.name,
+            f"All Files (*{src_path.suffix})",
+        )
+
+        if not dest_path:
             return
 
         try:
-            shutil.copy2(source, file_path)
+            shutil.copy2(src_path, dest_path)
+            QMessageBox.information(
+                self,
+                "Download",
+                f"File saved successfully to:\n{dest_path}",
+            )
         except Exception as exc:
-            QMessageBox.critical(self, "Download Failed", f"Unable to copy file: {exc}")
-            return
-        QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
+            QMessageBox.critical(
+                self,
+                "Download Failed",
+                f"Failed to copy file:\n{exc}",
+            )
 
 
 def _collect_resources(
-    manager: DatabaseManager, storage: LocalStorageManager
+    db_manager: DatabaseManager,
+    storage_manager: LocalStorageManager,
 ) -> List[LocalResource]:
+    """Collect all uploaded resources from the shared drive."""
     resources: List[LocalResource] = []
-    for record in manager.list_uploads():
-        file_path = record.file_path
-        if not file_path:
-            continue
-        relative_path = Path(file_path)
-        absolute_path = storage.base_path / relative_path
+    upload_records = db_manager.list_uploads()
 
-        # Check if a parquet version exists
-        if absolute_path.suffix.lower() == ".asc":
-            parquet_path = absolute_path.with_suffix(".parquet")
-            if parquet_path.exists():
-                # Use parquet instead of ASC
-                absolute_path = parquet_path
-                relative_path = parquet_path.relative_to(storage.base_path)
+    for record in upload_records:
+        absolute_path = storage_manager.base_path / record.pump_series / record.test_type / record.file_name
+        relative_path = Path(record.pump_series) / record.test_type / record.file_name
 
-        # Skip ASC files if they don't have parquet equivalents
-        if absolute_path.suffix.lower() == ".asc":
+        if not absolute_path.exists():
             continue
 
+        file_size = absolute_path.stat().st_size if absolute_path.exists() else None
         resources.append(
             LocalResource(
-                name=absolute_path.name,
+                name=record.file_name,
                 absolute_path=absolute_path,
                 relative_path=relative_path,
                 test_type=record.test_type,
-                pump_series=record.pump_series or "General",
-                file_size=record.file_size,
+                pump_series=record.pump_series,
+                file_size=file_size,
                 created_at=record.created_at,
             )
         )
-    resources.sort(key=lambda res: (res.pump_series.lower(), res.test_type.lower(), res.relative_path.parts))
+
     return resources
 
 
 class ReaderApp(QMainWindow):
-    """Main window that orchestrates authentication and browsing."""
+    """Main application window for the reader portal."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Inline Data Reader")
-        self.setMinimumSize(1100, 700)
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        try:
+            self.setWindowTitle("Reader Portal")
+            self.setMinimumSize(1100, 700)
 
-        self.config = get_config()
-        self.db_manager = DatabaseManager()
-        self.storage_manager = LocalStorageManager(config=self.config, database=self.db_manager)
-        self.auth_store = LocalAuthStore(self.db_manager)
-        self.current_user: Optional[LocalUser] = None
+            self.config = get_config()
+            self.db_manager = DatabaseManager()
+            self.storage_manager = LocalStorageManager(config=self.config, database=self.db_manager)
+            self.auth_store = LocalAuthStore(self.db_manager)
+            self.current_user: Optional[LocalUser] = None
 
-        self.session_manager = SessionManager(timeout_minutes=30)
+            self.session_manager = SessionManager(timeout_minutes=30)
 
-        # Add session timeout checker
-        self.session_timer = QTimer(self)
-        self.session_timer.timeout.connect(self._check_session_timeout)
-        self.session_timer.start(60000)  # Check every minu
+            # Add session timeout checker
+            self.session_timer = QTimer(self)
+            self.session_timer.timeout.connect(self._check_session_timeout)
+            self.session_timer.start(60000)  # Check every minute
 
-        self.stack = QStackedWidget()
-        self.setCentralWidget(self.stack)
+            self.stack = QStackedWidget()
+            self.setCentralWidget(self.stack)
 
-        self.login_page = ReaderLoginPage()
-        self.dashboard = ReaderDashboard()
+            self.login_page = ReaderLoginPage()
+            self.dashboard = ReaderDashboard()
 
-        self.stack.addWidget(self.login_page)
-        self.stack.addWidget(self.dashboard)
+            self.stack.addWidget(self.login_page)
+            self.stack.addWidget(self.dashboard)
 
-        self.login_page.login_requested.connect(self.handle_login)
-        self.login_page.signup_requested.connect(self.open_signup_dialog)
-        self.login_page.back_to_gateway_requested.connect(self.close)
-        self.dashboard.logout_requested.connect(self.handle_logout)
-        self.dashboard.refresh_requested.connect(self.refresh_resources)
-        self.dashboard.download_button.clicked.connect(self.dashboard.download_current)
+            self.login_page.login_requested.connect(self.handle_login)
+            self.login_page.signup_requested.connect(self.open_signup_dialog)
+            self.login_page.back_to_gateway_requested.connect(self.close)
+            self.dashboard.logout_requested.connect(self.handle_logout)
+            self.dashboard.refresh_requested.connect(self.refresh_resources)
+            self.dashboard.download_button.clicked.connect(self.dashboard.download_current)
+            # Don't connect open_tool_in_tab here - it will be connected by parent TabbedDesktopApp
+        except Exception as e:
+            print(f"Error initializing ReaderApp: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
     def show_login(self) -> None:
         self.login_page.reset_fields()
@@ -836,7 +828,7 @@ class ReaderApp(QMainWindow):
                 )
             return
 
-            # Log successful login
+        # Log successful login
         self.db_manager.log_security_event(
             user_id=user.id,
             event_type="LOGIN_SUCCESS",

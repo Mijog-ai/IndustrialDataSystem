@@ -6,6 +6,8 @@ from industrial_data_system.ai.toolkit import (
     run_anomaly_detector_standalone,
     run_plotter,
     run_training_simulation,
+    create_plotter_widget,
+    create_anomaly_widget,
 )
 
 from . import analysis, training, visualization
@@ -19,4 +21,6 @@ __all__ = [
     "run_training_simulation",
     "run_anomaly_detector",
     "run_anomaly_detector_standalone",
+    "create_plotter_widget",
+    "create_anomaly_widget",
 ]

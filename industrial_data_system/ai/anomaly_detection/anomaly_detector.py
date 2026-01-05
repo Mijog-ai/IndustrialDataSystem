@@ -1480,6 +1480,8 @@ class AnomalyDetectorWindow(QMainWindow):
 _open_windows: List[AnomalyDetectorWindow] = []
 
 
+
+
 def run(file_path: Path | str, parent: Optional[QWidget] = None) -> None:
     """Launch the anomaly detector window for the provided file path.
 
@@ -1507,25 +1509,110 @@ def run(file_path: Path | str, parent: Optional[QWidget] = None) -> None:
     _open_windows.append(window)
 
 
+
 def run_standalone(parent: Optional[QWidget] = None) -> None:
     """Launch the anomaly detector window in standalone mode without a file.
 
     This allows users to:
     1. Select pump series and test type from dropdowns
-    2. Load a data file (.sc, .asc, or parquet) via File menu
-    3. Automatically convert .sc/.asc files to parquet
-    4. Analyze the data with trained models for the selected pump/test type
+    """
+
+
+
+def create_anomaly_widget(file_path: Optional[Path] = None) -> Optional[QWidget]:
+    """Create an anomaly detector widget that can be embedded in a tab.
 
     Args:
-        parent: Optional parent widget
+        file_path: Optional path to the data file
+
+    Returns:
+        A standalone widget containing anomaly detector interface
     """
     try:
-        window = AnomalyDetectorWindow(file_path=None)
-    except Exception as exc:
-        QMessageBox.critical(None, "Anomaly Detector", f"Unable to open detector: {exc}")
-        return
+        # Create main widget
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
 
-    window.show()
-    window.raise_()
-    window.activateWindow()
-    _open_windows.append(window)
+        # Title
+        title = QLabel("Anomaly Detector")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #DC2626;")
+        layout.addWidget(title)
+
+        # File info
+        if file_path:
+            file_label = QLabel(f"File: {file_path.name}")
+            file_label.setStyleSheet("font-size: 12px; color: #6B7280;")
+            layout.addWidget(file_label)
+        else:
+            file_label = QLabel("Standalone Mode - No file loaded")
+            file_label.setStyleSheet("font-size: 12px; color: #6B7280;")
+            layout.addWidget(file_label)
+
+        # Info text
+        from PyQt5.QtWidgets import QTextEdit
+        info_text = QTextEdit()
+        info_text.setReadOnly(True)
+        info_text.setPlainText(
+            "Anomaly Detector Tool\n\n"
+            "This tool detects anomalies in your data using trained models.\n\n"
+            "Features:\n"
+            "- Load trained models from the model registry\n"
+            "- Analyze data for anomalies\n"
+            "- Visualize anomaly scores\n"
+            "- Export results\n\n"
+            "Click 'Open Full Detector' to launch the complete interface."
+        )
+        info_text.setMaximumHeight(200)
+        layout.addWidget(info_text)
+
+        # Buttons
+        button_layout = QVBoxLayout()
+
+        open_detector_btn = QPushButton("Open Full Anomaly Detector")
+        open_detector_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #DC2626;
+                color: white;
+                padding: 10px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #B91C1C;
+            }
+        """)
+
+        def open_full_detector():
+            """Open the full anomaly detector window."""
+            try:
+                if file_path:
+                    run(file_path)
+                else:
+                    run_standalone()
+            except Exception as e:
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.critical(widget, "Error", f"Failed to open detector: {e}")
+
+        open_detector_btn.clicked.connect(open_full_detector)
+        button_layout.addWidget(open_detector_btn)
+
+        layout.addLayout(button_layout)
+        layout.addStretch()
+
+        return widget
+
+    except Exception as e:
+        print(f"Error creating anomaly detector widget: {e}")
+        import traceback
+        traceback.print_exc()
+
+        # Return error widget
+        error_widget = QWidget()
+        error_layout = QVBoxLayout(error_widget)
+        error_label = QLabel(f"Error loading anomaly detector:\n{str(e)}")
+        error_label.setWordWrap(True)
+        error_label.setStyleSheet("color: red; padding: 20px;")
+        error_layout.addWidget(error_label)
+        return error_widget

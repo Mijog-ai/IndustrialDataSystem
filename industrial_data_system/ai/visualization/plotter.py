@@ -914,6 +914,8 @@ class QuickPlotterWindow(QMainWindow):
 _open_windows: List[QuickPlotterWindow] = []
 
 
+
+
 def run(file_path: Path | str, parent: Optional[QWidget] = None) -> None:
     """Launch the quick plotter window for the provided file path.
 
@@ -939,3 +941,156 @@ def run(file_path: Path | str, parent: Optional[QWidget] = None) -> None:
     window.raise_()
     window.activateWindow()
     _open_windows.append(window)
+
+
+
+
+def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
+    """Create a plotter widget that can be embedded in a tab.
+
+    Args:
+        file_path: Path to the data file to plot
+
+    Returns:
+        A standalone widget containing a simple plotter interface
+    """
+    try:
+        path = Path(file_path)
+        if not path.exists():
+            return None
+
+        # Load the data
+        suffix = path.suffix.lower()
+        if suffix == ".parquet":
+            df = pd.read_parquet(path, engine="pyarrow")
+        elif suffix == ".asc":
+            df, _ = load_and_process_asc_file(path)
+        elif suffix == ".csv":
+            df, _ = load_and_process_csv_file(path)
+        elif suffix == ".tdms":
+            df, _ = load_and_process_tdms_file(path)
+        else:
+            raise ValueError(f"Unsupported file format: {suffix}")
+
+        if df is None or df.empty:
+            raise ValueError("No data loaded from file")
+
+        # Create main widget
+        widget = QWidget()
+        main_layout = QHBoxLayout(widget)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+
+        # LEFT: Controls
+        left_panel = QWidget()
+        left_panel.setMaximumWidth(300)
+        left_layout = QVBoxLayout(left_panel)
+
+        title = QLabel(f"Plotter: {path.name}")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        left_layout.addWidget(title)
+
+        # Column selector
+        columns_group = QGroupBox("Select Columns")
+        columns_layout = QVBoxLayout(columns_group)
+
+        column_list = QListWidget()
+        column_list.setSelectionMode(QAbstractItemView.MultiSelection)
+
+        numeric_cols = df.select_dtypes(include=['float64', 'int64', 'float32', 'int32']).columns
+        for col in numeric_cols:
+            item = QListWidgetItem(str(col))
+            column_list.addItem(item)
+            if len(numeric_cols) <= 5:  # Auto-select if 5 or fewer
+                item.setSelected(True)
+
+        columns_layout.addWidget(column_list)
+        left_layout.addWidget(columns_group)
+
+        # Update button
+        update_btn = QPushButton("Update Plot")
+        update_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1D4ED8;
+                color: white;
+                padding: 8px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1E40AF;
+            }
+        """)
+        left_layout.addWidget(update_btn)
+        left_layout.addStretch()
+
+        main_layout.addWidget(left_panel)
+
+        # RIGHT: Plot area
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Create figure and canvas
+        figure = Figure(figsize=(8, 6), dpi=100)
+        canvas = FigureCanvas(figure)
+        toolbar = NavigationToolbar(canvas, widget)
+
+        right_layout.addWidget(toolbar)
+        right_layout.addWidget(canvas)
+
+        main_layout.addWidget(right_panel)
+
+        # Store references in widget to prevent garbage collection
+        widget._df = df
+        widget._figure = figure
+        widget._canvas = canvas
+        widget._column_list = column_list
+
+        # Plot update function
+        def update_plot():
+            try:
+                selected_items = column_list.selectedItems()
+                if not selected_items:
+                    return
+
+                selected_cols = [item.text() for item in selected_items]
+
+                figure.clear()
+                ax = figure.add_subplot(111)
+
+                for col in selected_cols:
+                    if col in df.columns:
+                        ax.plot(df.index, df[col], label=col, linewidth=1.5, alpha=0.8)
+
+                ax.set_xlabel("Index", fontsize=10)
+                ax.set_ylabel("Value", fontsize=10)
+                ax.set_title(f"Data Plot: {path.name}", fontsize=12, fontweight='bold')
+                ax.legend(loc='best', fontsize=9)
+                ax.grid(True, alpha=0.3, linestyle='--')
+
+                figure.tight_layout()
+                canvas.draw()
+
+            except Exception as e:
+                print(f"Error updating plot: {e}")
+
+        update_btn.clicked.connect(update_plot)
+
+        # Initial plot
+        update_plot()
+
+        return widget
+
+    except Exception as e:
+        print(f"Error creating plotter widget: {e}")
+        import traceback
+        traceback.print_exc()
+
+        # Return error widget
+        error_widget = QWidget()
+        error_layout = QVBoxLayout(error_widget)
+        error_label = QLabel(f"Error loading plotter:\n{str(e)}")
+        error_label.setWordWrap(True)
+        error_label.setStyleSheet("color: red; padding: 20px;")
+        error_layout.addWidget(error_label)
+        return error_widget

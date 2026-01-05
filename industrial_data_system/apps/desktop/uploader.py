@@ -114,12 +114,12 @@ class IndustrialTheme:
         """Return complete application stylesheet."""
         return f"""
             QMainWindow {{
-                background-color: {IndustrialTheme.BACKGROUND};
+                background-color: #F0F0F0;
             }}
             
             QWidget {{
                 font-family: 'Segoe UI', 'San Francisco', 'Helvetica Neue', Arial, sans-serif;
-                font-size: 14px;
+                font-size: 9px;
                 color: {IndustrialTheme.TEXT_PRIMARY};
             }}
             
@@ -128,14 +128,14 @@ class IndustrialTheme:
             }}
             
             QLabel[heading="true"] {{
-                font-size: 28px;
+                font-size: 13px;
                 font-weight: 600;
                 color: {IndustrialTheme.TEXT_PRIMARY};
-                padding: 8px 0px;
+                padding: 4px 0px;
             }}
             
             QLabel[subheading="true"] {{
-                font-size: 18px;
+                font-size: 12px;
                 font-weight: 500;
                 color: {IndustrialTheme.TEXT_PRIMARY};
                 padding: 4px 0px;
@@ -149,7 +149,7 @@ class IndustrialTheme:
             QLineEdit {{
                 padding: 12px 16px;
                 border: 2px solid {IndustrialTheme.BORDER};
-                border-radius: 8px;
+                border-radius: 2px;
                 background-color: {IndustrialTheme.SURFACE};
                 color: {IndustrialTheme.TEXT_PRIMARY};
                 font-size: 14px;
@@ -163,13 +163,13 @@ class IndustrialTheme:
             }}
             
             QComboBox {{
-                padding: 12px 16px;
+                padding: 4px 8px;
                 border: 2px solid {IndustrialTheme.BORDER};
-                border-radius: 8px;
+                border-radius: 2px;
                 background-color: {IndustrialTheme.SURFACE};
                 color: {IndustrialTheme.TEXT_PRIMARY};
-                font-size: 14px;
-                min-height: 44px;
+                font-size: 12px;
+                min-height: 22px;
             }}
             
            
@@ -188,17 +188,18 @@ class IndustrialTheme:
             }}
             
             QPushButton {{
-                padding: 12px 24px;
+                padding: 6px 16px;
                 border: none;
-                border-radius: 8px;
-                font-size: 14px;
+                border-radius: 0px;
+                font-size: 12px;
                 font-weight: 500;
-                min-height: 44px;
+                min-height: 24px;
             }}
             
             QPushButton[primary="true"] {{
                 background-color: {IndustrialTheme.PRIMARY};
                 color: white;
+                border: 1px solid {IndustrialTheme.PRIMARY_DARK}; 
             }}
             
             QPushButton[primary="true"]:hover {{
@@ -370,8 +371,8 @@ class NewPumpSeriesDialog(QDialog):
         self.setMinimumWidth(400)
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(20)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(24)
+        layout.setContentsMargins(24,24, 24, 24)
 
         title = QLabel("New Pump Series")
         title.setProperty("subheading", True)
@@ -678,7 +679,7 @@ class LoginPage(QWidget):
         layout.addStretch()
 
         scroll.setWidget(container)
-        main_layout.addWidget(scroll)
+        main_layout.addLayout(layout)
 
         self._switch_mode("login")
 
@@ -841,8 +842,8 @@ class DashboardPage(QWidget):
 
         container = QWidget()
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(40, 32, 40, 32)
-        layout.setSpacing(24)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
         # Header Section
         header_layout = QHBoxLayout()
@@ -955,8 +956,8 @@ class DashboardPage(QWidget):
         # Header with select all checkbox
         files_header_widget = QWidget()
         files_header_layout = QHBoxLayout(files_header_widget)
-        files_header_layout.setContentsMargins(24, 16, 24, 16)
-        files_header_layout.setSpacing(12)
+        files_header_layout.setContentsMargins(8, 8, 8, 8)
+        files_header_layout.setSpacing(8)
 
         self.select_all_checkbox = QCheckBox()
         self.select_all_checkbox.stateChanged.connect(self._handle_select_all)
@@ -1004,8 +1005,8 @@ class DashboardPage(QWidget):
 
         # Action buttons with bulk operations
         actions_layout = QHBoxLayout()
-        actions_layout.setContentsMargins(16, 12, 16, 16)
-        actions_layout.setSpacing(12)
+        actions_layout.setContentsMargins(8, 8, 8, 8)
+        actions_layout.setSpacing(8)
 
         # Bulk action buttons (only enabled when items selected)
         self.bulk_delete_button = QPushButton("Delete Selected")
@@ -2292,7 +2293,7 @@ def main() -> None:
     app.setStyleSheet(IndustrialTheme.get_stylesheet())
 
     # Set application-wide font
-    app.setFont(QFont("Segoe UI", 10))
+    # app.setFont(QFont("Segoe UI", 10))
 
     window = IndustrialDataApp()
     window.show()
