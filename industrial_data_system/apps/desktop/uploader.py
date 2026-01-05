@@ -13,9 +13,8 @@ from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from PyQt5.QtCore import QSize, Qt, QUrl, pyqtSignal
-from PyQt5.QtGui import QColor, QDesktopServices, QFont, QIcon, QKeySequence, QPalette
+from PyQt5.QtGui import QColor, QDesktopServices, QFont, QIcon, QPalette
 from PyQt5.QtWidgets import (
-    QAction,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -23,23 +22,18 @@ from PyQt5.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QFrame,
-    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QMainWindow,
-    QMenu,
-    QMenuBar,
     QMessageBox,
     QProgressDialog,
     QPushButton,
     QScrollArea,
     QStackedWidget,
-    QStatusBar,
     QTableWidget,
     QTableWidgetItem,
-    QToolBar,
     QVBoxLayout,
     QWidget,
 )
@@ -89,399 +83,280 @@ _load_environment()
 CONFIG = get_config()
 
 
-class DesktopTheme:
-    """Traditional desktop application design system."""
+class IndustrialTheme:
+    """Industrial design system color palette and styles."""
 
-    # Traditional Desktop Color Palette
-    PRIMARY = "#0078D4"  # Windows Blue
-    PRIMARY_LIGHT = "#429CE3"
-    PRIMARY_DARK = "#005A9E"
+    # Color Palette
+    PRIMARY = "#1E3A8A"  # Deep Blue
+    PRIMARY_LIGHT = "#3B82F6"  # Light Blue
+    PRIMARY_DARK = "#1E40AF"  # Darker Blue
 
-    SECONDARY = "#767676"  # Medium Gray
-    SECONDARY_LIGHT = "#A0A0A0"
+    SECONDARY = "#64748B"  # Slate Gray
+    SECONDARY_LIGHT = "#94A3B8"
 
-    SUCCESS = "#107C10"  # Dark Green
-    WARNING = "#FF8C00"  # Dark Orange
-    ERROR = "#D13438"  # Dark Red
+    SUCCESS = "#10B981"  # Green
+    WARNING = "#F59E0B"  # Amber
+    ERROR = "#EF4444"  # Red
 
-    BACKGROUND = "#F0F0F0"  # Classic Gray
+    BACKGROUND = "#F8FAFC"  # Light Gray
     SURFACE = "#FFFFFF"  # White
-    SURFACE_DARK = "#E6E6E6"
+    SURFACE_DARK = "#F1F5F9"
 
-    GROUPBOX_BG = "#FAFAFA"  # Light background for group boxes
+    TEXT_PRIMARY = "#0F172A"  # Dark Slate
+    TEXT_SECONDARY = "#475569"  # Medium Slate
+    TEXT_HINT = "#94A3B8"  # Light Slate
 
-    TEXT_PRIMARY = "#000000"  # Black
-    TEXT_SECONDARY = "#666666"  # Dark Gray
-    TEXT_HINT = "#999999"  # Light Gray
-
-    BORDER = "#ABABAB"
-    BORDER_DARK = "#707070"
-    BORDER_FOCUS = "#0078D4"
+    BORDER = "#E2E8F0"
+    BORDER_FOCUS = "#3B82F6"
 
     @staticmethod
     def get_stylesheet():
-        """Return complete application stylesheet with traditional desktop styling."""
+        """Return complete application stylesheet."""
         return f"""
             QMainWindow {{
-                background-color: {DesktopTheme.BACKGROUND};
+                background-color: {IndustrialTheme.BACKGROUND};
             }}
-
+            
             QWidget {{
-                font-family: 'Segoe UI', 'Tahoma', 'MS Sans Serif', Arial, sans-serif;
-                font-size: 9pt;
-                color: {DesktopTheme.TEXT_PRIMARY};
+                font-family: 'Segoe UI', 'San Francisco', 'Helvetica Neue', Arial, sans-serif;
+                font-size: 14px;
+                color: {IndustrialTheme.TEXT_PRIMARY};
             }}
-
-            QMenuBar {{
-                background-color: {DesktopTheme.SURFACE};
-                border-bottom: 1px solid {DesktopTheme.BORDER};
-                padding: 2px;
-            }}
-
-            QMenuBar::item {{
-                background-color: transparent;
-                padding: 4px 8px;
-            }}
-
-            QMenuBar::item:selected {{
-                background-color: {DesktopTheme.PRIMARY_LIGHT};
-                color: white;
-            }}
-
-            QMenu {{
-                background-color: {DesktopTheme.SURFACE};
-                border: 1px solid {DesktopTheme.BORDER};
-            }}
-
-            QMenu::item {{
-                padding: 4px 20px 4px 8px;
-            }}
-
-            QMenu::item:selected {{
-                background-color: {DesktopTheme.PRIMARY_LIGHT};
-                color: white;
-            }}
-
-            QToolBar {{
-                background-color: {DesktopTheme.SURFACE};
-                border-bottom: 1px solid {DesktopTheme.BORDER};
-                spacing: 2px;
-                padding: 2px;
-            }}
-
-            QToolButton {{
-                background-color: transparent;
-                border: 1px solid transparent;
-                padding: 3px;
-                margin: 1px;
-            }}
-
-            QToolButton:hover {{
-                background-color: {DesktopTheme.PRIMARY_LIGHT};
-                border: 1px solid {DesktopTheme.PRIMARY};
-            }}
-
-            QToolButton:pressed {{
-                background-color: {DesktopTheme.PRIMARY_DARK};
-                border: 1px solid {DesktopTheme.PRIMARY_DARK};
-            }}
-
-            QStatusBar {{
-                background-color: {DesktopTheme.SURFACE};
-                border-top: 1px solid {DesktopTheme.BORDER};
-            }}
-
+            
             QLabel {{
-                color: {DesktopTheme.TEXT_PRIMARY};
-                background-color: transparent;
+                color: {IndustrialTheme.TEXT_PRIMARY};
             }}
-
+            
             QLabel[heading="true"] {{
-                font-size: 12pt;
-                font-weight: bold;
-                color: {DesktopTheme.TEXT_PRIMARY};
+                font-size: 28px;
+                font-weight: 600;
+                color: {IndustrialTheme.TEXT_PRIMARY};
+                padding: 8px 0px;
+            }}
+            
+            QLabel[subheading="true"] {{
+                font-size: 18px;
+                font-weight: 500;
+                color: {IndustrialTheme.TEXT_PRIMARY};
                 padding: 4px 0px;
             }}
-
-            QLabel[subheading="true"] {{
-                font-size: 10pt;
-                font-weight: bold;
-                color: {DesktopTheme.TEXT_PRIMARY};
-                padding: 2px 0px;
-            }}
-
+            
             QLabel[caption="true"] {{
-                font-size: 8pt;
-                color: {DesktopTheme.TEXT_SECONDARY};
+                font-size: 12px;
+                color: {IndustrialTheme.TEXT_SECONDARY};
             }}
-
+            
             QLineEdit {{
-                padding: 3px 5px;
-                border: 1px solid {DesktopTheme.BORDER};
-                background-color: {DesktopTheme.SURFACE};
-                color: {DesktopTheme.TEXT_PRIMARY};
-                selection-background-color: {DesktopTheme.PRIMARY};
+                padding: 12px 16px;
+                border: 2px solid {IndustrialTheme.BORDER};
+                border-radius: 8px;
+                background-color: {IndustrialTheme.SURFACE};
+                color: {IndustrialTheme.TEXT_PRIMARY};
+                font-size: 14px;
             }}
-
-            QLineEdit:focus {{
-                border: 1px solid {DesktopTheme.BORDER_FOCUS};
-            }}
-
+            
+            
+            
             QLineEdit:disabled {{
-                background-color: {DesktopTheme.SURFACE_DARK};
-                color: {DesktopTheme.TEXT_HINT};
+                background-color: {IndustrialTheme.SURFACE_DARK};
+                color: {IndustrialTheme.TEXT_HINT};
             }}
-
+            
             QComboBox {{
-                padding: 3px 5px;
-                border: 1px solid {DesktopTheme.BORDER};
-                background-color: {DesktopTheme.SURFACE};
-                color: {DesktopTheme.TEXT_PRIMARY};
-                min-height: 20px;
+                padding: 12px 16px;
+                border: 2px solid {IndustrialTheme.BORDER};
+                border-radius: 8px;
+                background-color: {IndustrialTheme.SURFACE};
+                color: {IndustrialTheme.TEXT_PRIMARY};
+                font-size: 14px;
+                min-height: 44px;
             }}
-
-            QComboBox:focus {{
-                border: 1px solid {DesktopTheme.BORDER_FOCUS};
-            }}
-
+            
+           
+            
             QComboBox::drop-down {{
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 18px;
-                border-left: 1px solid {DesktopTheme.BORDER};
+                border: none;
+                width: 30px;
             }}
-
-            QComboBox::down-arrow {{
-                image: none;
-                border: 2px solid {DesktopTheme.TEXT_PRIMARY};
-                width: 6px;
-                height: 6px;
-                border-top: none;
-                border-right: none;
-                transform: rotate(-45deg);
-            }}
-
+            
             QComboBox QAbstractItemView {{
-                background-color: {DesktopTheme.SURFACE};
-                border: 1px solid {DesktopTheme.BORDER};
-                selection-background-color: {DesktopTheme.PRIMARY};
-                selection-color: white;
-                outline: none;
+                background-color: {IndustrialTheme.SURFACE};
+                border: 2px solid {IndustrialTheme.BORDER};
+                border-radius: 8px;
+                selection-background-color: {IndustrialTheme.PRIMARY_LIGHT};
+                padding: 4px;
             }}
-
+            
             QPushButton {{
-                padding: 4px 12px;
-                border: 1px solid {DesktopTheme.BORDER};
-                background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {DesktopTheme.SURFACE}, stop:1 {DesktopTheme.SURFACE_DARK});
-                color: {DesktopTheme.TEXT_PRIMARY};
-                min-height: 22px;
+                padding: 12px 24px;
+                border: none;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 500;
+                min-height: 44px;
             }}
-
-            QPushButton:hover {{
-                background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #E5F3FF, stop:1 #D0E8FF);
-                border: 1px solid {DesktopTheme.PRIMARY};
-            }}
-
-            QPushButton:pressed {{
-                background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {DesktopTheme.SURFACE_DARK}, stop:1 {DesktopTheme.SURFACE});
-                border: 1px solid {DesktopTheme.PRIMARY_DARK};
-            }}
-
+            
             QPushButton[primary="true"] {{
-                background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {DesktopTheme.PRIMARY_LIGHT}, stop:1 {DesktopTheme.PRIMARY});
+                background-color: {IndustrialTheme.PRIMARY};
                 color: white;
-                border: 1px solid {DesktopTheme.PRIMARY_DARK};
-                font-weight: bold;
             }}
-
+            
             QPushButton[primary="true"]:hover {{
-                background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {DesktopTheme.PRIMARY}, stop:1 {DesktopTheme.PRIMARY_LIGHT});
+                background-color: {IndustrialTheme.PRIMARY_DARK};
             }}
-
+            
             QPushButton[primary="true"]:pressed {{
-                background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {DesktopTheme.PRIMARY_DARK}, stop:1 {DesktopTheme.PRIMARY});
+                background-color: {IndustrialTheme.PRIMARY_DARK};
             }}
-
+            
             QPushButton[secondary="true"] {{
-                background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {DesktopTheme.SURFACE}, stop:1 {DesktopTheme.SURFACE_DARK});
-                color: {DesktopTheme.TEXT_PRIMARY};
-                border: 1px solid {DesktopTheme.BORDER};
+                background-color: {IndustrialTheme.SURFACE};
+                color: {IndustrialTheme.TEXT_PRIMARY};
+                border: 2px solid {IndustrialTheme.BORDER};
             }}
-
+            
+            QPushButton[secondary="true"]:hover {{
+                background-color: {IndustrialTheme.SURFACE_DARK};
+                border: 2px solid {IndustrialTheme.SECONDARY};
+            }}
+            
             QPushButton[danger="true"] {{
-                background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #F44336, stop:1 {DesktopTheme.ERROR});
+                background-color: {IndustrialTheme.ERROR};
                 color: white;
-                border: 1px solid #C62828;
-                font-weight: bold;
             }}
-
+            
             QPushButton[danger="true"]:hover {{
-                background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #FF5252, stop:1 #F44336);
+                background-color: #DC2626;
             }}
-
+            
             QPushButton[flat="true"] {{
                 background-color: transparent;
-                color: {DesktopTheme.PRIMARY};
-                border: none;
-                padding: 4px 8px;
+                color: {IndustrialTheme.PRIMARY};
+                padding: 8px 16px;
             }}
-
+            
             QPushButton[flat="true"]:hover {{
-                background-color: #E5F3FF;
+                background-color: rgba(59, 130, 246, 0.1);
             }}
-
+            
             QPushButton:disabled {{
-                background-color: {DesktopTheme.SURFACE_DARK};
-                color: {DesktopTheme.TEXT_HINT};
-                border: 1px solid {DesktopTheme.BORDER};
+                background-color: {IndustrialTheme.SURFACE_DARK};
+                color: {IndustrialTheme.TEXT_HINT};
             }}
-
+            
             QTableWidget {{
-                background-color: {DesktopTheme.SURFACE};
-                border: 1px solid {DesktopTheme.BORDER};
-                gridline-color: {DesktopTheme.BORDER};
-                selection-background-color: {DesktopTheme.PRIMARY};
-                selection-color: white;
+                background-color: {IndustrialTheme.SURFACE};
+                border: 1px solid {IndustrialTheme.BORDER};
+                border-radius: 8px;
+                gridline-color: {IndustrialTheme.BORDER};
             }}
-
+            
             QTableWidget::item {{
-                padding: 4px;
+                padding: 12px;
+                border-bottom: 1px solid {IndustrialTheme.BORDER};
             }}
-
+            
+            QTableWidget::item:selected {{
+                background-color: rgba(59, 130, 246, 0.1);
+                color: {IndustrialTheme.TEXT_PRIMARY};
+            }}
+            
             QHeaderView::section {{
-                background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {DesktopTheme.SURFACE}, stop:1 {DesktopTheme.SURFACE_DARK});
-                padding: 4px;
-                border: 1px solid {DesktopTheme.BORDER};
-                font-weight: bold;
-                color: {DesktopTheme.TEXT_PRIMARY};
+                background-color: {IndustrialTheme.SURFACE_DARK};
+                padding: 12px;
+                border: none;
+                border-bottom: 2px solid {IndustrialTheme.BORDER};
+                font-weight: 600;
+                color: {IndustrialTheme.TEXT_PRIMARY};
             }}
-
-            QGroupBox {{
-                border: 1px solid {DesktopTheme.BORDER};
-                margin-top: 8px;
-                padding-top: 8px;
-                background-color: {DesktopTheme.GROUPBOX_BG};
-            }}
-
-            QGroupBox::title {{
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 8px;
-                padding: 0 4px;
-                background-color: {DesktopTheme.GROUPBOX_BG};
-                color: {DesktopTheme.TEXT_PRIMARY};
-                font-weight: bold;
-            }}
-
+            
             QFrame[card="true"] {{
-                background-color: {DesktopTheme.GROUPBOX_BG};
-                border: 1px solid {DesktopTheme.BORDER};
-                padding: 8px;
+                background-color: {IndustrialTheme.SURFACE};
+                border: 1px solid {IndustrialTheme.BORDER};
+                border-radius: 12px;
+                padding: 24px;
             }}
-
+            
             QDialog {{
-                background-color: {DesktopTheme.BACKGROUND};
+                background-color: {IndustrialTheme.SURFACE};
             }}
-
+            
             QScrollBar:vertical {{
-                border: 1px solid {DesktopTheme.BORDER};
-                background-color: {DesktopTheme.SURFACE_DARK};
-                width: 16px;
+                border: none;
+                background-color: {IndustrialTheme.SURFACE_DARK};
+                width: 12px;
+                border-radius: 6px;
             }}
-
+            
             QScrollBar::handle:vertical {{
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {DesktopTheme.SURFACE}, stop:1 {DesktopTheme.SURFACE_DARK});
-                border: 1px solid {DesktopTheme.BORDER};
-                min-height: 20px;
+                background-color: {IndustrialTheme.SECONDARY_LIGHT};
+                border-radius: 6px;
+                min-height: 30px;
             }}
-
+            
             QScrollBar::handle:vertical:hover {{
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #E5F3FF, stop:1 #D0E8FF);
+                background-color: {IndustrialTheme.SECONDARY};
             }}
-
+            
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-                border: 1px solid {DesktopTheme.BORDER};
-                background-color: {DesktopTheme.SURFACE_DARK};
-                height: 16px;
-                subcontrol-origin: margin;
+                height: 0px;
             }}
-
-            QScrollBar::add-line:vertical {{
-                subcontrol-position: bottom;
-            }}
-
-            QScrollBar::sub-line:vertical {{
-                subcontrol-position: top;
-            }}
-
-            QScrollBar:horizontal {{
-                border: 1px solid {DesktopTheme.BORDER};
-                background-color: {DesktopTheme.SURFACE_DARK};
-                height: 16px;
-            }}
-
-            QScrollBar::handle:horizontal {{
-                background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {DesktopTheme.SURFACE}, stop:1 {DesktopTheme.SURFACE_DARK});
-                border: 1px solid {DesktopTheme.BORDER};
-                min-width: 20px;
-            }}
-
             QCheckBox::indicator {{
-                width: 13px;
-                height: 13px;
-                border: 1px solid {DesktopTheme.BORDER_DARK};
-                background-color: {DesktopTheme.SURFACE};
+                width: 18px;
+                height: 18px;
+                border: 2px solid #000000;
+                border-radius: 3px;
+                background-color: {IndustrialTheme.SURFACE};
             }}
-
+            
             QCheckBox::indicator:hover {{
-                border-color: {DesktopTheme.PRIMARY};
-                background-color: #E5F3FF;
+                border-color: #000000;
+                background-color: {IndustrialTheme.SURFACE_DARK};
             }}
-
+            
             QCheckBox::indicator:checked {{
-                background-color: {DesktopTheme.PRIMARY};
-                border-color: {DesktopTheme.PRIMARY_DARK};
+                background-color: #000000;
+                border-color: #000000;
             }}
 
             QTabWidget::pane {{
-                border: 1px solid {DesktopTheme.BORDER};
-                background-color: {DesktopTheme.SURFACE};
-                padding: 4px;
+                border: 1px solid {IndustrialTheme.BORDER};
+                border-radius: 8px;
+                background-color: {IndustrialTheme.SURFACE};
+                padding: 8px;
+            }}
+
+            QTabWidget::tab-bar {{
+                alignment: left;
             }}
 
             QTabBar::tab {{
-                background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {DesktopTheme.SURFACE}, stop:1 {DesktopTheme.SURFACE_DARK});
-                color: {DesktopTheme.TEXT_PRIMARY};
-                border: 1px solid {DesktopTheme.BORDER};
+                background-color: {IndustrialTheme.SURFACE_DARK};
+                color: {IndustrialTheme.TEXT_SECONDARY};
+                border: 1px solid {IndustrialTheme.BORDER};
                 border-bottom: none;
-                padding: 4px 12px;
-                margin-right: 2px;
-                min-width: 80px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                padding: 12px 24px;
+                margin-right: 4px;
+                min-width: 100px;
+                font-size: 14px;
+                font-weight: 500;
             }}
 
             QTabBar::tab:selected {{
-                background-color: {DesktopTheme.SURFACE};
-                color: {DesktopTheme.TEXT_PRIMARY};
-                font-weight: bold;
-                border-bottom: 1px solid {DesktopTheme.SURFACE};
+                background-color: {IndustrialTheme.SURFACE};
+                color: {IndustrialTheme.PRIMARY};
+                border-bottom: 2px solid {IndustrialTheme.PRIMARY};
             }}
 
             QTabBar::tab:hover:!selected {{
-                background-color: #E5F3FF;
+                background-color: {IndustrialTheme.SURFACE};
+                color: {IndustrialTheme.TEXT_PRIMARY};
+            }}
+
+            QTabBar::tab:first {{
+                margin-left: 0px;
             }}
         """
 
@@ -510,7 +385,7 @@ class NewPumpSeriesDialog(QDialog):
         layout.addWidget(desc)
 
         input_label = QLabel("Pump Series Name")
-        input_label.setStyleSheet(f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;")
+        input_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         layout.addWidget(input_label)
 
         self.series_input = QLineEdit()
@@ -519,7 +394,7 @@ class NewPumpSeriesDialog(QDialog):
 
         description_label = QLabel("Description (optional)")
         description_label.setStyleSheet(
-            f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;"
+            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
         )
         layout.addWidget(description_label)
 
@@ -574,7 +449,7 @@ class NewTestTypeDialog(QDialog):
 
         # Input field
         input_label = QLabel("Test Type Name")
-        input_label.setStyleSheet(f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;")
+        input_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         layout.addWidget(input_label)
 
         self.test_type_input = QLineEdit()
@@ -583,7 +458,7 @@ class NewTestTypeDialog(QDialog):
 
         description_label = QLabel("Description (optional)")
         description_label.setStyleSheet(
-            f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;"
+            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
         )
         layout.addWidget(description_label)
 
@@ -715,7 +590,7 @@ class LoginPage(QWidget):
 
         login_email_label = QLabel("Email or Username")
         login_email_label.setStyleSheet(
-            f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;"
+            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
         )
         self.login_email_input = QLineEdit()
         self.login_email_input.setPlaceholderText("Enter your email or username")
@@ -724,7 +599,7 @@ class LoginPage(QWidget):
 
         login_password_label = QLabel("Password")
         login_password_label.setStyleSheet(
-            f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;"
+            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
         )
         self.login_password_input = QLineEdit()
         self.login_password_input.setPlaceholderText("Enter your password")
@@ -753,7 +628,7 @@ class LoginPage(QWidget):
 
         signup_email_label = QLabel("Email")
         signup_email_label.setStyleSheet(
-            f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;"
+            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
         )
         self.signup_email_input = QLineEdit()
         self.signup_email_input.setPlaceholderText("your.email@company.com")
@@ -762,7 +637,7 @@ class LoginPage(QWidget):
 
         signup_username_label = QLabel("Username")
         signup_username_label.setStyleSheet(
-            f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;"
+            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
         )
         self.signup_username_input = QLineEdit()
         self.signup_username_input.setPlaceholderText("Username (max 6 characters)")
@@ -772,7 +647,7 @@ class LoginPage(QWidget):
 
         signup_password_label = QLabel("Password")
         signup_password_label.setStyleSheet(
-            f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;"
+            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
         )
         self.signup_password_input = QLineEdit()
         self.signup_password_input.setPlaceholderText("Password (max 6 characters)")
@@ -783,7 +658,7 @@ class LoginPage(QWidget):
 
         signup_confirm_label = QLabel("Confirm Password")
         signup_confirm_label.setStyleSheet(
-            f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;"
+            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
         )
         self.signup_confirm_input = QLineEdit()
         self.signup_confirm_input.setPlaceholderText("Re-enter your password")
@@ -910,7 +785,7 @@ class ForgotPasswordPage(QWidget):
         form_layout.setContentsMargins(32, 32, 32, 32)
 
         email_label = QLabel("Email Address")
-        email_label.setStyleSheet(f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;")
+        email_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         self.email_input = QLineEdit()
         self.email_input.setPlaceholderText("your.email@company.com")
         form_layout.addWidget(email_label)
@@ -1025,7 +900,7 @@ class DashboardPage(QWidget):
 
         pump_series_label = QLabel("Pump Series:")
         pump_series_label.setStyleSheet(
-            f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;"
+            f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;"
         )
         pump_series_layout.addWidget(pump_series_label)
 
@@ -1046,7 +921,7 @@ class DashboardPage(QWidget):
         test_type_layout.setSpacing(12)
 
         test_type_label = QLabel("Test Type:")
-        test_type_label.setStyleSheet(f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;")
+        test_type_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         test_type_layout.addWidget(test_type_label)
 
         self.test_type_combo = QComboBox()
@@ -1097,7 +972,7 @@ class DashboardPage(QWidget):
         self.selection_count_label.setProperty("caption", True)
         files_header_layout.addWidget(self.selection_count_label)
 
-        files_header_widget.setStyleSheet(f"border-bottom: 1px solid {DesktopTheme.BORDER};")
+        files_header_widget.setStyleSheet(f"border-bottom: 1px solid {IndustrialTheme.BORDER};")
         files_layout.addWidget(files_header_widget)
 
         # Table with checkbox column (now 6 columns instead of 5)
@@ -1183,7 +1058,7 @@ class DashboardPage(QWidget):
         self.csv_preview_label = QLabel("CSV Preview")
         self.csv_preview_label.setProperty("subheading", True)
         self.csv_preview_label.setStyleSheet(
-            f"padding: 20px 24px; border-bottom: 1px solid {DesktopTheme.BORDER};"
+            f"padding: 20px 24px; border-bottom: 1px solid {IndustrialTheme.BORDER};"
         )
         csv_layout.addWidget(self.csv_preview_label)
 
@@ -1781,7 +1656,7 @@ class BulkMoveDialog(QDialog):
 
         # Pump series selector
         pump_label = QLabel("Destination Pump Series")
-        pump_label.setStyleSheet(f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;")
+        pump_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         layout.addWidget(pump_label)
 
         self.pump_combo = QComboBox()
@@ -1791,7 +1666,7 @@ class BulkMoveDialog(QDialog):
 
         # Test type selector
         test_label = QLabel("Destination Test Type")
-        test_label.setStyleSheet(f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;")
+        test_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         layout.addWidget(test_label)
 
         self.test_combo = QComboBox()
@@ -1845,17 +1720,6 @@ class IndustrialDataApp(QMainWindow):
         self.current_username: str = ""
         self.default_pump_series = "General"
 
-        # Create menu bar
-        self._create_menu_bar()
-
-        # Create toolbar
-        self._create_toolbar()
-
-        # Create status bar
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Ready")
-
         self.dashboard_page = DashboardPage()
         self.setCentralWidget(self.dashboard_page)
         self.dashboard_page.upload_requested.connect(self.handle_upload)
@@ -1867,175 +1731,6 @@ class IndustrialDataApp(QMainWindow):
         self.dashboard_page.back_to_gateway_requested.connect(self.close)
 
         self._initialize_gateway_session()
-
-    def _create_menu_bar(self) -> None:
-        """Create traditional desktop menu bar."""
-        menubar = self.menuBar()
-
-        # File Menu
-        file_menu = menubar.addMenu("&File")
-
-        # Pump Series submenu
-        self.pump_series_menu = file_menu.addMenu("&Pump Series")
-        self._populate_pump_series_menu()
-
-        # Test Type submenu
-        self.test_type_menu = file_menu.addMenu("&Test Type")
-        self._populate_test_type_menu()
-
-        file_menu.addSeparator()
-
-        upload_action = QAction("&Upload Files...", self)
-        upload_action.setShortcut(QKeySequence("Ctrl+U"))
-        upload_action.triggered.connect(lambda: self.dashboard_page.upload_clicked.emit())
-        file_menu.addAction(upload_action)
-
-        file_menu.addSeparator()
-
-        exit_action = QAction("E&xit", self)
-        exit_action.setShortcut(QKeySequence("Alt+F4"))
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
-
-        # Edit Menu
-        edit_menu = menubar.addMenu("&Edit")
-
-        refresh_action = QAction("&Refresh", self)
-        refresh_action.setShortcut(QKeySequence("F5"))
-        refresh_action.triggered.connect(lambda: self.dashboard_page.refresh_clicked.emit())
-        edit_menu.addAction(refresh_action)
-
-        # View Menu
-        view_menu = menubar.addMenu("&View")
-
-        show_toolbar_action = QAction("Show &Toolbar", self)
-        show_toolbar_action.setCheckable(True)
-        show_toolbar_action.setChecked(True)
-        show_toolbar_action.triggered.connect(lambda checked: self.toolbar.setVisible(checked))
-        view_menu.addAction(show_toolbar_action)
-
-        show_statusbar_action = QAction("Show &Status Bar", self)
-        show_statusbar_action.setCheckable(True)
-        show_statusbar_action.setChecked(True)
-        show_statusbar_action.triggered.connect(lambda checked: self.status_bar.setVisible(checked))
-        view_menu.addAction(show_statusbar_action)
-
-        # Help Menu
-        help_menu = menubar.addMenu("&Help")
-
-        about_action = QAction("&About", self)
-        about_action.triggered.connect(self._show_about_dialog)
-        help_menu.addAction(about_action)
-
-    def _create_toolbar(self) -> None:
-        """Create traditional desktop toolbar."""
-        self.toolbar = QToolBar("Main Toolbar")
-        self.toolbar.setMovable(False)
-        self.addToolBar(self.toolbar)
-
-        # Upload button
-        upload_btn = QAction("Upload", self)
-        upload_btn.setToolTip("Upload Files (Ctrl+U)")
-        upload_btn.triggered.connect(lambda: self.dashboard_page.upload_clicked.emit())
-        self.toolbar.addAction(upload_btn)
-
-        self.toolbar.addSeparator()
-
-        # Refresh button
-        refresh_btn = QAction("Refresh", self)
-        refresh_btn.setToolTip("Refresh File List (F5)")
-        refresh_btn.triggered.connect(lambda: self.dashboard_page.refresh_clicked.emit())
-        self.toolbar.addAction(refresh_btn)
-
-        self.toolbar.addSeparator()
-
-        # New Pump Series button
-        new_pump_btn = QAction("New Pump", self)
-        new_pump_btn.setToolTip("Create New Pump Series (Ctrl+P)")
-        new_pump_btn.triggered.connect(lambda: self.dashboard_page.create_pump_series_clicked.emit())
-        self.toolbar.addAction(new_pump_btn)
-
-        # New Test Type button
-        new_test_btn = QAction("New Test", self)
-        new_test_btn.setToolTip("Create New Test Type (Ctrl+T)")
-        new_test_btn.triggered.connect(lambda: self.dashboard_page.create_test_type_clicked.emit())
-        self.toolbar.addAction(new_test_btn)
-
-    def _show_about_dialog(self) -> None:
-        """Show about dialog."""
-        QMessageBox.about(
-            self,
-            "About Inline Data System",
-            "<h3>Inline Data System</h3>"
-            "<p>Version 1.0</p>"
-            "<p>Industrial data management and analysis system.</p>"
-        )
-
-    def _populate_pump_series_menu(self) -> None:
-        """Populate the pump series dropdown menu."""
-        self.pump_series_menu.clear()
-
-        # Add existing pump series
-        pump_series_list = self.dashboard_page.pump_series_options
-        if pump_series_list:
-            for series in pump_series_list:
-                action = QAction(series, self)
-                action.triggered.connect(
-                    lambda checked, s=series: self._select_pump_series(s)
-                )
-                self.pump_series_menu.addAction(action)
-
-            self.pump_series_menu.addSeparator()
-
-        # Add "Add New Pump Series..." option
-        add_new_action = QAction("Add New Pump Series...", self)
-        add_new_action.setShortcut(QKeySequence("Ctrl+P"))
-        add_new_action.triggered.connect(
-            lambda: self.dashboard_page.create_pump_series_clicked.emit()
-        )
-        self.pump_series_menu.addAction(add_new_action)
-
-    def _populate_test_type_menu(self) -> None:
-        """Populate the test type dropdown menu."""
-        self.test_type_menu.clear()
-
-        # Get current pump series
-        current_pump_series = self.dashboard_page.get_selected_pump_series()
-
-        # Add existing test types for current pump series
-        if current_pump_series and current_pump_series in self.dashboard_page.catalog:
-            test_types = self.dashboard_page.catalog[current_pump_series]
-            if test_types:
-                for test_type in test_types:
-                    action = QAction(test_type, self)
-                    action.triggered.connect(
-                        lambda checked, t=test_type: self._select_test_type(t)
-                    )
-                    self.test_type_menu.addAction(action)
-
-                self.test_type_menu.addSeparator()
-
-        # Add "Add New Test Type..." option
-        add_new_action = QAction("Add New Test Type...", self)
-        add_new_action.setShortcut(QKeySequence("Ctrl+T"))
-        add_new_action.triggered.connect(
-            lambda: self.dashboard_page.create_test_type_clicked.emit()
-        )
-        self.test_type_menu.addAction(add_new_action)
-
-    def _select_pump_series(self, series: str) -> None:
-        """Select a pump series in the dashboard."""
-        index = self.dashboard_page.pump_series_combo.findText(series)
-        if index >= 0:
-            self.dashboard_page.pump_series_combo.setCurrentIndex(index)
-        # Update test type menu when pump series changes
-        self._populate_test_type_menu()
-
-    def _select_test_type(self, test_type: str) -> None:
-        """Select a test type in the dashboard."""
-        index = self.dashboard_page.test_type_combo.findText(test_type)
-        if index >= 0:
-            self.dashboard_page.test_type_combo.setCurrentIndex(index)
 
     def _initialize_gateway_session(self) -> None:
         gateway_user = self._ensure_gateway_user()
@@ -2150,14 +1845,8 @@ class IndustrialDataApp(QMainWindow):
 
             normalized_catalog = {name: sorted(types) for name, types in catalog.items()}
             self.dashboard_page.set_catalog(normalized_catalog)
-            # Refresh menus after catalog is updated
-            self._populate_pump_series_menu()
-            self._populate_test_type_menu()
         except Exception:
             self.dashboard_page.set_catalog({})
-            # Refresh menus even on exception
-            self._populate_pump_series_menu()
-            self._populate_test_type_menu()
 
     def handle_new_pump_series(self, name: str, description: str) -> None:
         name = name.strip()
@@ -2178,9 +1867,6 @@ class IndustrialDataApp(QMainWindow):
         index = self.dashboard_page.pump_series_combo.findText(record.name)
         if index >= 0:
             self.dashboard_page.pump_series_combo.setCurrentIndex(index)
-        # Refresh menus
-        self._populate_pump_series_menu()
-        self._populate_test_type_menu()
 
     def handle_new_test_type(self, pump_series: str, name: str, description: str) -> None:
         pump_series = pump_series.strip()
@@ -2206,9 +1892,6 @@ class IndustrialDataApp(QMainWindow):
         index = self.dashboard_page.test_type_combo.findText(record.name)
         if index >= 0:
             self.dashboard_page.test_type_combo.setCurrentIndex(index)
-        # Refresh menus
-        self._populate_pump_series_menu()
-        self._populate_test_type_menu()
 
     def handle_delete_files(self, file_ids: List[int]) -> None:
         """Handle deletion of files from storage and database."""
@@ -2586,10 +2269,10 @@ class IndustrialDataApp(QMainWindow):
         dialog.setStyleSheet(
             f"""
             QMessageBox {{
-                background-color: {DesktopTheme.SURFACE};
+                background-color: {IndustrialTheme.SURFACE};
             }}
             QMessageBox QLabel {{
-                color: {DesktopTheme.TEXT_PRIMARY};
+                color: {IndustrialTheme.TEXT_PRIMARY};
                 font-size: 14px;
                 padding: 10px;
             }}
@@ -2606,7 +2289,7 @@ def main() -> None:
     app = QApplication(sys.argv)
 
     # Apply industrial theme stylesheet
-    app.setStyleSheet(DesktopTheme.get_stylesheet())
+    app.setStyleSheet(IndustrialTheme.get_stylesheet())
 
     # Set application-wide font
     app.setFont(QFont("Segoe UI", 10))
