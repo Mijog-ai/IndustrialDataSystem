@@ -10,27 +10,32 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional
 
 from PyQt5.QtCore import Qt, QTimer, QUrl, pyqtSignal
-from PyQt5.QtGui import QDesktopServices, QFont, QPixmap
+from PyQt5.QtGui import QDesktopServices, QFont, QKeySequence, QPixmap
 from PyQt5.QtWidgets import (
+    QAction,
     QApplication,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QFrame,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenuBar,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSplitter,
     QStackedWidget,
+    QStatusBar,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
+    QToolBar,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -41,7 +46,7 @@ from industrial_data_system.ai.toolkit import (  # run_ai_data_study,; run_train
     run_anomaly_detector_standalone,
     run_plotter,
 )
-from industrial_data_system.apps.desktop.uploader import IndustrialTheme
+from industrial_data_system.apps.desktop.uploader import DesktopTheme
 from industrial_data_system.core.auth import LocalAuthStore, LocalUser, SessionManager
 from industrial_data_system.core.config import get_config
 from industrial_data_system.core.db_manager import DatabaseManager
@@ -134,7 +139,7 @@ class ReaderLoginPage(QWidget):
         form_layout.setContentsMargins(24, 24, 24, 24)
 
         email_label = QLabel("Email")
-        email_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
+        email_label.setStyleSheet(f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;")
         form_layout.addWidget(email_label)
 
         self.email_input = QLineEdit()
@@ -142,7 +147,7 @@ class ReaderLoginPage(QWidget):
         form_layout.addWidget(self.email_input)
 
         password_label = QLabel("Password")
-        password_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
+        password_label.setStyleSheet(f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;")
         form_layout.addWidget(password_label)
 
         self.password_input = QLineEdit()
@@ -151,7 +156,7 @@ class ReaderLoginPage(QWidget):
         form_layout.addWidget(self.password_input)
 
         code_label = QLabel("Security Code")
-        code_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
+        code_label.setStyleSheet(f"color: {DesktopTheme.TEXT_SECONDARY}; font-weight: 500;")
         form_layout.addWidget(code_label)
 
         self.security_input = QLineEdit()
@@ -769,6 +774,17 @@ class ReaderApp(QMainWindow):
         self.session_timer.timeout.connect(self._check_session_timeout)
         self.session_timer.start(60000)  # Check every minu
 
+        # Create menu bar
+        self._create_menu_bar()
+
+        # Create toolbar
+        self._create_toolbar()
+
+        # Create status bar
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        self.status_bar.showMessage("Ready")
+
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
 
@@ -784,6 +800,125 @@ class ReaderApp(QMainWindow):
         self.dashboard.logout_requested.connect(self.handle_logout)
         self.dashboard.refresh_requested.connect(self.refresh_resources)
         self.dashboard.download_button.clicked.connect(self.dashboard.download_current)
+
+    def _create_menu_bar(self) -> None:
+        """Create traditional desktop menu bar."""
+        menubar = self.menuBar()
+
+        # File Menu
+        file_menu = menubar.addMenu("&File")
+
+        download_action = QAction("&Download...", self)
+        download_action.setShortcut(QKeySequence("Ctrl+D"))
+        download_action.triggered.connect(lambda: self.dashboard.download_current())
+        file_menu.addAction(download_action)
+
+        file_menu.addSeparator()
+
+        logout_action = QAction("&Logout", self)
+        logout_action.setShortcut(QKeySequence("Ctrl+L"))
+        logout_action.triggered.connect(self.handle_logout)
+        file_menu.addAction(logout_action)
+
+        file_menu.addSeparator()
+
+        exit_action = QAction("E&xit", self)
+        exit_action.setShortcut(QKeySequence("Alt+F4"))
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+
+        # Edit Menu
+        edit_menu = menubar.addMenu("&Edit")
+
+        refresh_action = QAction("&Refresh", self)
+        refresh_action.setShortcut(QKeySequence("F5"))
+        refresh_action.triggered.connect(self.refresh_resources)
+        edit_menu.addAction(refresh_action)
+
+        # Tools Menu
+        tools_menu = menubar.addMenu("&Tools")
+
+        plotter_action = QAction("&Plotter", self)
+        plotter_action.triggered.connect(lambda: self.dashboard.run_plotter())
+        tools_menu.addAction(plotter_action)
+
+        anomaly_action = QAction("&Anomaly Detector", self)
+        anomaly_action.triggered.connect(lambda: self.dashboard.run_anomaly_detector())
+        tools_menu.addAction(anomaly_action)
+
+        # View Menu
+        view_menu = menubar.addMenu("&View")
+
+        show_toolbar_action = QAction("Show &Toolbar", self)
+        show_toolbar_action.setCheckable(True)
+        show_toolbar_action.setChecked(True)
+        show_toolbar_action.triggered.connect(lambda checked: self.toolbar.setVisible(checked))
+        view_menu.addAction(show_toolbar_action)
+
+        show_statusbar_action = QAction("Show &Status Bar", self)
+        show_statusbar_action.setCheckable(True)
+        show_statusbar_action.setChecked(True)
+        show_statusbar_action.triggered.connect(lambda checked: self.status_bar.setVisible(checked))
+        view_menu.addAction(show_statusbar_action)
+
+        # Help Menu
+        help_menu = menubar.addMenu("&Help")
+
+        about_action = QAction("&About", self)
+        about_action.triggered.connect(self._show_about_dialog)
+        help_menu.addAction(about_action)
+
+    def _create_toolbar(self) -> None:
+        """Create traditional desktop toolbar."""
+        self.toolbar = QToolBar("Main Toolbar")
+        self.toolbar.setMovable(False)
+        self.addToolBar(self.toolbar)
+
+        # Refresh button
+        refresh_btn = QAction("Refresh", self)
+        refresh_btn.setToolTip("Refresh File List (F5)")
+        refresh_btn.triggered.connect(self.refresh_resources)
+        self.toolbar.addAction(refresh_btn)
+
+        self.toolbar.addSeparator()
+
+        # Download button
+        download_btn = QAction("Download", self)
+        download_btn.setToolTip("Download Selected File (Ctrl+D)")
+        download_btn.triggered.connect(lambda: self.dashboard.download_current())
+        self.toolbar.addAction(download_btn)
+
+        self.toolbar.addSeparator()
+
+        # Plotter button
+        plotter_btn = QAction("Plotter", self)
+        plotter_btn.setToolTip("Open Plotter Tool")
+        plotter_btn.triggered.connect(lambda: self.dashboard.run_plotter())
+        self.toolbar.addAction(plotter_btn)
+
+        # Anomaly Detector button
+        anomaly_btn = QAction("Anomaly", self)
+        anomaly_btn.setToolTip("Open Anomaly Detector")
+        anomaly_btn.triggered.connect(lambda: self.dashboard.run_anomaly_detector())
+        self.toolbar.addAction(anomaly_btn)
+
+        self.toolbar.addSeparator()
+
+        # Logout button
+        logout_btn = QAction("Logout", self)
+        logout_btn.setToolTip("Logout (Ctrl+L)")
+        logout_btn.triggered.connect(self.handle_logout)
+        self.toolbar.addAction(logout_btn)
+
+    def _show_about_dialog(self) -> None:
+        """Show about dialog."""
+        QMessageBox.about(
+            self,
+            "About Inline Data Reader",
+            "<h3>Inline Data Reader</h3>"
+            "<p>Version 1.0</p>"
+            "<p>Browse and analyze industrial data files.</p>"
+        )
 
     def show_login(self) -> None:
         self.login_page.reset_fields()
@@ -956,7 +1091,7 @@ class ReaderApp(QMainWindow):
 
 def main() -> None:
     app = QApplication(sys.argv)
-    app.setStyleSheet(IndustrialTheme.get_stylesheet())
+    app.setStyleSheet(DesktopTheme.get_stylesheet())
     app.setFont(QFont("Segoe UI", 10))
 
     window = ReaderApp()
