@@ -867,10 +867,10 @@ class DashboardPage(QWidget):
         action_layout = QHBoxLayout()
         action_layout.setSpacing(12)
 
-        back_button = QPushButton("← Back to App Selection")
-        back_button.setProperty("flat", True)
-        back_button.clicked.connect(self.back_to_gateway_requested.emit)
-        action_layout.addWidget(back_button)
+        # back_button = QPushButton("← Back to App Selection")
+        # back_button.setProperty("flat", True)
+        # back_button.clicked.connect(self.back_to_gateway_requested.emit)
+        # action_layout.addWidget(back_button)
 
         upload_button = QPushButton("Upload File")
         upload_button.setProperty("primary", True)

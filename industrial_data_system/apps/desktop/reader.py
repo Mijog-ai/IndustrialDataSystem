@@ -169,10 +169,10 @@ class ReaderLoginPage(QWidget):
         self.signup_button.clicked.connect(self.signup_requested.emit)
         form_layout.addWidget(self.signup_button)
 
-        back_button = QPushButton("← Back to App Selection")
-        back_button.setProperty("flat", True)
-        back_button.clicked.connect(self.back_to_gateway_requested.emit)
-        form_layout.addWidget(back_button)
+        # back_button = QPushButton("← Back to App Selection")
+        # back_button.setProperty("flat", True)
+        # back_button.clicked.connect(self.back_to_gateway_requested.emit)
+        # form_layout.addWidget(back_button)
 
         layout.addWidget(form_container, alignment=Qt.AlignCenter)
         layout.addStretch()
