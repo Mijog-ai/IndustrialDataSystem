@@ -28,6 +28,7 @@ from PyQt5.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSplitter,
     QTableWidget,
@@ -302,11 +303,24 @@ class QuickPlotterWindow(QMainWindow):
 
         left_layout.addStretch()
 
-        # ========== RIGHT PANEL: Plot and Statistics ==========
+        # ========== RIGHT PANEL: Scrollable Plot and Statistics ==========
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(12)
+        right_layout.setSpacing(0)
+
+        # Create scroll area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setFrameShape(QScrollArea.NoFrame)
+
+        # Create scrollable content widget
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setContentsMargins(0, 0, 16, 0)  # Right margin for scrollbar
+        scroll_layout.setSpacing(12)
 
         # Status label
         self.status_label = QLabel("Select axes to plot")
@@ -315,37 +329,24 @@ class QuickPlotterWindow(QMainWindow):
             "background: #F3F4F6; border-radius: 6px;"
         )
         self.status_label.setAlignment(Qt.AlignCenter)
-        right_layout.addWidget(self.status_label)
+        scroll_layout.addWidget(self.status_label)
 
-        # Plot area with statistics (vertical splitter for flexibility)
-        plot_stats_splitter = QSplitter(Qt.Vertical)
-        plot_stats_splitter.setHandleWidth(8)
-        plot_stats_splitter.setStyleSheet(
-            """
-            QSplitter::handle {
-                background: #E5E7EB;
-            }
-            QSplitter::handle:hover {
-                background: #3B82F6;
-            }
-            """
-        )
-
-        # Top section: Plot area
+        # Plot area with FIXED height
         plot_container = QWidget()
         plot_layout = QVBoxLayout(plot_container)
         plot_layout.setContentsMargins(0, 0, 0, 0)
         plot_layout.setSpacing(4)
 
-        # Matplotlib figure (taller aspect ratio) with dynamic DPI based on device pixel ratio
-        # Get device pixel ratio for proper scaling across different screen sizes
+        # Matplotlib figure with fixed size
         pixel_ratio = QApplication.instance().devicePixelRatio() if QApplication.instance() else 1.0
         dpi = int(100 * pixel_ratio)
-        self.figure = Figure(figsize=(10, 8), dpi=dpi)
+        self.figure = Figure(figsize=(10, 6), dpi=dpi)
         self.figure.patch.set_facecolor("#FFFFFF")
         self.canvas = FigureCanvas(self.figure)
-        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.canvas.setMinimumHeight(400)
+
+        # Set FIXED height for the plot canvas (graph stays at this size)
+        self.canvas.setFixedHeight(500)  # Fixed height in pixels
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         # Enable mouse interaction and focus for pan/zoom controls
         self.canvas.setFocusPolicy(Qt.StrongFocus)
@@ -360,27 +361,35 @@ class QuickPlotterWindow(QMainWindow):
         plot_layout.addWidget(self.toolbar)
         plot_layout.addWidget(self.canvas)
 
-        # Bottom section: Statistics area
-        stats_container = QWidget()
-        stats_layout = QVBoxLayout(stats_container)
-        stats_layout.setContentsMargins(0, 0, 0, 0)
-        stats_layout.setSpacing(0)
+        scroll_layout.addWidget(plot_container)
 
+        # Divider between plot and statistics
+        divider = QLabel()
+        divider.setStyleSheet("background-color: #E5E7EB; min-height: 2px; max-height: 2px;")
+        scroll_layout.addWidget(divider)
+
+        # Statistics area (will appear below the plot when scrolling)
         self.stats_area = StatisticsArea(self)
-        self.stats_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.stats_area.setMinimumHeight(150)
-        stats_layout.addWidget(self.stats_area)
+        self.stats_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        scroll_layout.addWidget(self.stats_area)
 
-        # Add to splitter
-        plot_stats_splitter.addWidget(plot_container)
-        plot_stats_splitter.addWidget(stats_container)
+        # Placeholder for future content (you can add more widgets here later)
+        # Example: Data table, additional analysis, export options, etc.
+        future_content_label = QLabel("Additional content can be added below...")
+        future_content_label.setStyleSheet(
+            "color: #6B7280; font-style: italic; padding: 20px; "
+            "text-align: center; background: #F9FAFB; border-radius: 6px; margin-top: 12px;"
+        )
+        future_content_label.setAlignment(Qt.AlignCenter)
+        future_content_label.setMinimumHeight(100)
+        scroll_layout.addWidget(future_content_label)
 
-        # Set initial sizes (70% plot, 30% statistics)
-        plot_stats_splitter.setSizes([600, 300])
-        plot_stats_splitter.setStretchFactor(0, 3)
-        plot_stats_splitter.setStretchFactor(1, 1)
+        # Add stretch at the bottom to push content to top
+        scroll_layout.addStretch()
 
-        right_layout.addWidget(plot_stats_splitter)
+        # Set the scroll content and add to right panel
+        scroll_area.setWidget(scroll_content)
+        right_layout.addWidget(scroll_area)
 
         # Add panels to splitter
         self.main_splitter.addWidget(left_panel)
@@ -450,6 +459,25 @@ class QuickPlotterWindow(QMainWindow):
                 background: #F9FAFB;
                 border: 1px solid #E5E7EB;
                 border-radius: 4px;
+            }
+            QScrollArea {
+                border: none;
+            }
+            QScrollBar:vertical {
+                background: #F3F4F6;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #CBD5E1;
+                border-radius: 6px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #94A3B8;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
             }
             """
             + self.BUTTON_STYLES
@@ -946,14 +974,7 @@ def run(file_path: Path | str, parent: Optional[QWidget] = None) -> None:
 
 
 def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
-    """Create a plotter widget that can be embedded in a tab.
-
-    Args:
-        file_path: Path to the data file to plot
-
-    Returns:
-        A standalone widget containing a simple plotter interface
-    """
+    """Create a scrollable plotter widget with statistics, additional plots, and download functionality."""
     try:
         path = Path(file_path)
         if not path.exists():
@@ -978,12 +999,14 @@ def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
         # Create main widget
         widget = QWidget()
         main_layout = QHBoxLayout(widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # LEFT: Controls
+        # LEFT: Controls (Fixed)
         left_panel = QWidget()
         left_panel.setMaximumWidth(300)
         left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(12, 12, 12, 12)
 
         title = QLabel(f"Plotter: {path.name}")
         title.setStyleSheet("font-weight: bold; font-size: 14px;")
@@ -1021,22 +1044,103 @@ def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
             }
         """)
         left_layout.addWidget(update_btn)
+
+        # Download button for plots
+        download_btn = QPushButton("Download Plot")
+        download_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #059669;
+                color: white;
+                padding: 8px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #047857;
+            }
+        """)
+        left_layout.addWidget(download_btn)
+
         left_layout.addStretch()
 
         main_layout.addWidget(left_panel)
 
-        # RIGHT: Plot area
+        # RIGHT: Scrollable Plot and Statistics Area
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Create figure and canvas
-        figure = Figure(figsize=(8, 6), dpi=100)
+        # Create scroll area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setFrameShape(QScrollArea.NoFrame)
+
+        # Create scrollable content widget
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setContentsMargins(12, 12, 12, 12)
+        scroll_layout.setSpacing(12)
+
+        # Plot area (Fixed height)
+        plot_container = QWidget()
+        plot_layout = QVBoxLayout(plot_container)
+        plot_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Matplotlib figure and canvas
+        figure = Figure(figsize=(10, 6), dpi=100)
         canvas = FigureCanvas(figure)
         toolbar = NavigationToolbar(canvas, widget)
 
-        right_layout.addWidget(toolbar)
-        right_layout.addWidget(canvas)
+        plot_layout.addWidget(toolbar)
+        plot_layout.addWidget(canvas)
+
+        scroll_layout.addWidget(plot_container)
+
+        # Statistics area
+        stats_group = QGroupBox("Statistics")
+        stats_layout = QVBoxLayout(stats_group)
+
+        stats_table = QTableWidget()
+        stats_table.setColumnCount(5)
+        stats_table.setHorizontalHeaderLabels(["Column", "Max", "Mean", "Min", "Std"])
+        stats_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        stats_table.verticalHeader().setVisible(False)
+        stats_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        stats_table.setSelectionMode(QTableWidget.NoSelection)
+
+        stats_layout.addWidget(stats_table)
+        scroll_layout.addWidget(stats_group)
+
+        # Additional statistical plots (e.g., histogram, box plot)
+        additional_plots_group = QGroupBox("Additional Statistical Plots")
+        additional_plots_layout = QVBoxLayout(additional_plots_group)
+
+        # Example: Histogram
+        histogram_figure = Figure(figsize=(8, 4), dpi=100)
+        histogram_canvas = FigureCanvas(histogram_figure)
+        additional_plots_layout.addWidget(histogram_canvas)
+
+        # Example: Box plot
+        boxplot_figure = Figure(figsize=(8, 4), dpi=100)
+        boxplot_canvas = FigureCanvas(boxplot_figure)
+        additional_plots_layout.addWidget(boxplot_canvas)
+
+        scroll_layout.addWidget(additional_plots_group)
+
+        # Example content section (e.g., data table, notes)
+        example_content_group = QGroupBox("Example Content")
+        example_content_layout = QVBoxLayout(example_content_group)
+
+        example_label = QLabel("This section can include additional data tables, notes, or visualizations.")
+        example_content_layout.addWidget(example_label)
+
+        scroll_layout.addWidget(example_content_group)
+
+        # Set scroll content and add to right panel
+        scroll_area.setWidget(scroll_content)
+        right_layout.addWidget(scroll_area)
 
         main_layout.addWidget(right_panel)
 
@@ -1045,6 +1149,9 @@ def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
         widget._figure = figure
         widget._canvas = canvas
         widget._column_list = column_list
+        widget._stats_table = stats_table
+        widget._histogram_figure = histogram_figure
+        widget._boxplot_figure = boxplot_figure
 
         # Plot update function
         def update_plot():
@@ -1055,6 +1162,7 @@ def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
 
                 selected_cols = [item.text() for item in selected_items]
 
+                # Main plot
                 figure.clear()
                 ax = figure.add_subplot(111)
 
@@ -1071,10 +1179,50 @@ def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
                 figure.tight_layout()
                 canvas.draw()
 
+                # Histogram
+                histogram_figure.clear()
+                hist_ax = histogram_figure.add_subplot(111)
+                for col in selected_cols:
+                    if col in df.columns:
+                        hist_ax.hist(df[col].dropna(), bins=20, alpha=0.5, label=col)
+                hist_ax.set_title("Histogram")
+                hist_ax.legend()
+                histogram_canvas.draw()
+
+                # Box plot
+                boxplot_figure.clear()
+                box_ax = boxplot_figure.add_subplot(111)
+                box_ax.boxplot([df[col].dropna() for col in selected_cols])
+                box_ax.set_title("Box Plot")
+                box_ax.set_xticklabels(selected_cols)
+                boxplot_canvas.draw()
+
+                # Update statistics
+                stats_df = df[selected_cols].describe().T
+                stats_table.setRowCount(len(stats_df))
+                for i, (index, row) in enumerate(stats_df.iterrows()):
+                    stats_table.setItem(i, 0, QTableWidgetItem(str(index)))
+                    stats_table.setItem(i, 1, QTableWidgetItem(f"{row['max']:.4g}"))
+                    stats_table.setItem(i, 2, QTableWidgetItem(f"{row['mean']:.4g}"))
+                    stats_table.setItem(i, 3, QTableWidgetItem(f"{row['min']:.4g}"))
+                    stats_table.setItem(i, 4, QTableWidgetItem(f"{row['std']:.4g}"))
+
             except Exception as e:
                 print(f"Error updating plot: {e}")
 
+        def download_plot():
+            """Download the current plot as an image."""
+            try:
+                file_path, _ = QFileDialog.getSaveFileName(
+                    widget, "Save Plot", f"{path.stem}_plot.png", "PNG (*.png);;PDF (*.pdf);;SVG (*.svg)"
+                )
+                if file_path:
+                    figure.savefig(file_path, dpi=300, bbox_inches="tight")
+            except Exception as e:
+                print(f"Error downloading plot: {e}")
+
         update_btn.clicked.connect(update_plot)
+        download_btn.clicked.connect(download_plot)
 
         # Initial plot
         update_plot()
@@ -1094,3 +1242,5 @@ def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
         error_label.setStyleSheet("color: red; padding: 20px;")
         error_layout.addWidget(error_label)
         return error_widget
+
+
