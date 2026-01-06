@@ -39,7 +39,7 @@ from PyQt5.QtWidgets import (
 
 from industrial_data_system.ai.toolkit import (  # run_ai_data_study,; run_training_simulation,
     run_anomaly_detector_standalone,
-    run_plotter,
+    create_plotter_widget
 )
 from industrial_data_system.apps.desktop.uploader import IndustrialTheme
 from industrial_data_system.core.auth import LocalAuthStore, LocalUser, SessionManager
@@ -384,7 +384,7 @@ class ReaderDashboard(QWidget):
 
         self.plotter_button = QPushButton("Plotter")
         self.plotter_button.setProperty("secondary", True)
-        self.plotter_button.clicked.connect(lambda: self._launch_tool("Plotter", run_plotter, True))
+        self.plotter_button.clicked.connect(lambda: self._launch_tool("Plotter", create_plotter_widget, True))
         tools_layout.addWidget(self.plotter_button)
 
         self.anomaly_button = QPushButton("Anomaly Detector")

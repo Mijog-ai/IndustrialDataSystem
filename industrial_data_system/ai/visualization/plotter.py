@@ -22,7 +22,6 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
@@ -43,7 +42,7 @@ from industrial_data_system.utils.asc_utils import (
     load_and_process_tdms_file,
 )
 
-__all__ = ["run"]
+__all__ = ["run", "create_plotter_widget"]
 
 
 class StatisticsArea(QWidget):
@@ -70,11 +69,6 @@ class StatisticsArea(QWidget):
         self.stats_table.setSelectionMode(QTableWidget.NoSelection)
         self.layout.addWidget(self.stats_table)
 
-        # Export button
-        self.export_btn = QPushButton("Export Statistics")
-        self.export_btn.clicked.connect(self.export_statistics)
-        self.layout.addWidget(self.export_btn)
-
         self._current_df = None
 
     def update_stats(self, df):
@@ -97,26 +91,6 @@ class StatisticsArea(QWidget):
         """Clear all statistics from the table."""
         self.stats_table.setRowCount(0)
         self._current_df = None
-
-    def export_statistics(self):
-        """Export statistics table to CSV file."""
-        if self._current_df is None or self._current_df.empty:
-            QMessageBox.warning(self, "Export Statistics", "No statistics available to export.")
-            return
-
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "Export Statistics", "statistics.csv", "CSV Files (*.csv)"
-        )
-
-        if file_path:
-            try:
-                stats_df = self._current_df.describe()
-                stats_df.to_csv(file_path)
-                QMessageBox.information(
-                    self, "Export Success", f"Statistics exported to:\n{file_path}"
-                )
-            except Exception as exc:
-                QMessageBox.critical(self, "Export Failed", f"Failed to export statistics:\n{exc}")
 
 
 class QuickPlotterWindow(QMainWindow):
@@ -141,12 +115,6 @@ class QuickPlotterWindow(QMainWindow):
         }
         QPushButton:pressed:!disabled {
             background-color: #1E3A8A;
-        }
-        QPushButton[secondary="true"] {
-            background-color: #6B7280;
-        }
-        QPushButton[secondary="true"]:hover:!disabled {
-            background-color: #4B5563;
         }
     """
 
@@ -190,7 +158,7 @@ class QuickPlotterWindow(QMainWindow):
         # ========== LEFT PANEL: Controls ==========
         left_panel = QWidget()
         left_panel.setMinimumWidth(250)
-        left_panel.setMaximumWidth(500)  # Prevent left panel from growing too large
+        left_panel.setMaximumWidth(500)
         left_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 8, 0)
@@ -201,12 +169,12 @@ class QuickPlotterWindow(QMainWindow):
         header.setStyleSheet("font-size: 20px; font-weight: 600; color: #0F172A;")
         left_layout.addWidget(header)
 
-        # Metadata table
+        # Metadata table (simplified - only filename and dimensions)
         metadata_group = QGroupBox("File Information")
         metadata_layout = QVBoxLayout(metadata_group)
 
         self.metadata_table = QTableWidget()
-        self.metadata_table.setRowCount(4)
+        self.metadata_table.setRowCount(2)
         self.metadata_table.setColumnCount(2)
         self.metadata_table.setHorizontalHeaderLabels(["Property", "Value"])
         self.metadata_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -251,10 +219,6 @@ class QuickPlotterWindow(QMainWindow):
         options_group = QGroupBox("Plot Options")
         options_layout = QVBoxLayout(options_group)
 
-        self.show_markers = QCheckBox("Show Markers")
-        self.show_markers.stateChanged.connect(self._plot_current_selection)
-        options_layout.addWidget(self.show_markers)
-
         self.grid_toggle = QCheckBox("Show Grid")
         self.grid_toggle.setChecked(True)
         self.grid_toggle.stateChanged.connect(self._plot_current_selection)
@@ -262,44 +226,10 @@ class QuickPlotterWindow(QMainWindow):
 
         left_layout.addWidget(options_group)
 
-        # Range filter group
-        range_group = QGroupBox("X-Axis Range")
-        range_layout = QGridLayout(range_group)
-
-        range_layout.addWidget(QLabel("Min:"), 0, 0)
-        self.x_min_input = QLineEdit()
-        self.x_min_input.setPlaceholderText("Auto")
-        range_layout.addWidget(self.x_min_input, 0, 1)
-
-        range_layout.addWidget(QLabel("Max:"), 1, 0)
-        self.x_max_input = QLineEdit()
-        self.x_max_input.setPlaceholderText("Auto")
-        range_layout.addWidget(self.x_max_input, 1, 1)
-
-        apply_range_btn = QPushButton("Apply")
-        apply_range_btn.setProperty("secondary", True)
-        apply_range_btn.clicked.connect(self._zoom_to_selection)
-        range_layout.addWidget(apply_range_btn, 2, 0)
-
-        reset_range_btn = QPushButton("Reset")
-        reset_range_btn.setProperty("secondary", True)
-        reset_range_btn.clicked.connect(self._reset_zoom)
-        range_layout.addWidget(reset_range_btn, 2, 1)
-
-        left_layout.addWidget(range_group)
-
         # Action buttons
         export_plot_btn = QPushButton("Export Plot")
         export_plot_btn.clicked.connect(self._export_plot)
         left_layout.addWidget(export_plot_btn)
-
-        refresh_btn = QPushButton("Refresh Plot")
-        refresh_btn.clicked.connect(self._plot_current_selection)
-        left_layout.addWidget(refresh_btn)
-
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(self.close)
-        left_layout.addWidget(close_btn)
 
         left_layout.addStretch()
 
@@ -319,7 +249,7 @@ class QuickPlotterWindow(QMainWindow):
         # Create scrollable content widget
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
-        scroll_layout.setContentsMargins(0, 0, 16, 0)  # Right margin for scrollbar
+        scroll_layout.setContentsMargins(0, 0, 16, 0)
         scroll_layout.setSpacing(12)
 
         # Status label
@@ -344,8 +274,8 @@ class QuickPlotterWindow(QMainWindow):
         self.figure.patch.set_facecolor("#FFFFFF")
         self.canvas = FigureCanvas(self.figure)
 
-        # Set FIXED height for the plot canvas (graph stays at this size)
-        self.canvas.setFixedHeight(500)  # Fixed height in pixels
+        # Set FIXED height for the plot canvas
+        self.canvas.setFixedHeight(500)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         # Enable mouse interaction and focus for pan/zoom controls
@@ -368,23 +298,12 @@ class QuickPlotterWindow(QMainWindow):
         divider.setStyleSheet("background-color: #E5E7EB; min-height: 2px; max-height: 2px;")
         scroll_layout.addWidget(divider)
 
-        # Statistics area (will appear below the plot when scrolling)
+        # Statistics area
         self.stats_area = StatisticsArea(self)
         self.stats_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         scroll_layout.addWidget(self.stats_area)
 
-        # Placeholder for future content (you can add more widgets here later)
-        # Example: Data table, additional analysis, export options, etc.
-        future_content_label = QLabel("Additional content can be added below...")
-        future_content_label.setStyleSheet(
-            "color: #6B7280; font-style: italic; padding: 20px; "
-            "text-align: center; background: #F9FAFB; border-radius: 6px; margin-top: 12px;"
-        )
-        future_content_label.setAlignment(Qt.AlignCenter)
-        future_content_label.setMinimumHeight(100)
-        scroll_layout.addWidget(future_content_label)
-
-        # Add stretch at the bottom to push content to top
+        # Add stretch at the bottom
         scroll_layout.addStretch()
 
         # Set the scroll content and add to right panel
@@ -396,11 +315,10 @@ class QuickPlotterWindow(QMainWindow):
         self.main_splitter.addWidget(right_panel)
 
         # Set initial splitter sizes (25% left, 75% right)
-        # Using proportional sizes that adapt to window size
-        self.main_splitter.setStretchFactor(0, 1)  # Left panel
-        self.main_splitter.setStretchFactor(1, 3)  # Right panel gets more space
+        self.main_splitter.setStretchFactor(0, 1)
+        self.main_splitter.setStretchFactor(1, 3)
 
-        # Set collapsible behavior - left panel can be collapsed
+        # Set collapsible behavior
         self.main_splitter.setCollapsible(0, False)
         self.main_splitter.setCollapsible(1, False)
 
@@ -441,16 +359,6 @@ class QuickPlotterWindow(QMainWindow):
             }
             QListWidget::item:hover {
                 background: #EFF6FF;
-            }
-            QLineEdit {
-                border: 1px solid #D1D5DB;
-                border-radius: 4px;
-                padding: 6px;
-                background: #F9FAFB;
-            }
-            QLineEdit:focus {
-                border: 2px solid #3B82F6;
-                background: #FFFFFF;
             }
             QCheckBox {
                 spacing: 8px;
@@ -521,30 +429,12 @@ class QuickPlotterWindow(QMainWindow):
         if self._dataframe is None:
             return
 
-        # Get file stats
-        file_stats = self._file_path.stat()
-        file_size_mb = file_stats.st_size / (1024 * 1024)
-
-        # Format file size
-        if file_size_mb < 1:
-            size_str = f"{file_stats.st_size / 1024:.1f} KB"
-        else:
-            size_str = f"{file_size_mb:.2f} MB"
-
-        # Format timestamp
-        import datetime
-
-        timestamp = datetime.datetime.fromtimestamp(file_stats.st_mtime)
-        time_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
-
         # DataFrame shape
         shape_str = f"{self._dataframe.shape[0]} × {self._dataframe.shape[1]}"
 
-        # Populate table with property-value pairs
+        # Populate table with property-value pairs (simplified)
         properties = [
             ("File Name", self._file_path.name),
-            ("Modified", time_str),
-            ("Size", size_str),
             ("Dimensions", shape_str),
         ]
 
@@ -655,15 +545,11 @@ class QuickPlotterWindow(QMainWindow):
         # Calculate number of axes needed
         n_axes = len(y_columns)
 
-        # Calculate how many axes on each side (first axis is left, then alternate right/left)
-        # Index 0: left (primary)
-        # Index 1: right
-        # Index 2: left
-        # Index 3: right, etc.
-        n_left_axes = (n_axes + 1) // 2  # Axes at indices 0, 2, 4, ...
-        n_right_axes = n_axes // 2  # Axes at indices 1, 3, 5, ...
+        # Calculate how many axes on each side
+        n_left_axes = (n_axes + 1) // 2
+        n_right_axes = n_axes // 2
 
-        # Calculate dynamic margins (each additional axis needs ~0.1 width)
+        # Calculate dynamic margins
         left_margin = 0.08 + (n_left_axes - 1) * 0.12
         right_margin = 0.92 - (n_right_axes) * 0.12
 
@@ -678,35 +564,19 @@ class QuickPlotterWindow(QMainWindow):
         ax = self.figure.add_subplot(111)
         ax.set_facecolor("#FFFFFF")
 
-        # Professional color palette (more distinct and pleasant than jet)
+        # Professional color palette
         professional_colors = [
-            "#1f77b4",  # Blue
-            "#ff7f0e",  # Orange
-            "#2ca02c",  # Green
-            "#d62728",  # Red
-            "#9467bd",  # Purple
-            "#8c564b",  # Brown
-            "#e377c2",  # Pink
-            "#7f7f7f",  # Gray
-            "#bcbd22",  # Olive
-            "#17becf",  # Cyan
+            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+            "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
         ]
 
-        # If we have more columns than colors, cycle through
-        color_map = []
-        for i in range(n_axes):
-            color_map.append(professional_colors[i % len(professional_colors)])
+        color_map = [professional_colors[i % len(professional_colors)] for i in range(n_axes)]
 
         axes = [ax]
         plotted_any = False
         all_lines = []
         left_spine_offset = 0
         right_spine_offset = 0
-
-        # Determine if we should show markers
-        show_markers = self.show_markers.isChecked()
-        marker = "o" if show_markers else None
-        markersize = 3 if show_markers else None
 
         for i, (column, color) in enumerate(zip(y_columns, color_map)):
             series = pd.to_numeric(df[column], errors="coerce")
@@ -718,41 +588,32 @@ class QuickPlotterWindow(QMainWindow):
 
             # Create new axis for each y-column after the first
             if i == 0:
-                # First axis is the primary left axis
                 new_ax = ax
                 new_ax.spines["left"].set_color(color)
                 new_ax.spines["left"].set_linewidth(2)
             elif i % 2 == 1:
-                # Odd indices (1, 3, 5, ...) go to the right side
+                # Odd indices go to the right side
                 new_ax = ax.twinx()
-                # Hide left spine, show right spine
                 new_ax.spines["left"].set_visible(False)
                 new_ax.spines["right"].set_visible(True)
                 new_ax.spines["right"].set_color(color)
                 new_ax.spines["right"].set_linewidth(2)
-
-                # Position the spine
                 new_ax.spines["right"].set_position(("axes", 1.0 + right_spine_offset))
                 new_ax.yaxis.set_label_position("right")
                 new_ax.yaxis.set_ticks_position("right")
-
                 right_spine_offset += 0.15
                 axes.append(new_ax)
             else:
-                # Even indices (2, 4, 6, ...) go to the left side
+                # Even indices go to the left side
                 new_ax = ax.twinx()
-                # Hide right spine, show left spine
                 new_ax.spines["right"].set_visible(False)
                 new_ax.spines["left"].set_visible(True)
                 new_ax.spines["left"].set_color(color)
                 new_ax.spines["left"].set_linewidth(2)
-
-                # Position the spine
                 left_spine_offset += 0.15
                 new_ax.spines["left"].set_position(("axes", -left_spine_offset))
                 new_ax.yaxis.set_label_position("left")
                 new_ax.yaxis.set_ticks_position("left")
-
                 axes.append(new_ax)
 
             # Plot with colored line
@@ -761,8 +622,6 @@ class QuickPlotterWindow(QMainWindow):
                 series[valid],
                 color=color,
                 label=column,
-                marker=marker,
-                markersize=markersize,
                 linewidth=2.5,
                 alpha=0.9,
             )
@@ -807,7 +666,7 @@ class QuickPlotterWindow(QMainWindow):
             )
             ax.set_axisbelow(True)
 
-        # Create legend with better positioning
+        # Create legend
         labels = [line.get_label() for line in all_lines]
         legend_ncol = min(len(labels), 4)
         ax.legend(
@@ -841,36 +700,6 @@ class QuickPlotterWindow(QMainWindow):
         except Exception:
             self.stats_area.clear_stats()
 
-    def _zoom_to_selection(self) -> None:
-        """Zoom plot to selected X range from inputs."""
-        try:
-            x_min = float(self.x_min_input.text()) if self.x_min_input.text() else None
-            x_max = float(self.x_max_input.text()) if self.x_max_input.text() else None
-
-            if x_min is not None or x_max is not None:
-                axes = self.figure.get_axes()
-                if axes:
-                    ax = axes[0]
-                    current_xlim = ax.get_xlim()
-                    new_xlim = (
-                        x_min if x_min is not None else current_xlim[0],
-                        x_max if x_max is not None else current_xlim[1],
-                    )
-                    ax.set_xlim(new_xlim)
-                    self.canvas.draw_idle()
-        except ValueError:
-            QMessageBox.warning(self, "Invalid Range", "Please enter valid numeric values.")
-
-    def _reset_zoom(self) -> None:
-        """Reset zoom to show all data."""
-        self.x_min_input.clear()
-        self.x_max_input.clear()
-        axes = self.figure.get_axes()
-        if axes:
-            ax = axes[0]
-            ax.autoscale()
-            self.canvas.draw_idle()
-
     def _on_scroll(self, event) -> None:
         """Handle scroll events for zooming with Ctrl+scroll."""
         if event.key != "control":
@@ -879,7 +708,6 @@ class QuickPlotterWindow(QMainWindow):
         if event.inaxes is None:
             return
 
-        # Get the current axis limits
         ax = event.inaxes
         xdata = event.xdata
         ydata = event.ydata
@@ -887,7 +715,7 @@ class QuickPlotterWindow(QMainWindow):
         if xdata is None or ydata is None:
             return
 
-        # Zoom factor: scroll up (event.step > 0) zooms in, scroll down zooms out
+        # Zoom factor
         zoom_factor = 1.2 if event.button == "up" else 0.8
 
         # Get current limits
@@ -942,14 +770,11 @@ class QuickPlotterWindow(QMainWindow):
 _open_windows: List[QuickPlotterWindow] = []
 
 
-
-
-def run(file_path: Path | str, parent: Optional[QWidget] = None) -> None:
+def run(file_path: Path | str) -> None:
     """Launch the quick plotter window for the provided file path.
 
     Args:
         file_path: Path to the file to plot
-        parent: Optional parent widget (used to manage window lifecycle)
     """
     path = Path(file_path)
     if not path.exists():
@@ -971,10 +796,17 @@ def run(file_path: Path | str, parent: Optional[QWidget] = None) -> None:
     _open_windows.append(window)
 
 
-
-
 def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
-    """Create a scrollable plotter widget with statistics, additional plots, and download functionality."""
+    """Create a scrollable plotter widget with statistics for embedding in other interfaces.
+
+    This is a simplified embeddable version used by other parts of the application.
+
+    Args:
+        file_path: Path to the file to plot
+
+    Returns:
+        QWidget containing the plotter interface, or None if creation fails
+    """
     try:
         path = Path(file_path)
         if not path.exists():
@@ -985,11 +817,11 @@ def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
         if suffix == ".parquet":
             df = pd.read_parquet(path, engine="pyarrow")
         elif suffix == ".asc":
-            df, _ = load_and_process_asc_file(path)
+            df = load_and_process_asc_file(str(path))
         elif suffix == ".csv":
-            df, _ = load_and_process_csv_file(path)
+            df = load_and_process_csv_file(str(path))
         elif suffix == ".tdms":
-            df, _ = load_and_process_tdms_file(path)
+            df = load_and_process_tdms_file(str(path))
         else:
             raise ValueError(f"Unsupported file format: {suffix}")
 
@@ -1045,7 +877,7 @@ def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
         """)
         left_layout.addWidget(update_btn)
 
-        # Download button for plots
+        # Download button
         download_btn = QPushButton("Download Plot")
         download_btn.setStyleSheet("""
             QPushButton {
@@ -1113,31 +945,6 @@ def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
         stats_layout.addWidget(stats_table)
         scroll_layout.addWidget(stats_group)
 
-        # Additional statistical plots (e.g., histogram, box plot)
-        additional_plots_group = QGroupBox("Additional Statistical Plots")
-        additional_plots_layout = QVBoxLayout(additional_plots_group)
-
-        # Example: Histogram
-        histogram_figure = Figure(figsize=(8, 4), dpi=100)
-        histogram_canvas = FigureCanvas(histogram_figure)
-        additional_plots_layout.addWidget(histogram_canvas)
-
-        # Example: Box plot
-        boxplot_figure = Figure(figsize=(8, 4), dpi=100)
-        boxplot_canvas = FigureCanvas(boxplot_figure)
-        additional_plots_layout.addWidget(boxplot_canvas)
-
-        scroll_layout.addWidget(additional_plots_group)
-
-        # Example content section (e.g., data table, notes)
-        example_content_group = QGroupBox("Example Content")
-        example_content_layout = QVBoxLayout(example_content_group)
-
-        example_label = QLabel("This section can include additional data tables, notes, or visualizations.")
-        example_content_layout.addWidget(example_label)
-
-        scroll_layout.addWidget(example_content_group)
-
         # Set scroll content and add to right panel
         scroll_area.setWidget(scroll_content)
         right_layout.addWidget(scroll_area)
@@ -1150,8 +957,6 @@ def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
         widget._canvas = canvas
         widget._column_list = column_list
         widget._stats_table = stats_table
-        widget._histogram_figure = histogram_figure
-        widget._boxplot_figure = boxplot_figure
 
         # Plot update function
         def update_plot():
@@ -1178,24 +983,6 @@ def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
 
                 figure.tight_layout()
                 canvas.draw()
-
-                # Histogram
-                histogram_figure.clear()
-                hist_ax = histogram_figure.add_subplot(111)
-                for col in selected_cols:
-                    if col in df.columns:
-                        hist_ax.hist(df[col].dropna(), bins=20, alpha=0.5, label=col)
-                hist_ax.set_title("Histogram")
-                hist_ax.legend()
-                histogram_canvas.draw()
-
-                # Box plot
-                boxplot_figure.clear()
-                box_ax = boxplot_figure.add_subplot(111)
-                box_ax.boxplot([df[col].dropna() for col in selected_cols])
-                box_ax.set_title("Box Plot")
-                box_ax.set_xticklabels(selected_cols)
-                boxplot_canvas.draw()
 
                 # Update statistics
                 stats_df = df[selected_cols].describe().T
@@ -1242,5 +1029,3 @@ def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
         error_label.setStyleSheet("color: red; padding: 20px;")
         error_layout.addWidget(error_label)
         return error_widget
-
-
