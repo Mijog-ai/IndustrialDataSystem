@@ -12,16 +12,20 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
+    QColorDialog,
+    QComboBox,
     QFileDialog,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
@@ -29,9 +33,11 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QToolBar,
     QVBoxLayout,
     QWidget,
 )
@@ -43,6 +49,150 @@ from industrial_data_system.utils.asc_utils import (
 )
 
 __all__ = ["run", "create_plotter_widget"]
+
+
+class PlotCard(QWidget):
+    """Individual plot card that can be edited and customized."""
+
+    def __init__(self, df: pd.DataFrame, plot_id: int, parent=None):
+        super().__init__(parent)
+        self.df = df
+        self.plot_id = plot_id
+        self.x_column = None
+        self.y_columns = []
+        self.plot_title = f"Plot {plot_id + 1}"
+        self.show_grid = True
+        self.line_colors = {}
+        self.line_styles = {}
+        self.line_widths = {}
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Initialize the plot card UI."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(4)
+
+        # Header with title and remove button
+        header_layout = QHBoxLayout()
+        self.title_label = QLabel(self.plot_title)
+        self.title_label.setStyleSheet("font-weight: bold; font-size: 12px; color: #1F2937;")
+        header_layout.addWidget(self.title_label)
+        header_layout.addStretch()
+
+        remove_btn = QPushButton("✕")
+        remove_btn.setFixedSize(24, 24)
+        remove_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #EF4444;
+                color: white;
+                border: none;
+                border-radius: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #DC2626;
+            }
+        """)
+        remove_btn.clicked.connect(lambda: self.parent().remove_plot_card(self))
+        header_layout.addWidget(remove_btn)
+
+        layout.addLayout(header_layout)
+
+        # Matplotlib figure
+        self.figure = Figure(figsize=(8, 4), dpi=100)
+        self.figure.patch.set_facecolor("#FFFFFF")
+        self.canvas = FigureCanvas(self.figure)
+        self.canvas.setFixedHeight(350)
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        # Toolbar
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        self.toolbar.setStyleSheet("background: #F9FAFB; border: none; padding: 2px;")
+
+        layout.addWidget(self.toolbar)
+        layout.addWidget(self.canvas)
+
+        # Set background
+        self.setStyleSheet("""
+            PlotCard {
+                background: white;
+                border: 2px solid #E5E7EB;
+                border-radius: 8px;
+            }
+        """)
+
+    def update_plot(self, x_column=None, y_columns=None, title=None, show_grid=None):
+        """Update the plot with new data."""
+        if x_column is not None:
+            self.x_column = x_column
+        if y_columns is not None:
+            self.y_columns = y_columns
+        if title is not None:
+            self.plot_title = title
+            self.title_label.setText(title)
+        if show_grid is not None:
+            self.show_grid = show_grid
+
+        if not self.x_column or not self.y_columns:
+            return
+
+        self.render_plot()
+
+    def render_plot(self):
+        """Render the plot on the canvas."""
+        self.figure.clear()
+        ax = self.figure.add_subplot(111)
+        ax.set_facecolor("#FFFFFF")
+
+        try:
+            x_data = pd.to_numeric(self.df[self.x_column], errors="coerce")
+
+            # Professional color palette
+            professional_colors = [
+                "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+                "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+            ]
+
+            for i, column in enumerate(self.y_columns):
+                series = pd.to_numeric(self.df[column], errors="coerce")
+                valid = series.notna() & x_data.notna()
+
+                if not valid.any():
+                    continue
+
+                # Get custom styling or use defaults
+                color = self.line_colors.get(column, professional_colors[i % len(professional_colors)])
+                style = self.line_styles.get(column, '-')
+                width = self.line_widths.get(column, 2.0)
+
+                ax.plot(
+                    x_data[valid],
+                    series[valid],
+                    color=color,
+                    linestyle=style,
+                    linewidth=width,
+                    label=column,
+                    alpha=0.9,
+                )
+
+            ax.set_xlabel(self.x_column, fontsize=10, fontweight="bold")
+            ax.set_ylabel("Value", fontsize=10, fontweight="bold")
+            ax.set_title(self.plot_title, fontsize=11, fontweight="bold", pad=10)
+
+            if self.show_grid:
+                ax.grid(True, color="#E2E8F0", alpha=0.4, linestyle="--", linewidth=0.8)
+                ax.set_axisbelow(True)
+
+            if self.y_columns:
+                ax.legend(loc="best", fontsize=9, framealpha=0.95, edgecolor="#E5E7EB")
+
+            self.figure.tight_layout()
+            self.canvas.draw_idle()
+
+        except Exception as e:
+            print(f"Error rendering plot: {e}")
 
 
 class StatisticsArea(QWidget):
@@ -122,23 +272,25 @@ class QuickPlotterWindow(QMainWindow):
         super().__init__()
         self._file_path = file_path
         self._dataframe: pd.DataFrame | None = None
+        self._plot_cards = []
+        self._plot_counter = 0
 
         self.setObjectName("quick-plotter-window")
         self.setAttribute(Qt.WA_DeleteOnClose, True)
-        self.setWindowTitle(f"Plot Preview - {self._file_path.name}")
+        self.setWindowTitle(f"Plot Editor - {self._file_path.name}")
         self.resize(1400, 900)
 
         self._build_ui()
         self._load_data()
 
     def _build_ui(self) -> None:
-        """Build the main user interface."""
+        """Build the main user interface with LEFT=plots, RIGHT=toolbar."""
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
 
-        # Main horizontal splitter: Left controls + Right plot area
+        # Main horizontal layout
         main_layout = QHBoxLayout(self.central_widget)
-        main_layout.setContentsMargins(16, 16, 16, 16)
+        main_layout.setContentsMargins(12, 12, 12, 12)
         main_layout.setSpacing(0)
 
         # Create horizontal splitter for resizable panels
@@ -155,167 +307,210 @@ class QuickPlotterWindow(QMainWindow):
             """
         )
 
-        # ========== LEFT PANEL: Controls ==========
+        # ========== LEFT PANEL: Scrollable Plot Area (like PDF) ==========
         left_panel = QWidget()
-        left_panel.setMinimumWidth(250)
-        left_panel.setMaximumWidth(500)
-        left_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        left_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 8, 0)
-        left_layout.setSpacing(12)
+        left_layout.setSpacing(8)
 
         # Header
-        header = QLabel("Quick Plotter")
-        header.setStyleSheet("font-size: 20px; font-weight: 600; color: #0F172A;")
-        left_layout.addWidget(header)
+        header_layout = QHBoxLayout()
+        header = QLabel("📊 Plot Report")
+        header.setStyleSheet("font-size: 18px; font-weight: 600; color: #0F172A;")
+        header_layout.addWidget(header)
+        header_layout.addStretch()
 
-        # Metadata table (simplified - only filename and dimensions)
-        metadata_group = QGroupBox("File Information")
-        metadata_layout = QVBoxLayout(metadata_group)
+        # Save Report button
+        save_report_btn = QPushButton("💾 Save as PDF Report")
+        save_report_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #059669;
+                color: white;
+                padding: 8px 16px;
+                border: none;
+                border-radius: 6px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #047857;
+            }
+        """)
+        save_report_btn.clicked.connect(self._save_as_report)
+        header_layout.addWidget(save_report_btn)
 
-        self.metadata_table = QTableWidget()
-        self.metadata_table.setRowCount(2)
-        self.metadata_table.setColumnCount(2)
-        self.metadata_table.setHorizontalHeaderLabels(["Property", "Value"])
-        self.metadata_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.metadata_table.verticalHeader().setVisible(False)
-        self.metadata_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.metadata_table.setSelectionMode(QTableWidget.NoSelection)
-        self.metadata_table.setFocusPolicy(Qt.NoFocus)
-        self.metadata_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        metadata_layout.addWidget(self.metadata_table)
+        left_layout.addLayout(header_layout)
 
-        left_layout.addWidget(metadata_group)
+        # Scrollable area for plots
+        self.plots_scroll_area = QScrollArea()
+        self.plots_scroll_area.setWidgetResizable(True)
+        self.plots_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.plots_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.plots_scroll_area.setFrameShape(QScrollArea.StyledPanel)
+        self.plots_scroll_area.setStyleSheet("""
+            QScrollArea {
+                background: #F9FAFB;
+                border: 2px solid #E5E7EB;
+                border-radius: 8px;
+            }
+        """)
 
-        # Axis selectors group
-        selectors_group = QGroupBox("Axis Selection")
-        selectors_layout = QVBoxLayout(selectors_group)
+        # Container for plot cards
+        self.plots_container = QWidget()
+        self.plots_layout = QVBoxLayout(self.plots_container)
+        self.plots_layout.setContentsMargins(12, 12, 12, 12)
+        self.plots_layout.setSpacing(16)
+        self.plots_layout.addStretch()
 
-        # X Axis
-        x_label = QLabel("X Axis")
-        x_label.setStyleSheet("font-weight: 600; color: #1F2937;")
-        selectors_layout.addWidget(x_label)
+        self.plots_scroll_area.setWidget(self.plots_container)
+        left_layout.addWidget(self.plots_scroll_area)
 
-        self.x_selector = QListWidget()
-        self.x_selector.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.x_selector.itemSelectionChanged.connect(self._handle_selection_change)
-        self.x_selector.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        selectors_layout.addWidget(self.x_selector)
+        # ========== RIGHT PANEL: Toolbar and Controls ==========
+        right_panel = QWidget()
+        right_panel.setMinimumWidth(300)
+        right_panel.setMaximumWidth(400)
+        right_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(8, 0, 0, 0)
+        right_layout.setSpacing(12)
 
-        # Y Axes
-        y_label = QLabel("Y Axes (Multi-select)")
-        y_label.setStyleSheet("font-weight: 600; color: #1F2937; margin-top: 8px;")
-        selectors_layout.addWidget(y_label)
+        # Toolbar header
+        toolbar_header = QLabel("🛠 Plot Toolbar")
+        toolbar_header.setStyleSheet("font-size: 16px; font-weight: 600; color: #0F172A;")
+        right_layout.addWidget(toolbar_header)
+
+        # File information
+        file_info_group = QGroupBox("File Information")
+        file_info_layout = QVBoxLayout(file_info_group)
+
+        self.file_info_label = QLabel()
+        self.file_info_label.setWordWrap(True)
+        self.file_info_label.setStyleSheet("color: #4B5563; font-size: 11px;")
+        file_info_layout.addWidget(self.file_info_label)
+
+        right_layout.addWidget(file_info_group)
+
+        # Add Plot Section
+        add_plot_group = QGroupBox("Add New Plot")
+        add_plot_layout = QVBoxLayout(add_plot_group)
+
+        add_plot_btn = QPushButton("➕ Add Plot")
+        add_plot_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1D4ED8;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 6px;
+                font-weight: 600;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #1E40AF;
+            }
+        """)
+        add_plot_btn.clicked.connect(self._add_new_plot)
+        add_plot_layout.addWidget(add_plot_btn)
+
+        right_layout.addWidget(add_plot_group)
+
+        # Plot Configuration Section
+        config_group = QGroupBox("Plot Configuration")
+        config_layout = QVBoxLayout(config_group)
+
+        # Plot title
+        title_label = QLabel("Plot Title:")
+        title_label.setStyleSheet("font-weight: 600; color: #1F2937; font-size: 11px;")
+        config_layout.addWidget(title_label)
+
+        self.plot_title_input = QLineEdit()
+        self.plot_title_input.setPlaceholderText("Enter plot title...")
+        self.plot_title_input.setStyleSheet("""
+            QLineEdit {
+                padding: 6px;
+                border: 1px solid #D1D5DB;
+                border-radius: 4px;
+                background: white;
+            }
+        """)
+        config_layout.addWidget(self.plot_title_input)
+
+        # X Axis selection
+        x_label = QLabel("X Axis:")
+        x_label.setStyleSheet("font-weight: 600; color: #1F2937; margin-top: 8px; font-size: 11px;")
+        config_layout.addWidget(x_label)
+
+        self.x_selector = QComboBox()
+        self.x_selector.setStyleSheet("""
+            QComboBox {
+                padding: 6px;
+                border: 1px solid #D1D5DB;
+                border-radius: 4px;
+                background: white;
+            }
+        """)
+        config_layout.addWidget(self.x_selector)
+
+        # Y Axes selection
+        y_label = QLabel("Y Axes (Multi-select):")
+        y_label.setStyleSheet("font-weight: 600; color: #1F2937; margin-top: 8px; font-size: 11px;")
+        config_layout.addWidget(y_label)
 
         self.y_selector = QListWidget()
         self.y_selector.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.y_selector.itemSelectionChanged.connect(self._handle_selection_change)
-        self.y_selector.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        selectors_layout.addWidget(self.y_selector)
+        self.y_selector.setStyleSheet("""
+            QListWidget {
+                border: 1px solid #D1D5DB;
+                border-radius: 4px;
+                padding: 4px;
+                background: white;
+            }
+            QListWidget::item:selected {
+                background: #DBEAFE;
+                color: #1E3A8A;
+            }
+        """)
+        config_layout.addWidget(self.y_selector)
 
-        left_layout.addWidget(selectors_group)
-
-        # Plot options group
-        options_group = QGroupBox("Plot Options")
-        options_layout = QVBoxLayout(options_group)
-
+        # Grid toggle
         self.grid_toggle = QCheckBox("Show Grid")
         self.grid_toggle.setChecked(True)
-        self.grid_toggle.stateChanged.connect(self._plot_current_selection)
-        options_layout.addWidget(self.grid_toggle)
+        self.grid_toggle.setStyleSheet("margin-top: 8px;")
+        config_layout.addWidget(self.grid_toggle)
 
-        left_layout.addWidget(options_group)
+        # Apply button
+        apply_btn = QPushButton("Apply to Selected Plot")
+        apply_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #7C3AED;
+                color: white;
+                padding: 8px;
+                border: none;
+                border-radius: 6px;
+                font-weight: 600;
+                margin-top: 8px;
+            }
+            QPushButton:hover {
+                background-color: #6D28D9;
+            }
+        """)
+        apply_btn.clicked.connect(self._apply_plot_config)
+        config_layout.addWidget(apply_btn)
 
-        # Action buttons
-        export_plot_btn = QPushButton("Export Plot")
-        export_plot_btn.clicked.connect(self._export_plot)
-        left_layout.addWidget(export_plot_btn)
-
-        left_layout.addStretch()
-
-        # ========== RIGHT PANEL: Scrollable Plot and Statistics ==========
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(0)
-
-        # Create scroll area
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setFrameShape(QScrollArea.NoFrame)
-
-        # Create scrollable content widget
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
-        scroll_layout.setContentsMargins(0, 0, 16, 0)
-        scroll_layout.setSpacing(12)
-
-        # Status label
-        self.status_label = QLabel("Select axes to plot")
-        self.status_label.setStyleSheet(
-            "color: #0F172A; font-weight: 500; padding: 8px; "
-            "background: #F3F4F6; border-radius: 6px;"
-        )
-        self.status_label.setAlignment(Qt.AlignCenter)
-        scroll_layout.addWidget(self.status_label)
-
-        # Plot area with FIXED height
-        plot_container = QWidget()
-        plot_layout = QVBoxLayout(plot_container)
-        plot_layout.setContentsMargins(0, 0, 0, 0)
-        plot_layout.setSpacing(4)
-
-        # Matplotlib figure with fixed size
-        pixel_ratio = QApplication.instance().devicePixelRatio() if QApplication.instance() else 1.0
-        dpi = int(100 * pixel_ratio)
-        self.figure = Figure(figsize=(10, 6), dpi=dpi)
-        self.figure.patch.set_facecolor("#FFFFFF")
-        self.canvas = FigureCanvas(self.figure)
-
-        # Set FIXED height for the plot canvas
-        self.canvas.setFixedHeight(500)
-        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
-        # Enable mouse interaction and focus for pan/zoom controls
-        self.canvas.setFocusPolicy(Qt.StrongFocus)
-        self.canvas.setMouseTracking(True)
-
-        # Connect scroll event for Ctrl+scroll zooming
-        self.canvas.mpl_connect("scroll_event", self._on_scroll)
-
-        self.toolbar = NavigationToolbar(self.canvas, self)
-        self.toolbar.setStyleSheet("background: #F9FAFB; border: none; padding: 4px;")
-
-        plot_layout.addWidget(self.toolbar)
-        plot_layout.addWidget(self.canvas)
-
-        scroll_layout.addWidget(plot_container)
-
-        # Divider between plot and statistics
-        divider = QLabel()
-        divider.setStyleSheet("background-color: #E5E7EB; min-height: 2px; max-height: 2px;")
-        scroll_layout.addWidget(divider)
+        right_layout.addWidget(config_group)
 
         # Statistics area
         self.stats_area = StatisticsArea(self)
-        self.stats_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        scroll_layout.addWidget(self.stats_area)
+        right_layout.addWidget(self.stats_area)
 
-        # Add stretch at the bottom
-        scroll_layout.addStretch()
-
-        # Set the scroll content and add to right panel
-        scroll_area.setWidget(scroll_content)
-        right_layout.addWidget(scroll_area)
+        right_layout.addStretch()
 
         # Add panels to splitter
         self.main_splitter.addWidget(left_panel)
         self.main_splitter.addWidget(right_panel)
 
-        # Set initial splitter sizes (25% left, 75% right)
-        self.main_splitter.setStretchFactor(0, 1)
+        # Set initial splitter sizes (70% left, 30% right)
+        self.main_splitter.setStretchFactor(0, 7)
         self.main_splitter.setStretchFactor(1, 3)
 
         # Set collapsible behavior
@@ -347,30 +542,6 @@ class QuickPlotterWindow(QMainWindow):
                 left: 10px;
                 padding: 0 5px;
             }
-            QListWidget {
-                border: 1px solid #D1D5DB;
-                border-radius: 6px;
-                padding: 4px;
-                background: #F9FAFB;
-            }
-            QListWidget::item:selected {
-                background: #DBEAFE;
-                color: #1E3A8A;
-            }
-            QListWidget::item:hover {
-                background: #EFF6FF;
-            }
-            QCheckBox {
-                spacing: 8px;
-            }
-            QTableWidget {
-                background: #F9FAFB;
-                border: 1px solid #E5E7EB;
-                border-radius: 4px;
-            }
-            QScrollArea {
-                border: none;
-            }
             QScrollBar:vertical {
                 background: #F3F4F6;
                 width: 12px;
@@ -399,9 +570,8 @@ class QuickPlotterWindow(QMainWindow):
             raise ValueError("The selected file did not contain any data to display.")
 
         self._dataframe = df
-        self._populate_metadata_table()
+        self._populate_file_info()
         self._populate_selectors(df)
-        self._plot_current_selection()
 
     @staticmethod
     def _read_file(path: Path) -> pd.DataFrame:
@@ -424,33 +594,14 @@ class QuickPlotterWindow(QMainWindow):
             raise ValueError("Files without an extension are not supported by the quick plotter.")
         raise ValueError(f"Unsupported file type: {ext}")
 
-    def _populate_metadata_table(self) -> None:
-        """Populate the metadata table with file information."""
+    def _populate_file_info(self) -> None:
+        """Populate file information label."""
         if self._dataframe is None:
             return
 
-        # DataFrame shape
-        shape_str = f"{self._dataframe.shape[0]} × {self._dataframe.shape[1]}"
-
-        # Populate table with property-value pairs (simplified)
-        properties = [
-            ("File Name", self._file_path.name),
-            ("Dimensions", shape_str),
-        ]
-
-        for row, (prop, value) in enumerate(properties):
-            self.metadata_table.setItem(row, 0, QTableWidgetItem(prop))
-            self.metadata_table.setItem(row, 1, QTableWidgetItem(value))
-
-            # Style property column
-            prop_item = self.metadata_table.item(row, 0)
-            if prop_item:
-                prop_item.setForeground(Qt.darkGray)
-                font = prop_item.font()
-                font.setBold(True)
-                prop_item.setFont(font)
-
-        self.metadata_table.resizeColumnsToContents()
+        shape_str = f"{self._dataframe.shape[0]} rows × {self._dataframe.shape[1]} columns"
+        info_text = f"<b>File:</b> {self._file_path.name}<br><b>Size:</b> {shape_str}"
+        self.file_info_label.setText(info_text)
 
     def _populate_selectors(self, df: pd.DataFrame) -> None:
         """Populate axis selectors with column names."""
@@ -461,301 +612,112 @@ class QuickPlotterWindow(QMainWindow):
             column for column in df.columns if pd.api.types.is_numeric_dtype(df[column])
         ]
 
+        # Populate X axis combo box
         for column in df.columns:
+            self.x_selector.addItem(column)
+
+        # Populate Y axis list widget with numeric columns
+        for column in numeric_columns:
             item = QListWidgetItem(column)
-            self.x_selector.addItem(item)
-            if column in numeric_columns:
-                y_item = QListWidgetItem(column)
-                y_item.setSelected(False)
-                self.y_selector.addItem(y_item)
+            self.y_selector.addItem(item)
 
-        if self.x_selector.count() > 0:
-            self.x_selector.setCurrentRow(0)
-
-        # Select up to two numeric columns by default
-        for index in range(min(2, len(numeric_columns))):
-            items = self.y_selector.findItems(numeric_columns[index], Qt.MatchExactly)
-            if items:
-                items[0].setSelected(True)
-
-        self._update_status()
-
-    def _handle_selection_change(self) -> None:
-        """Handle selection changes in axis selectors."""
-        self._update_status()
-        self._plot_current_selection()
-
-    def _update_status(self) -> None:
-        """Update status label based on current selections."""
+    def _add_new_plot(self) -> None:
+        """Add a new plot card to the scrollable area."""
         if self._dataframe is None:
-            self.status_label.setText("No data loaded")
+            QMessageBox.warning(self, "Plotter", "No data loaded.")
             return
 
-        selected_x = self._current_x_axis()
-        selected_y = self._current_y_axes()
-        if not selected_x:
-            self.status_label.setText("⚠ Select a column for the X axis")
-        elif not selected_y:
-            self.status_label.setText("⚠ Select one or more numeric columns for the Y axis")
-        else:
-            self.status_label.setText(f"📊 Plotting: {selected_x} vs [{', '.join(selected_y)}]")
+        # Create new plot card
+        plot_card = PlotCard(self._dataframe, self._plot_counter, self.plots_container)
+        self._plot_cards.append(plot_card)
+        self._plot_counter += 1
 
-    def _current_x_axis(self) -> str | None:
-        """Get currently selected X axis column."""
-        selected_items = self.x_selector.selectedItems()
-        return selected_items[0].text() if selected_items else None
+        # Insert before the stretch
+        self.plots_layout.insertWidget(self.plots_layout.count() - 1, plot_card)
 
-    def _current_y_axes(self) -> List[str]:
-        """Get currently selected Y axis columns."""
-        return [item.text() for item in self.y_selector.selectedItems()]
+        # Scroll to the new plot
+        QApplication.processEvents()
+        self.plots_scroll_area.ensureWidgetVisible(plot_card)
 
-    def _plot_current_selection(self) -> None:
-        """Plot the currently selected axes."""
-        if self._dataframe is None:
+    def remove_plot_card(self, plot_card: PlotCard) -> None:
+        """Remove a plot card from the scrollable area."""
+        if plot_card in self._plot_cards:
+            self._plot_cards.remove(plot_card)
+            self.plots_layout.removeWidget(plot_card)
+            plot_card.deleteLater()
+
+    def _apply_plot_config(self) -> None:
+        """Apply configuration to the most recently added plot."""
+        if not self._plot_cards:
+            QMessageBox.information(self, "Plot Configuration", "Please add a plot first using the '➕ Add Plot' button.")
             return
 
-        x_column = self._current_x_axis()
-        y_columns = self._current_y_axes()
+        # Get the last plot card
+        plot_card = self._plot_cards[-1]
 
-        if not x_column or not y_columns:
+        # Get configuration values
+        x_column = self.x_selector.currentText()
+        selected_y_items = self.y_selector.selectedItems()
+        y_columns = [item.text() for item in selected_y_items]
+        title = self.plot_title_input.text() or f"Plot {plot_card.plot_id + 1}"
+        show_grid = self.grid_toggle.isChecked()
+
+        if not x_column:
+            QMessageBox.warning(self, "Configuration", "Please select an X axis column.")
             return
 
-        try:
-            self._plot_data(x_column, y_columns)
-        except ValueError as exc:
-            QMessageBox.warning(self, "Plotter", str(exc))
+        if not y_columns:
+            QMessageBox.warning(self, "Configuration", "Please select at least one Y axis column.")
+            return
 
-    def _plot_data(self, x_column: str, y_columns: List[str]) -> None:
-        """Plot data on the figure with dynamic margins for multiple y-axes."""
-        if self._dataframe is None:
-            raise ValueError("No data is loaded for plotting.")
-
-        df = self._dataframe.copy()
-
-        try:
-            x_data = pd.to_numeric(df[x_column], errors="coerce")
-        except Exception as exc:
-            raise ValueError(f"Unable to interpret '{x_column}' as numeric: {exc}")
-
-        if x_data.isna().all():
-            raise ValueError(f"Column '{x_column}' does not contain numeric data.")
-
-        self.figure.clear()
-
-        # Calculate number of axes needed
-        n_axes = len(y_columns)
-
-        # Calculate how many axes on each side
-        n_left_axes = (n_axes + 1) // 2
-        n_right_axes = n_axes // 2
-
-        # Calculate dynamic margins
-        left_margin = 0.08 + (n_left_axes - 1) * 0.12
-        right_margin = 0.92 - (n_right_axes) * 0.12
-
-        # Ensure margins don't overlap
-        if left_margin >= right_margin:
-            raise ValueError(
-                f"Too many y-axes ({n_axes}) to display properly. "
-                "Consider plotting fewer columns at once."
-            )
-
-        # Create subplot
-        ax = self.figure.add_subplot(111)
-        ax.set_facecolor("#FFFFFF")
-
-        # Professional color palette
-        professional_colors = [
-            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
-            "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
-        ]
-
-        color_map = [professional_colors[i % len(professional_colors)] for i in range(n_axes)]
-
-        axes = [ax]
-        plotted_any = False
-        all_lines = []
-        left_spine_offset = 0
-        right_spine_offset = 0
-
-        for i, (column, color) in enumerate(zip(y_columns, color_map)):
-            series = pd.to_numeric(df[column], errors="coerce")
-            if series.isna().all():
-                continue
-            valid = series.notna() & x_data.notna()
-            if not valid.any():
-                continue
-
-            # Create new axis for each y-column after the first
-            if i == 0:
-                new_ax = ax
-                new_ax.spines["left"].set_color(color)
-                new_ax.spines["left"].set_linewidth(2)
-            elif i % 2 == 1:
-                # Odd indices go to the right side
-                new_ax = ax.twinx()
-                new_ax.spines["left"].set_visible(False)
-                new_ax.spines["right"].set_visible(True)
-                new_ax.spines["right"].set_color(color)
-                new_ax.spines["right"].set_linewidth(2)
-                new_ax.spines["right"].set_position(("axes", 1.0 + right_spine_offset))
-                new_ax.yaxis.set_label_position("right")
-                new_ax.yaxis.set_ticks_position("right")
-                right_spine_offset += 0.15
-                axes.append(new_ax)
-            else:
-                # Even indices go to the left side
-                new_ax = ax.twinx()
-                new_ax.spines["right"].set_visible(False)
-                new_ax.spines["left"].set_visible(True)
-                new_ax.spines["left"].set_color(color)
-                new_ax.spines["left"].set_linewidth(2)
-                left_spine_offset += 0.15
-                new_ax.spines["left"].set_position(("axes", -left_spine_offset))
-                new_ax.yaxis.set_label_position("left")
-                new_ax.yaxis.set_ticks_position("left")
-                axes.append(new_ax)
-
-            # Plot with colored line
-            (line,) = new_ax.plot(
-                x_data[valid],
-                series[valid],
-                color=color,
-                label=column,
-                linewidth=2.5,
-                alpha=0.9,
-            )
-            all_lines.append(line)
-
-            # Style the y-axis with matching color
-            new_ax.set_ylabel(
-                column,
-                color=color,
-                fontsize=11,
-                fontweight="bold",
-                labelpad=10
-            )
-            new_ax.tick_params(
-                axis="y",
-                colors=color,
-                labelsize=9,
-                width=2,
-                length=6
-            )
-
-            plotted_any = True
-
-        if not plotted_any:
-            raise ValueError("None of the selected y-axis columns contain numeric data.")
-
-        # Style X-axis
-        ax.set_xlabel(x_column, fontsize=12, fontweight="bold", labelpad=15)
-        ax.tick_params(axis="x", labelsize=10, width=1.5, length=6)
-        ax.spines["bottom"].set_linewidth(1.5)
-        ax.spines["top"].set_visible(False)
-
-        # Grid toggle
-        if self.grid_toggle.isChecked():
-            ax.grid(
-                True,
-                color="#E2E8F0",
-                alpha=0.4,
-                linestyle="--",
-                linewidth=0.8,
-                zorder=0
-            )
-            ax.set_axisbelow(True)
-
-        # Create legend
-        labels = [line.get_label() for line in all_lines]
-        legend_ncol = min(len(labels), 4)
-        ax.legend(
-            all_lines,
-            labels,
-            loc="upper center",
-            bbox_to_anchor=(0.5, -0.12),
-            ncol=legend_ncol,
-            frameon=True,
-            fancybox=True,
-            shadow=True,
-            fontsize=9,
-            edgecolor="#E5E7EB",
-            framealpha=0.95,
+        # Apply configuration to the plot
+        plot_card.update_plot(
+            x_column=x_column,
+            y_columns=y_columns,
+            title=title,
+            show_grid=show_grid
         )
-
-        # Adjust layout with dynamic margins
-        self.figure.subplots_adjust(
-            left=left_margin,
-            right=right_margin,
-            top=0.96,
-            bottom=0.18
-        )
-
-        self.canvas.draw_idle()
 
         # Update statistics
         try:
-            stats_df = df[y_columns].select_dtypes(include=[np.number])
+            stats_df = self._dataframe[y_columns].select_dtypes(include=[np.number])
             self.stats_area.update_stats(stats_df)
         except Exception:
             self.stats_area.clear_stats()
 
-    def _on_scroll(self, event) -> None:
-        """Handle scroll events for zooming with Ctrl+scroll."""
-        if event.key != "control":
+    def _save_as_report(self) -> None:
+        """Save all plots as a PDF report."""
+        if not self._plot_cards:
+            QMessageBox.information(self, "Save Report", "No plots to save. Please add plots first.")
             return
 
-        if event.inaxes is None:
-            return
-
-        ax = event.inaxes
-        xdata = event.xdata
-        ydata = event.ydata
-
-        if xdata is None or ydata is None:
-            return
-
-        # Zoom factor
-        zoom_factor = 1.2 if event.button == "up" else 0.8
-
-        # Get current limits
-        xlim = ax.get_xlim()
-        ylim = ax.get_ylim()
-
-        # Calculate new limits centered on cursor position
-        new_width = (xlim[1] - xlim[0]) * zoom_factor
-        new_height = (ylim[1] - ylim[0]) * zoom_factor
-
-        relx = (xlim[1] - xdata) / (xlim[1] - xlim[0])
-        rely = (ylim[1] - ydata) / (ylim[1] - ylim[0])
-
-        ax.set_xlim([xdata - new_width * (1 - relx), xdata + new_width * relx])
-        ax.set_ylim([ydata - new_height * (1 - rely), ydata + new_height * rely])
-
-        # Update all twin axes to maintain synchronization
-        for other_ax in self.figure.get_axes():
-            if other_ax != ax and hasattr(other_ax, "get_shared_x_axes"):
-                shared_x = other_ax.get_shared_x_axes()
-                if shared_x.joined(ax, other_ax):
-                    other_ax.set_xlim(ax.get_xlim())
-
-        self.canvas.draw_idle()
-
-    def _export_plot(self) -> None:
-        """Export current plot to image file."""
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Export Plot",
-            f"{self._file_path.stem}_plot.png",
-            "PNG (*.png);;PDF (*.pdf);;SVG (*.svg)",
+            "Save Report as PDF",
+            f"{self._file_path.stem}_report.pdf",
+            "PDF (*.pdf)",
         )
 
-        if file_path:
-            try:
-                self.figure.savefig(file_path, dpi=300, bbox_inches="tight")
-                QMessageBox.information(self, "Export Success", f"Plot saved to:\n{file_path}")
-            except Exception as exc:
-                QMessageBox.critical(self, "Export Failed", f"Failed to export plot:\n{exc}")
+        if not file_path:
+            return
+
+        try:
+            from matplotlib.backends.backend_pdf import PdfPages
+
+            with PdfPages(file_path) as pdf:
+                for plot_card in self._plot_cards:
+                    if plot_card.x_column and plot_card.y_columns:
+                        # Save each plot's figure to PDF
+                        pdf.savefig(plot_card.figure, bbox_inches="tight")
+
+            QMessageBox.information(
+                self,
+                "Save Success",
+                f"Report saved successfully to:\n{file_path}\n\nTotal plots: {len(self._plot_cards)}"
+            )
+
+        except Exception as exc:
+            QMessageBox.critical(self, "Save Failed", f"Failed to save report:\n{exc}")
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         """Handle window close event."""
