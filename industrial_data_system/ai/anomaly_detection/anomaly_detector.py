@@ -43,7 +43,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from industrial_data_system.ai.anomaly_detection import anomaly_prediction_plotter
+# from industrial_data_system.ai.anomaly_detection import anomaly_prediction_plotter
 from industrial_data_system.core.config import get_config
 from industrial_data_system.core.db_manager import DatabaseManager, ModelRegistryRecord
 from industrial_data_system.utils.asc_utils import (
@@ -179,308 +179,308 @@ class AnomalyDetectorWindow(QMainWindow):
             """
         )
 
-        # ========== LEFT PANEL: Controls ==========
-        left_panel = QWidget()
-        left_panel.setMinimumWidth(300)
-        left_panel.setMaximumWidth(600)  # Increased max width, but still constrained
-        left_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 8, 0)
-        left_layout.setSpacing(0)
-
-        # Header
-        header = QLabel("Anomaly Detector")
-        header.setStyleSheet("font-size: 20px; font-weight: 600; color: #DC2626; margin-bottom: 12px;")
-        left_layout.addWidget(header)
-
-        # Create vertical splitter for resizable group boxes
-        left_splitter = QSplitter(Qt.Vertical)
-        left_splitter.setHandleWidth(6)
-        left_splitter.setStyleSheet(
-            """
-            QSplitter::handle {
-                background: #E5E7EB;
-                margin: 2px 0px;
-            }
-            QSplitter::handle:hover {
-                background: #DC2626;
-            }
-            """
-        )
-        left_layout.addWidget(left_splitter)
-
-        # Data selection group (for standalone mode)
-        self.data_selection_group = QGroupBox("Data Selection")
-        data_selection_layout = QVBoxLayout(self.data_selection_group)
-
-        # Pump series selection
-        pump_layout = QHBoxLayout()
-        pump_layout.addWidget(QLabel("Pump Series:"))
-        self.pump_series_combo = QComboBox()
-        self.pump_series_combo.setMinimumWidth(150)
-        self.pump_series_combo.currentIndexChanged.connect(self._on_pump_series_changed)
-        pump_layout.addWidget(self.pump_series_combo)
-        pump_layout.addStretch()
-        data_selection_layout.addLayout(pump_layout)
-
-        # Test type selection
-        test_layout = QHBoxLayout()
-        test_layout.addWidget(QLabel("Test Type:"))
-        self.test_type_combo = QComboBox()
-        self.test_type_combo.setMinimumWidth(150)
-        self.test_type_combo.currentIndexChanged.connect(self._on_test_type_changed)
-        test_layout.addWidget(self.test_type_combo)
-        test_layout.addStretch()
-        data_selection_layout.addLayout(test_layout)
-
-        left_splitter.addWidget(self.data_selection_group)
-
-        # Model info group
-        model_group = QGroupBox("Model Information")
-        model_layout = QVBoxLayout(model_group)
-
-        # Version selection
-        version_layout = QHBoxLayout()
-        version_layout.addWidget(QLabel("Model Version:"))
-        self.version_combo = QComboBox()
-        self.version_combo.setMinimumWidth(150)
-        self.version_combo.currentIndexChanged.connect(self._on_version_changed)
-        version_layout.addWidget(self.version_combo)
-        version_layout.addStretch()
-        model_layout.addLayout(version_layout)
-
-        left_splitter.addWidget(model_group)
-
-        # Comparison mode group
-        compare_group = QGroupBox("Model Comparison")
-        compare_layout = QVBoxLayout(compare_group)
-
-        self.compare_checkbox = QCheckBox("Enable Comparison Mode")
-        self.compare_checkbox.stateChanged.connect(self._on_comparison_toggled)
-        compare_layout.addWidget(self.compare_checkbox)
-
-        compare_version_layout = QHBoxLayout()
-        compare_version_layout.addWidget(QLabel("Compare with:"))
-        self.compare_version_combo = QComboBox()
-        self.compare_version_combo.setMinimumWidth(150)
-        self.compare_version_combo.setEnabled(False)
-        self.compare_version_combo.currentIndexChanged.connect(self._on_compare_version_changed)
-        compare_version_layout.addWidget(self.compare_version_combo)
-        compare_version_layout.addStretch()
-        compare_layout.addLayout(compare_version_layout)
-
-        left_splitter.addWidget(compare_group)
-
-        # Detection settings group
-        settings_group = QGroupBox("Detection Settings")
-        settings_layout = QGridLayout(settings_group)
-
-        settings_layout.addWidget(QLabel("Threshold Method:"), 0, 0)
-        self.threshold_method = QListWidget()
-        self.threshold_method.addItems(
-            ["Mean + 2×Std", "Mean + 3×Std", "95th Percentile", "99th Percentile", "Custom Value"]
-        )
-        self.threshold_method.setCurrentRow(1)  # Default: Mean + 3×Std
-        self.threshold_method.setMaximumHeight(120)
-        self.threshold_method.currentRowChanged.connect(self._on_threshold_method_changed)
-        settings_layout.addWidget(self.threshold_method, 1, 0, 1, 2)
-
-        settings_layout.addWidget(QLabel("Custom Threshold:"), 2, 0)
-        self.custom_threshold = QDoubleSpinBox()
-        self.custom_threshold.setDecimals(6)
-        self.custom_threshold.setRange(0.0, 1000.0)
-        self.custom_threshold.setValue(0.1)
-        self.custom_threshold.setEnabled(False)
-        settings_layout.addWidget(self.custom_threshold, 2, 1)
-
-        detect_btn = QPushButton("Detect Anomalies")
-        detect_btn.setProperty("primary", True)
-        detect_btn.clicked.connect(self._detect_anomalies)
-        settings_layout.addWidget(detect_btn, 3, 0, 1, 2)
-
-        left_splitter.addWidget(settings_group)
-
-        # Statistics group
-        stats_group = QGroupBox("Detection Results")
-        stats_layout = QVBoxLayout(stats_group)
-
-        self.stats_table = QTableWidget()
-        self.stats_table.setRowCount(6)
-        self.stats_table.setColumnCount(2)
-        self.stats_table.setHorizontalHeaderLabels(["Metric", "Value"])
-        self.stats_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.stats_table.verticalHeader().setVisible(False)
-        self.stats_table.setMaximumHeight(220)
-        self.stats_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.stats_table.setSelectionMode(QTableWidget.NoSelection)
-        stats_layout.addWidget(self.stats_table)
-
-        left_splitter.addWidget(stats_group)
-
-        # Export buttons container
-        export_container = QWidget()
-        export_layout = QVBoxLayout(export_container)
-        export_layout.setContentsMargins(0, 0, 0, 0)
-        export_layout.setSpacing(8)
-
-        export_anomalies_btn = QPushButton("Export Anomalies")
-        export_anomalies_btn.setProperty("secondary", True)
-        export_anomalies_btn.clicked.connect(self._export_anomalies)
-        export_layout.addWidget(export_anomalies_btn)
-
-        export_plot_btn = QPushButton("Export Plot")
-        export_plot_btn.setProperty("secondary", True)
-        export_plot_btn.clicked.connect(self._export_plot)
-        export_layout.addWidget(export_plot_btn)
-
-        decode_predict_btn = QPushButton("Decode & Predict")
-        decode_predict_btn.setProperty("primary", True)
-        decode_predict_btn.clicked.connect(self._decode_and_predict)
-        export_layout.addWidget(decode_predict_btn)
-
-        close_btn = QPushButton("Close")
-        close_btn.setProperty("secondary", True)
-        close_btn.clicked.connect(self.close)
-        export_layout.addWidget(close_btn)
-
-        export_layout.addStretch()
-
-        left_splitter.addWidget(export_container)
-
-        # Configure splitter stretch factors
-        # Make stats and export container take minimal space by default
-        left_splitter.setStretchFactor(0, 1)  # Data Selection
-        left_splitter.setStretchFactor(1, 0)  # Model Information
-        left_splitter.setStretchFactor(2, 0)  # Model Comparison
-        left_splitter.setStretchFactor(3, 1)  # Detection Settings
-        left_splitter.setStretchFactor(4, 2)  # Detection Results
-        left_splitter.setStretchFactor(5, 0)  # Export buttons
-
-        # Set collapsible behavior for all sections
-        for i in range(left_splitter.count()):
-            left_splitter.setCollapsible(i, False)
-
-        # ========== RIGHT PANEL: Plots ==========
-        right_panel = QWidget()
-        right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(12)
-
-        # Status label
-        self.status_label = QLabel("Loading model...")
-        self.status_label.setStyleSheet(
-            "color: #0F172A; font-weight: 500; padding: 8px; "
-            "background: #FEF3C7; border-radius: 6px;"
-        )
-        self.status_label.setAlignment(Qt.AlignCenter)
-        right_layout.addWidget(self.status_label)
-
-        # Matplotlib figure with dynamic DPI based on device pixel ratio
-        # Get device pixel ratio for proper scaling across different screen sizes
-        pixel_ratio = QApplication.instance().devicePixelRatio() if QApplication.instance() else 1.0
-        dpi = int(100 * pixel_ratio)
-        self.figure = Figure(figsize=(12, 10), dpi=dpi)
-        self.figure.patch.set_facecolor("#FFFFFF")
-        self.canvas = FigureCanvas(self.figure)
-        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-        self.toolbar = NavigationToolbar(self.canvas, self)
-        self.toolbar.setStyleSheet("background: #F9FAFB; border: none; padding: 4px;")
-
-        right_layout.addWidget(self.toolbar)
-        right_layout.addWidget(self.canvas)
-
-        # Add panels to splitter
-        self.main_splitter.addWidget(left_panel)
-        self.main_splitter.addWidget(right_panel)
-
-        # Set initial splitter sizes (25% left, 75% right)
-        # Using proportional sizes that adapt to window size
-        self.main_splitter.setStretchFactor(0, 1)  # Left panel
-        self.main_splitter.setStretchFactor(1, 3)  # Right panel gets more space
-
-        # Set collapsible behavior
-        self.main_splitter.setCollapsible(0, False)
-        self.main_splitter.setCollapsible(1, False)
-
-        # Add splitter to main layout
-        main_layout.addWidget(self.main_splitter)
-
-        # Apply styles
-        self.setStyleSheet(
-            """
-            QMainWindow#anomaly-detector-window {
-                background: #FFFFFF;
-            }
-            QWidget {
-                background: #FFFFFF;
-                color: #0F172A;
-            }
-            QGroupBox {
-                font-weight: 600;
-                border: 2px solid #FCA5A5;
-                border-radius: 8px;
-                margin-top: 12px;
-                padding-top: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-            QListWidget {
-                border: 1px solid #D1D5DB;
-                border-radius: 6px;
-                padding: 4px;
-                background: #F9FAFB;
-            }
-            QListWidget::item:selected {
-                background: #FEE2E2;
-                color: #991B1B;
-            }
-            QListWidget::item:hover {
-                background: #FEF2F2;
-            }
-            QTableWidget {
-                background: #F9FAFB;
-                border: 1px solid #E5E7EB;
-                border-radius: 4px;
-            }
-            QComboBox {
-                border: 1px solid #D1D5DB;
-                border-radius: 4px;
-                padding: 4px 8px;
-                background: #F9FAFB;
-                min-height: 24px;
-            }
-            QComboBox:hover {
-                border-color: #DC2626;
-            }
-            QComboBox::drop-down {
-                border: none;
-                padding-right: 8px;
-            }
-            QCheckBox {
-                spacing: 8px;
-            }
-            QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-                border: 2px solid #D1D5DB;
-                border-radius: 4px;
-                background: #FFFFFF;
-            }
-            QCheckBox::indicator:checked {
-                background: #DC2626;
-                border-color: #DC2626;
-            }
-            QCheckBox::indicator:hover {
-                border-color: #DC2626;
-            }
-            """
-            + self.BUTTON_STYLES
-        )
+        # # ========== LEFT PANEL: Controls ==========
+        # left_panel = QWidget()
+        # left_panel.setMinimumWidth(300)
+        # left_panel.setMaximumWidth(600)  # Increased max width, but still constrained
+        # left_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        # left_layout = QVBoxLayout(left_panel)
+        # left_layout.setContentsMargins(0, 0, 8, 0)
+        # left_layout.setSpacing(0)
+        #
+        # # Header
+        # header = QLabel("Anomaly Detector")
+        # header.setStyleSheet("font-size: 20px; font-weight: 600; color: #DC2626; margin-bottom: 12px;")
+        # left_layout.addWidget(header)
+        #
+        # # Create vertical splitter for resizable group boxes
+        # left_splitter = QSplitter(Qt.Vertical)
+        # left_splitter.setHandleWidth(6)
+        # left_splitter.setStyleSheet(
+        #     """
+        #     QSplitter::handle {
+        #         background: #E5E7EB;
+        #         margin: 2px 0px;
+        #     }
+        #     QSplitter::handle:hover {
+        #         background: #DC2626;
+        #     }
+        #     """
+        # )
+        # left_layout.addWidget(left_splitter)
+        #
+        # # Data selection group (for standalone mode)
+        # self.data_selection_group = QGroupBox("Data Selection")
+        # data_selection_layout = QVBoxLayout(self.data_selection_group)
+        #
+        # # Pump series selection
+        # pump_layout = QHBoxLayout()
+        # pump_layout.addWidget(QLabel("Pump Series:"))
+        # self.pump_series_combo = QComboBox()
+        # self.pump_series_combo.setMinimumWidth(150)
+        # self.pump_series_combo.currentIndexChanged.connect(self._on_pump_series_changed)
+        # pump_layout.addWidget(self.pump_series_combo)
+        # pump_layout.addStretch()
+        # data_selection_layout.addLayout(pump_layout)
+        #
+        # # Test type selection
+        # test_layout = QHBoxLayout()
+        # test_layout.addWidget(QLabel("Test Type:"))
+        # self.test_type_combo = QComboBox()
+        # self.test_type_combo.setMinimumWidth(150)
+        # self.test_type_combo.currentIndexChanged.connect(self._on_test_type_changed)
+        # test_layout.addWidget(self.test_type_combo)
+        # test_layout.addStretch()
+        # data_selection_layout.addLayout(test_layout)
+        #
+        # left_splitter.addWidget(self.data_selection_group)
+        #
+        # # Model info group
+        # model_group = QGroupBox("Model Information")
+        # model_layout = QVBoxLayout(model_group)
+        #
+        # # Version selection
+        # version_layout = QHBoxLayout()
+        # version_layout.addWidget(QLabel("Model Version:"))
+        # self.version_combo = QComboBox()
+        # self.version_combo.setMinimumWidth(150)
+        # self.version_combo.currentIndexChanged.connect(self._on_version_changed)
+        # version_layout.addWidget(self.version_combo)
+        # version_layout.addStretch()
+        # model_layout.addLayout(version_layout)
+        #
+        # left_splitter.addWidget(model_group)
+        #
+        # # Comparison mode group
+        # compare_group = QGroupBox("Model Comparison")
+        # compare_layout = QVBoxLayout(compare_group)
+        #
+        # self.compare_checkbox = QCheckBox("Enable Comparison Mode")
+        # self.compare_checkbox.stateChanged.connect(self._on_comparison_toggled)
+        # compare_layout.addWidget(self.compare_checkbox)
+        #
+        # compare_version_layout = QHBoxLayout()
+        # compare_version_layout.addWidget(QLabel("Compare with:"))
+        # self.compare_version_combo = QComboBox()
+        # self.compare_version_combo.setMinimumWidth(150)
+        # self.compare_version_combo.setEnabled(False)
+        # self.compare_version_combo.currentIndexChanged.connect(self._on_compare_version_changed)
+        # compare_version_layout.addWidget(self.compare_version_combo)
+        # compare_version_layout.addStretch()
+        # compare_layout.addLayout(compare_version_layout)
+        #
+        # left_splitter.addWidget(compare_group)
+        #
+        # # Detection settings group
+        # settings_group = QGroupBox("Detection Settings")
+        # settings_layout = QGridLayout(settings_group)
+        #
+        # settings_layout.addWidget(QLabel("Threshold Method:"), 0, 0)
+        # self.threshold_method = QListWidget()
+        # self.threshold_method.addItems(
+        #     ["Mean + 2×Std", "Mean + 3×Std", "95th Percentile", "99th Percentile", "Custom Value"]
+        # )
+        # self.threshold_method.setCurrentRow(1)  # Default: Mean + 3×Std
+        # self.threshold_method.setMaximumHeight(120)
+        # self.threshold_method.currentRowChanged.connect(self._on_threshold_method_changed)
+        # settings_layout.addWidget(self.threshold_method, 1, 0, 1, 2)
+        #
+        # settings_layout.addWidget(QLabel("Custom Threshold:"), 2, 0)
+        # self.custom_threshold = QDoubleSpinBox()
+        # self.custom_threshold.setDecimals(6)
+        # self.custom_threshold.setRange(0.0, 1000.0)
+        # self.custom_threshold.setValue(0.1)
+        # self.custom_threshold.setEnabled(False)
+        # settings_layout.addWidget(self.custom_threshold, 2, 1)
+        #
+        # detect_btn = QPushButton("Detect Anomalies")
+        # detect_btn.setProperty("primary", True)
+        # detect_btn.clicked.connect(self._detect_anomalies)
+        # settings_layout.addWidget(detect_btn, 3, 0, 1, 2)
+        #
+        # left_splitter.addWidget(settings_group)
+        #
+        # # Statistics group
+        # stats_group = QGroupBox("Detection Results")
+        # stats_layout = QVBoxLayout(stats_group)
+        #
+        # self.stats_table = QTableWidget()
+        # self.stats_table.setRowCount(6)
+        # self.stats_table.setColumnCount(2)
+        # self.stats_table.setHorizontalHeaderLabels(["Metric", "Value"])
+        # self.stats_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        # self.stats_table.verticalHeader().setVisible(False)
+        # self.stats_table.setMaximumHeight(220)
+        # self.stats_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        # self.stats_table.setSelectionMode(QTableWidget.NoSelection)
+        # stats_layout.addWidget(self.stats_table)
+        #
+        # left_splitter.addWidget(stats_group)
+        #
+        # # Export buttons container
+        # export_container = QWidget()
+        # export_layout = QVBoxLayout(export_container)
+        # export_layout.setContentsMargins(0, 0, 0, 0)
+        # export_layout.setSpacing(8)
+        #
+        # export_anomalies_btn = QPushButton("Export Anomalies")
+        # export_anomalies_btn.setProperty("secondary", True)
+        # export_anomalies_btn.clicked.connect(self._export_anomalies)
+        # export_layout.addWidget(export_anomalies_btn)
+        #
+        # export_plot_btn = QPushButton("Export Plot")
+        # export_plot_btn.setProperty("secondary", True)
+        # export_plot_btn.clicked.connect(self._export_plot)
+        # export_layout.addWidget(export_plot_btn)
+        #
+        # decode_predict_btn = QPushButton("Decode & Predict")
+        # decode_predict_btn.setProperty("primary", True)
+        # decode_predict_btn.clicked.connect(self._decode_and_predict)
+        # export_layout.addWidget(decode_predict_btn)
+        #
+        # close_btn = QPushButton("Close")
+        # close_btn.setProperty("secondary", True)
+        # close_btn.clicked.connect(self.close)
+        # export_layout.addWidget(close_btn)
+        #
+        # export_layout.addStretch()
+        #
+        # left_splitter.addWidget(export_container)
+        #
+        # # Configure splitter stretch factors
+        # # Make stats and export container take minimal space by default
+        # left_splitter.setStretchFactor(0, 1)  # Data Selection
+        # left_splitter.setStretchFactor(1, 0)  # Model Information
+        # left_splitter.setStretchFactor(2, 0)  # Model Comparison
+        # left_splitter.setStretchFactor(3, 1)  # Detection Settings
+        # left_splitter.setStretchFactor(4, 2)  # Detection Results
+        # left_splitter.setStretchFactor(5, 0)  # Export buttons
+        #
+        # # Set collapsible behavior for all sections
+        # for i in range(left_splitter.count()):
+        #     left_splitter.setCollapsible(i, False)
+        #
+        # # ========== RIGHT PANEL: Plots ==========
+        # right_panel = QWidget()
+        # right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # right_layout = QVBoxLayout(right_panel)
+        # right_layout.setContentsMargins(0, 0, 0, 0)
+        # right_layout.setSpacing(12)
+        #
+        # # Status label
+        # self.status_label = QLabel("Loading model...")
+        # self.status_label.setStyleSheet(
+        #     "color: #0F172A; font-weight: 500; padding: 8px; "
+        #     "background: #FEF3C7; border-radius: 6px;"
+        # )
+        # self.status_label.setAlignment(Qt.AlignCenter)
+        # right_layout.addWidget(self.status_label)
+        #
+        # # Matplotlib figure with dynamic DPI based on device pixel ratio
+        # # Get device pixel ratio for proper scaling across different screen sizes
+        # pixel_ratio = QApplication.instance().devicePixelRatio() if QApplication.instance() else 1.0
+        # dpi = int(100 * pixel_ratio)
+        # self.figure = Figure(figsize=(12, 10), dpi=dpi)
+        # self.figure.patch.set_facecolor("#FFFFFF")
+        # self.canvas = FigureCanvas(self.figure)
+        # self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        #
+        # self.toolbar = NavigationToolbar(self.canvas, self)
+        # self.toolbar.setStyleSheet("background: #F9FAFB; border: none; padding: 4px;")
+        #
+        # right_layout.addWidget(self.toolbar)
+        # right_layout.addWidget(self.canvas)
+        #
+        # # Add panels to splitter
+        # self.main_splitter.addWidget(left_panel)
+        # self.main_splitter.addWidget(right_panel)
+        #
+        # # Set initial splitter sizes (25% left, 75% right)
+        # # Using proportional sizes that adapt to window size
+        # self.main_splitter.setStretchFactor(0, 1)  # Left panel
+        # self.main_splitter.setStretchFactor(1, 3)  # Right panel gets more space
+        #
+        # # Set collapsible behavior
+        # self.main_splitter.setCollapsible(0, False)
+        # self.main_splitter.setCollapsible(1, False)
+        #
+        # # Add splitter to main layout
+        # main_layout.addWidget(self.main_splitter)
+        #
+        # # Apply styles
+        # self.setStyleSheet(
+        #     """
+        #     QMainWindow#anomaly-detector-window {
+        #         background: #FFFFFF;
+        #     }
+        #     QWidget {
+        #         background: #FFFFFF;
+        #         color: #0F172A;
+        #     }
+        #     QGroupBox {
+        #         font-weight: 600;
+        #         border: 2px solid #FCA5A5;
+        #         border-radius: 8px;
+        #         margin-top: 12px;
+        #         padding-top: 8px;
+        #     }
+        #     QGroupBox::title {
+        #         subcontrol-origin: margin;
+        #         left: 10px;
+        #         padding: 0 5px;
+        #     }
+        #     QListWidget {
+        #         border: 1px solid #D1D5DB;
+        #         border-radius: 6px;
+        #         padding: 4px;
+        #         background: #F9FAFB;
+        #     }
+        #     QListWidget::item:selected {
+        #         background: #FEE2E2;
+        #         color: #991B1B;
+        #     }
+        #     QListWidget::item:hover {
+        #         background: #FEF2F2;
+        #     }
+        #     QTableWidget {
+        #         background: #F9FAFB;
+        #         border: 1px solid #E5E7EB;
+        #         border-radius: 4px;
+        #     }
+        #     QComboBox {
+        #         border: 1px solid #D1D5DB;
+        #         border-radius: 4px;
+        #         padding: 4px 8px;
+        #         background: #F9FAFB;
+        #         min-height: 24px;
+        #     }
+        #     QComboBox:hover {
+        #         border-color: #DC2626;
+        #     }
+        #     QComboBox::drop-down {
+        #         border: none;
+        #         padding-right: 8px;
+        #     }
+        #     QCheckBox {
+        #         spacing: 8px;
+        #     }
+        #     QCheckBox::indicator {
+        #         width: 18px;
+        #         height: 18px;
+        #         border: 2px solid #D1D5DB;
+        #         border-radius: 4px;
+        #         background: #FFFFFF;
+        #     }
+        #     QCheckBox::indicator:checked {
+        #         background: #DC2626;
+        #         border-color: #DC2626;
+        #     }
+        #     QCheckBox::indicator:hover {
+        #         border-color: #DC2626;
+        #     }
+        #     """
+        #     + self.BUTTON_STYLES
+        # )
 
     def _load_data(self) -> None:
         """Load data from the file."""
@@ -1427,38 +1427,38 @@ class AnomalyDetectorWindow(QMainWindow):
                     f"{self._model.input_dim} columns"
                 )
 
-            # Scale data
-            scaled_data = self._scaler.transform(numeric_df.values)
+            # # Scale data
+            # scaled_data = self._scaler.transform(numeric_df.values)
 
-            # Get predictions (reconstructions) from the model
-            reconstructed_data, _ = self._model.forward(scaled_data)
+            # # Get predictions (reconstructions) from the model
+            # reconstructed_data, _ = self._model.forward(scaled_data)
 
-            # Inverse transform to get predictions in original scale
-            predictions = self._scaler.inverse_transform(reconstructed_data)
+            # # Inverse transform to get predictions in original scale
+            # predictions = self._scaler.inverse_transform(reconstructed_data)
 
-            # Create DataFrames for predictions and actual data
-            predictions_df = pd.DataFrame(
-                predictions,
-                columns=numeric_df.columns,
-                index=numeric_df.index
-            )
+            # # Create DataFrames for predictions and actual data
+            # predictions_df = pd.DataFrame(
+            #     predictions,
+            #     columns=numeric_df.columns,
+            #     index=numeric_df.index
+            # )
 
-            # Determine file name
-            file_name = self._file_path.name if self._file_path else "New Dataset"
+            # # Determine file name
+            # file_name = self._file_path.name if self._file_path else "New Dataset"
 
-            # Open the prediction plotter window
-            anomaly_prediction_plotter.run(
-                actual_data=numeric_df,
-                predictions=predictions_df,
-                file_name=file_name
-            )
+            # # Open the prediction plotter window
+            # anomaly_prediction_plotter.run(
+            #     actual_data=numeric_df,
+            #     predictions=predictions_df,
+            #     file_name=file_name
+            # )
 
-            # Update status
-            self.status_label.setText("✓ Prediction plotter opened")
-            self.status_label.setStyleSheet(
-                "color: #0F172A; font-weight: 500; padding: 8px; "
-                "background: #D1FAE5; border-radius: 6px;"
-            )
+            # # Update status
+            # self.status_label.setText("✓ Prediction plotter opened")
+            # self.status_label.setStyleSheet(
+            #     "color: #0F172A; font-weight: 500; padding: 8px; "
+            #     "background: #D1FAE5; border-radius: 6px;"
+            # )
 
         except Exception as exc:
             QMessageBox.critical(
@@ -1509,97 +1509,784 @@ def run(file_path: Path | str, parent: Optional[QWidget] = None) -> None:
     _open_windows.append(window)
 
 
-
 def run_standalone(parent: Optional[QWidget] = None) -> None:
     """Launch the anomaly detector window in standalone mode without a file.
 
     This allows users to:
     1. Select pump series and test type from dropdowns
+    2. Load a data file (.sc, .asc, or parquet) via File menu
+    3. Automatically convert .sc/.asc files to parquet
+    4. Analyze the data with trained models for the selected pump/test type
+
+    Args:
+        parent: Optional parent widget
     """
+    try:
+        window = AnomalyDetectorWindow(file_path=None)
+    except Exception as exc:
+        QMessageBox.critical(None, "Anomaly Detector", f"Unable to open detector: {exc}")
+        return
+
+    window.show()
+    window.raise_()
+    window.activateWindow()
+    _open_windows.append(window)
 
 
+# Enhanced Anomaly Detector Widget Implementation
+# Add this to the end of your anomaly_detector.py file, replacing the existing create_anomaly_widget
+
+# Enhanced Anomaly Detector Widget Implementation
+# Add this to the end of your anomaly_detector.py file, replacing the existing create_anomaly_widget
 
 def create_anomaly_widget(file_path: Optional[Path] = None) -> Optional[QWidget]:
-    """Create an anomaly detector widget that can be embedded in a tab.
+    """Create an embeddable anomaly detector widget with full functionality.
+
+    This creates a two-panel layout similar to the enhanced plotter:
+    - Left panel: Controls and settings
+    - Right panel: Plots and visualizations
 
     Args:
         file_path: Optional path to the data file
 
     Returns:
-        A standalone widget containing anomaly detector interface
+        QWidget containing the anomaly detector interface
     """
     try:
         # Create main widget
         widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        main_layout = QHBoxLayout(widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Create splitter for resizable panels
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setHandleWidth(8)
+        splitter.setStyleSheet("""
+            QSplitter::handle {
+                background: #E5E7EB;
+            }
+            QSplitter::handle:hover {
+                background: #DC2626;
+            }
+        """)
+
+        # ========== LEFT PANEL: Controls ==========
+        left_panel = QWidget()
+        left_panel.setMaximumWidth(400)
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(12, 12, 12, 12)
+        left_layout.setSpacing(12)
 
         # Title
         title = QLabel("Anomaly Detector")
         title.setStyleSheet("font-size: 18px; font-weight: bold; color: #DC2626;")
-        layout.addWidget(title)
+        left_layout.addWidget(title)
 
         # File info
         if file_path:
             file_label = QLabel(f"File: {file_path.name}")
-            file_label.setStyleSheet("font-size: 12px; color: #6B7280;")
-            layout.addWidget(file_label)
         else:
-            file_label = QLabel("Standalone Mode - No file loaded")
-            file_label.setStyleSheet("font-size: 12px; color: #6B7280;")
-            layout.addWidget(file_label)
+            file_label = QLabel("No file loaded")
+        file_label.setStyleSheet("font-size: 11px; color: #6B7280; padding: 4px;")
+        left_layout.addWidget(file_label)
 
-        # Info text
-        from PyQt5.QtWidgets import QTextEdit
-        info_text = QTextEdit()
-        info_text.setReadOnly(True)
-        info_text.setPlainText(
-            "Anomaly Detector Tool\n\n"
-            "This tool detects anomalies in your data using trained models.\n\n"
-            "Features:\n"
-            "- Load trained models from the model registry\n"
-            "- Analyze data for anomalies\n"
-            "- Visualize anomaly scores\n"
-            "- Export results\n\n"
-            "Click 'Open Full Detector' to launch the complete interface."
-        )
-        info_text.setMaximumHeight(200)
-        layout.addWidget(info_text)
+        # Data/Model selection group
+        selection_group = QGroupBox("Configuration")
+        selection_layout = QVBoxLayout(selection_group)
 
-        # Buttons
-        button_layout = QVBoxLayout()
+        # Pump series
+        pump_layout = QHBoxLayout()
+        pump_layout.addWidget(QLabel("Pump Series:"))
+        pump_combo = QComboBox()
+        pump_combo.setMinimumWidth(150)
+        pump_layout.addWidget(pump_combo)
+        selection_layout.addLayout(pump_layout)
 
-        open_detector_btn = QPushButton("Open Full Anomaly Detector")
-        open_detector_btn.setStyleSheet("""
+        # Test type
+        test_layout = QHBoxLayout()
+        test_layout.addWidget(QLabel("Test Type:"))
+        test_combo = QComboBox()
+        test_combo.setMinimumWidth(150)
+        test_layout.addWidget(test_combo)
+        selection_layout.addLayout(test_layout)
+
+        # Model version
+        version_layout = QHBoxLayout()
+        version_layout.addWidget(QLabel("Model Version:"))
+        version_combo = QComboBox()
+        version_combo.setMinimumWidth(150)
+        version_layout.addWidget(version_combo)
+        selection_layout.addLayout(version_layout)
+
+        left_layout.addWidget(selection_group)
+
+        # Detection settings
+        settings_group = QGroupBox("Detection Settings")
+        settings_layout = QVBoxLayout(settings_group)
+
+        # Threshold method
+        settings_layout.addWidget(QLabel("Threshold Method:"))
+        threshold_list = QListWidget()
+        threshold_list.addItems([
+            "Mean + 2×Std",
+            "Mean + 3×Std",
+            "95th Percentile",
+            "99th Percentile"
+        ])
+        threshold_list.setCurrentRow(1)
+        threshold_list.setMaximumHeight(100)
+        settings_layout.addWidget(threshold_list)
+
+        # Detect button
+        detect_btn = QPushButton("Detect Anomalies")
+        detect_btn.setStyleSheet("""
             QPushButton {
                 background-color: #DC2626;
                 color: white;
                 padding: 10px;
-                border-radius: 4px;
+                border-radius: 6px;
                 font-weight: bold;
             }
             QPushButton:hover {
                 background-color: #B91C1C;
             }
         """)
+        settings_layout.addWidget(detect_btn)
 
-        def open_full_detector():
-            """Open the full anomaly detector window."""
+        left_layout.addWidget(settings_group)
+
+        # Results group
+        results_group = QGroupBox("Detection Results")
+        results_layout = QVBoxLayout(results_group)
+
+        results_table = QTableWidget()
+        results_table.setRowCount(4)
+        results_table.setColumnCount(2)
+        results_table.setHorizontalHeaderLabels(["Metric", "Value"])
+        results_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        results_table.verticalHeader().setVisible(False)
+        results_table.setMaximumHeight(150)
+        results_table.setEditTriggers(QTableWidget.NoEditTriggers)
+
+        # Initialize with placeholder data
+        metrics = [
+            ("Total Points", "-"),
+            ("Anomalies Found", "-"),
+            ("Anomaly Rate", "-"),
+            ("Threshold", "-")
+        ]
+        for row, (metric, value) in enumerate(metrics):
+            results_table.setItem(row, 0, QTableWidgetItem(metric))
+            results_table.setItem(row, 1, QTableWidgetItem(value))
+
+        results_layout.addWidget(results_table)
+        left_layout.addWidget(results_group)
+
+        # Action buttons
+        action_layout = QVBoxLayout()
+
+        # Load file button
+        load_file_btn = QPushButton("📁 Load Data File")
+        load_file_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #059669;
+                color: white;
+                padding: 8px;
+                border-radius: 4px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #047857;
+            }
+        """)
+        action_layout.addWidget(load_file_btn)
+
+        export_anomalies_btn = QPushButton("Export Anomalies")
+        export_anomalies_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6B7280;
+                color: white;
+                padding: 8px;
+                border-radius: 4px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #4B5563;
+            }
+        """)
+        action_layout.addWidget(export_anomalies_btn)
+
+        export_plot_btn = QPushButton("Export Plot")
+        export_plot_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6B7280;
+                color: white;
+                padding: 8px;
+                border-radius: 4px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #4B5563;
+            }
+        """)
+        action_layout.addWidget(export_plot_btn)
+
+        open_full_btn = QPushButton("Open Full Detector")
+        open_full_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1D4ED8;
+                color: white;
+                padding: 8px;
+                border-radius: 4px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #1E40AF;
+            }
+        """)
+        action_layout.addWidget(open_full_btn)
+
+        left_layout.addLayout(action_layout)
+        left_layout.addStretch()
+
+        # ========== RIGHT PANEL: Plot Area ==========
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(12, 12, 12, 12)
+        right_layout.setSpacing(8)
+
+        # Status label
+        status_label = QLabel("Load data and detect anomalies to view results")
+        status_label.setStyleSheet("""
+            QLabel {
+                color: #0F172A;
+                font-weight: 500;
+                padding: 8px;
+                background: #FEF3C7;
+                border-radius: 6px;
+            }
+        """)
+        status_label.setAlignment(Qt.AlignCenter)
+        right_layout.addWidget(status_label)
+
+        # Matplotlib figure
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+        from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+
+        figure = Figure(figsize=(10, 8), dpi=100)
+        canvas = FigureCanvas(figure)
+        toolbar = NavigationToolbar(canvas, widget)
+        toolbar.setStyleSheet("background: #F9FAFB; border: none; padding: 4px;")
+
+        right_layout.addWidget(toolbar)
+        right_layout.addWidget(canvas)
+
+        # Add panels to splitter
+        splitter.addWidget(left_panel)
+        splitter.addWidget(right_panel)
+
+        # Set stretch factors (30-70 split)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 7)
+
+        main_layout.addWidget(splitter)
+
+        # Store references to prevent garbage collection
+        widget._file_path = file_path
+        widget._dataframe = None
+        widget._model = None
+        widget._scaler = None
+        widget._reconstruction_errors = None
+        widget._anomaly_indices = None
+        widget._threshold = 0.0
+        widget._figure = figure
+        widget._canvas = canvas
+        widget._status_label = status_label
+        widget._results_table = results_table
+        widget._pump_combo = pump_combo
+        widget._test_combo = test_combo
+        widget._version_combo = version_combo
+        widget._threshold_list = threshold_list
+        widget._detect_btn = detect_btn
+        widget._export_anomalies_btn = export_anomalies_btn
+        widget._export_plot_btn = export_plot_btn
+        widget._file_label = file_label
+
+        # Helper functions
+        def load_data_file():
+            """Open file dialog and load data."""
+            from PyQt5.QtWidgets import QFileDialog, QMessageBox
+
+            file_path, _ = QFileDialog.getOpenFileName(
+                widget,
+                "Load Data File",
+                "",
+                "All Supported Files (*.sc *.asc *.parquet *.csv *.tdms);;SC Files (*.sc);;ASC Files (*.asc);;Parquet Files (*.parquet);;CSV Files (*.csv);;TDMS Files (*.tdms);;All Files (*.*)"
+            )
+
+            if not file_path:
+                return
+
+            file_path = Path(file_path)
+
+            # Check if pump series and test type are selected
+            if not pump_combo.currentText() or pump_combo.currentText() == "Select":
+                QMessageBox.warning(
+                    widget,
+                    "Selection Required",
+                    "Please select Pump Series and Test Type before loading a file."
+                )
+                return
+
             try:
-                if file_path:
-                    run(file_path)
-                else:
-                    run_standalone()
+                # Convert .sc or .asc files to parquet if needed
+                if file_path.suffix.lower() in {'.sc', '.asc'}:
+                    status_label.setText("Converting file to Parquet format...")
+
+                    # Get pump series and test type
+                    pump_series = pump_combo.currentText()
+                    test_type = test_combo.currentText()
+
+                    # Create target directory
+                    from industrial_data_system.core.config import get_config
+                    config = get_config()
+                    newdatasets_dir = config.files_base_path / pump_series / "tests" / "newdatasets"
+                    newdatasets_dir.mkdir(parents=True, exist_ok=True)
+
+                    # Convert to parquet
+                    parquet_filename = file_path.stem + ".parquet"
+                    target_parquet_path = newdatasets_dir / parquet_filename
+
+                    from industrial_data_system.utils.asc_utils import convert_asc_to_parquet
+                    parquet_path = convert_asc_to_parquet(file_path, parquet_path=target_parquet_path,
+                                                          preserve_asc=True)
+
+                    if parquet_path is None:
+                        QMessageBox.critical(
+                            widget,
+                            "Conversion Failed",
+                            "The file could not be converted to Parquet format."
+                        )
+                        return
+                    file_path = parquet_path
+
+                # Load the data
+                df = AnomalyDetectorWindow._read_file(file_path)
+                widget._dataframe = df
+                widget._file_path = file_path
+
+                # Update file label
+                file_label.setText(f"File: {file_path.name}")
+
+                # Update status
+                status_label.setText(f"✓ Data loaded: {df.shape[0]} rows, {df.shape[1]} columns")
+                status_label.setStyleSheet("""
+                    QLabel {
+                        color: #0F172A;
+                        font-weight: 500;
+                        padding: 8px;
+                        background: #D1FAE5;
+                        border-radius: 6px;
+                    }
+                """)
+
+                # Try to load model if pump/test selected
+                if pump_combo.currentText() and test_combo.currentText():
+                    load_model()
+
             except Exception as e:
-                from PyQt5.QtWidgets import QMessageBox
-                QMessageBox.critical(widget, "Error", f"Failed to open detector: {e}")
+                QMessageBox.critical(
+                    widget,
+                    "Load Failed",
+                    f"Failed to load file:\n{e}"
+                )
+                status_label.setText(f"⚠ Error: {e}")
 
-        open_detector_btn.clicked.connect(open_full_detector)
-        button_layout.addWidget(open_detector_btn)
+        def load_model():
+            """Load the model for current selection."""
+            try:
+                pump_series = pump_combo.currentText()
+                test_type = test_combo.currentText()
+                version = version_combo.currentData()
 
-        layout.addLayout(button_layout)
-        layout.addStretch()
+                if not pump_series or not test_type or version is None:
+                    return
+
+                # Load model using database
+                database = DatabaseManager()
+                file_type = "parquet" if widget._file_path and widget._file_path.suffix == ".parquet" else "csv"
+
+                versions = database.get_all_model_versions(pump_series, test_type, file_type)
+                if not versions:
+                    status_label.setText("⚠ No models available for this selection")
+                    return
+
+                # Get model paths
+                record = next((r for r in versions if r.version == version), None)
+                if not record:
+                    return
+
+                import joblib
+
+                # Load model
+                model_state = joblib.load(record.model_path)
+                widget._model = create_model_from_state(model_state)
+
+                # Load scaler
+                if record.scaler_path:
+                    widget._scaler = joblib.load(record.scaler_path)
+
+                status_label.setText(f"✓ Model loaded: v{version}")
+                status_label.setStyleSheet("""
+                    QLabel {
+                        color: #0F172A;
+                        font-weight: 500;
+                        padding: 8px;
+                        background: #D1FAE5;
+                        border-radius: 6px;
+                    }
+                """)
+
+            except Exception as e:
+                status_label.setText(f"⚠ Model load failed: {e}")
+
+        def create_model_from_state(state: dict):
+            """Recreate model from saved state."""
+
+            class SimpleAutoencoder:
+                def __init__(self, state_dict):
+                    import numpy as np
+                    self.W1 = np.array(state_dict["W1"], dtype=np.float32)
+                    self.b1 = np.array(state_dict["b1"], dtype=np.float32)
+                    self.W2 = np.array(state_dict["W2"], dtype=np.float32)
+                    self.b2 = np.array(state_dict["b2"], dtype=np.float32)
+                    self.input_dim = int(state_dict.get("input_dim", self.W1.shape[0]))
+                    self.hidden_dim = int(state_dict.get("hidden_dim", self.W1.shape[1]))
+
+                def forward(self, features):
+                    import numpy as np
+                    hidden = features @ self.W1 + self.b1
+                    hidden = np.maximum(0.0, hidden)
+                    reconstructed = hidden @ self.W2 + self.b2
+                    return reconstructed, hidden
+
+                def reconstruction_error(self, data):
+                    import numpy as np
+                    reconstructed, _ = self.forward(data)
+                    return np.mean((reconstructed - data) ** 2, axis=1)
+
+            return SimpleAutoencoder(state)
+
+        def detect_anomalies():
+            """Run anomaly detection."""
+            if widget._model is None or widget._scaler is None:
+                QMessageBox.warning(widget, "Detection", "No model loaded")
+                return
+
+            if widget._dataframe is None:
+                QMessageBox.warning(widget, "Detection", "No data loaded")
+                return
+
+            try:
+                import numpy as np
+
+                # Prepare data
+                df = widget._dataframe.copy()
+                numeric_df = df.select_dtypes(include=[np.number])
+                numeric_df = numeric_df.dropna(axis=1, how="all")
+                numeric_df = numeric_df.fillna(0.0)
+                numeric_df = numeric_df.replace([np.inf, -np.inf], 0.0)
+
+                # Scale and detect
+                scaled_data = widget._scaler.transform(numeric_df.values)
+                widget._reconstruction_errors = widget._model.reconstruction_error(scaled_data)
+
+                # Calculate threshold
+                method = threshold_list.currentItem().text()
+                mean_error = np.mean(widget._reconstruction_errors)
+                std_error = np.std(widget._reconstruction_errors)
+
+                if method == "Mean + 2×Std":
+                    widget._threshold = mean_error + 2 * std_error
+                elif method == "Mean + 3×Std":
+                    widget._threshold = mean_error + 3 * std_error
+                elif method == "95th Percentile":
+                    widget._threshold = np.percentile(widget._reconstruction_errors, 95)
+                else:
+                    widget._threshold = np.percentile(widget._reconstruction_errors, 99)
+
+                # Find anomalies
+                widget._anomaly_indices = np.where(widget._reconstruction_errors > widget._threshold)[0]
+
+                # Update results table
+                total = len(widget._reconstruction_errors)
+                anomalies = len(widget._anomaly_indices)
+                rate = (anomalies / total * 100) if total > 0 else 0
+
+                results_table.setItem(0, 1, QTableWidgetItem(f"{total:,}"))
+                results_table.setItem(1, 1, QTableWidgetItem(f"{anomalies:,}"))
+                results_table.setItem(2, 1, QTableWidgetItem(f"{rate:.2f}%"))
+                results_table.setItem(3, 1, QTableWidgetItem(f"{widget._threshold:.6f}"))
+
+                # Plot results
+                plot_results()
+
+                status_label.setText(f"✓ Detection complete: {anomalies} anomalies found")
+                status_label.setStyleSheet("""
+                    QLabel {
+                        color: #0F172A;
+                        font-weight: 500;
+                        padding: 8px;
+                        background: #D1FAE5;
+                        border-radius: 6px;
+                    }
+                """)
+
+            except Exception as e:
+                QMessageBox.critical(widget, "Detection Failed", f"Error: {e}")
+                import traceback
+                traceback.print_exc()
+
+        def plot_results():
+            """Plot anomaly detection results."""
+            if widget._reconstruction_errors is None:
+                return
+
+            import numpy as np
+
+            figure.clear()
+
+            indices = np.arange(len(widget._reconstruction_errors))
+
+            # Top plot: Reconstruction error
+            ax1 = figure.add_subplot(211)
+            ax1.plot(indices, widget._reconstruction_errors, 'b-', linewidth=1, alpha=0.7, label='Error')
+
+            if widget._anomaly_indices is not None and len(widget._anomaly_indices) > 0:
+                ax1.scatter(
+                    widget._anomaly_indices,
+                    widget._reconstruction_errors[widget._anomaly_indices],
+                    c='red', s=50, marker='o', label='Anomalies', zorder=5
+                )
+
+            ax1.axhline(y=widget._threshold, color='r', linestyle='--', linewidth=2,
+                        label=f'Threshold = {widget._threshold:.4f}')
+            ax1.set_xlabel('Data Point Index', fontweight='bold')
+            ax1.set_ylabel('Reconstruction Error', fontweight='bold')
+            ax1.set_title('Anomaly Detection Results', fontweight='bold')
+            ax1.legend(loc='upper right')
+            ax1.grid(True, alpha=0.3)
+
+            # Bottom plot: Histogram
+            ax2 = figure.add_subplot(212)
+            ax2.hist(widget._reconstruction_errors, bins=50, color='skyblue',
+                     edgecolor='black', alpha=0.7, label='Normal')
+
+            if widget._anomaly_indices is not None and len(widget._anomaly_indices) > 0:
+                ax2.hist(widget._reconstruction_errors[widget._anomaly_indices], bins=50,
+                         color='red', edgecolor='darkred', alpha=0.7, label='Anomalies')
+
+            ax2.axvline(x=widget._threshold, color='r', linestyle='--', linewidth=2,
+                        label=f'Threshold = {widget._threshold:.4f}')
+            ax2.set_xlabel('Reconstruction Error', fontweight='bold')
+            ax2.set_ylabel('Frequency', fontweight='bold')
+            ax2.set_title('Error Distribution', fontweight='bold')
+            ax2.legend(loc='upper right')
+            ax2.grid(True, alpha=0.3, axis='y')
+
+            figure.tight_layout()
+            canvas.draw()
+
+        def export_anomalies():
+            """Export anomalies to CSV."""
+            if widget._anomaly_indices is None or len(widget._anomaly_indices) == 0:
+                QMessageBox.warning(widget, "Export", "No anomalies to export")
+                return
+
+            from PyQt5.QtWidgets import QFileDialog
+            import pandas as pd
+
+            file_path, _ = QFileDialog.getSaveFileName(
+                widget, "Export Anomalies", "anomalies.csv", "CSV Files (*.csv)"
+            )
+
+            if file_path:
+                try:
+                    anomaly_df = widget._dataframe.iloc[widget._anomaly_indices].copy()
+                    anomaly_df['reconstruction_error'] = widget._reconstruction_errors[widget._anomaly_indices]
+                    anomaly_df.to_csv(file_path, index=False)
+                    QMessageBox.information(widget, "Success", f"Exported {len(widget._anomaly_indices)} anomalies")
+                except Exception as e:
+                    QMessageBox.critical(widget, "Export Failed", str(e))
+
+        def export_plot():
+            """Export plot to file."""
+            from PyQt5.QtWidgets import QFileDialog
+
+            file_path, _ = QFileDialog.getSaveFileName(
+                widget, "Export Plot", "anomaly_plot.png", "PNG (*.png);;PDF (*.pdf)"
+            )
+
+            if file_path:
+                try:
+                    figure.savefig(file_path, dpi=300, bbox_inches='tight')
+                    QMessageBox.information(widget, "Success", f"Plot saved to:\n{file_path}")
+                except Exception as e:
+                    QMessageBox.critical(widget, "Export Failed", str(e))
+
+        # Populate pump series on initialization
+        def populate_pump_series():
+            """Load pump series from database."""
+            try:
+                database = DatabaseManager()
+                records = database.list_pump_series()
+                pump_combo.clear()
+                pump_combo.addItem("Select Pump Series", None)
+                for record in records:
+                    pump_combo.addItem(record.name, record.name)
+            except:
+                pass
+
+        def on_pump_changed():
+            """Handle pump series selection."""
+            pump = pump_combo.currentData()
+            if pump:
+                try:
+                    database = DatabaseManager()
+                    records = database.list_test_types(pump_series=pump)
+                    test_combo.clear()
+                    test_combo.addItem("Select Test Type", None)
+                    for record in records:
+                        test_combo.addItem(record.name, record.name)
+                except:
+                    pass
+
+        def on_test_changed():
+            """Handle test type selection."""
+            pump = pump_combo.currentData()
+            test = test_combo.currentData()
+            if pump and test:
+                try:
+                    database = DatabaseManager()
+                    file_type = "parquet"
+                    versions = database.get_all_model_versions(pump, test, file_type)
+                    version_combo.clear()
+                    for record in versions:
+                        text = f"v{record.version} ({record.trained_at[:10]})"
+                        version_combo.addItem(text, record.version)
+                except:
+                    pass
+
+        # Connect signals
+        load_file_btn.clicked.connect(load_data_file)
+        detect_btn.clicked.connect(detect_anomalies)
+        export_anomalies_btn.clicked.connect(export_anomalies)
+        export_plot_btn.clicked.connect(export_plot)
+        pump_combo.currentIndexChanged.connect(on_pump_changed)
+        test_combo.currentIndexChanged.connect(on_test_changed)
+        version_combo.currentIndexChanged.connect(load_model)
+
+        # Populate pump series
+        populate_pump_series()
+
+        # Load data if file path provided
+        if file_path and file_path.exists():
+            try:
+                # Load data
+                df = AnomalyDetectorWindow._read_file(file_path)
+                widget._dataframe = df
+
+                # Try to extract pump/test info from path
+                try:
+                    file_parts = file_path.parts
+                    if "tests" in file_parts:
+                        tests_index = file_parts.index("tests")
+                        test_type = file_parts[tests_index + 1]
+                        pump_series = file_parts[tests_index - 1] if tests_index > 0 else "General"
+
+                        # Set selections
+                        pump_idx = pump_combo.findData(pump_series)
+                        if pump_idx >= 0:
+                            pump_combo.setCurrentIndex(pump_idx)
+                            on_pump_changed()
+
+                            test_idx = test_combo.findData(test_type)
+                            if test_idx >= 0:
+                                test_combo.setCurrentIndex(test_idx)
+                                on_test_changed()
+
+                        status_label.setText(f"✓ Data loaded: {df.shape[0]} rows, {df.shape[1]} columns")
+                        status_label.setStyleSheet("""
+                            QLabel {
+                                color: #0F172A;
+                                font-weight: 500;
+                                padding: 8px;
+                                background: #D1FAE5;
+                                border-radius: 6px;
+                            }
+                        """)
+
+                        # Try to load model
+                        if version_combo.count() > 0:
+                            load_model()
+
+                except:
+                    pass
+
+            except Exception as e:
+                status_label.setText(f"⚠ Error loading data: {e}")
+
+        # Connect button to open full detector
+        def open_full_detector():
+            if widget._file_path:
+                run(widget._file_path)
+            else:
+                run_standalone()
+
+        open_full_btn.clicked.connect(open_full_detector)
+
+        # Apply global styling
+        widget.setStyleSheet("""
+            QWidget {
+                background: #FFFFFF;
+                color: #0F172A;
+            }
+            QGroupBox {
+                font-weight: 600;
+                border: 2px solid #FCA5A5;
+                border-radius: 8px;
+                margin-top: 12px;
+                padding-top: 8px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+            QListWidget {
+                border: 1px solid #D1D5DB;
+                border-radius: 6px;
+                padding: 4px;
+                background: #F9FAFB;
+            }
+            QListWidget::item:selected {
+                background: #FEE2E2;
+                color: #991B1B;
+            }
+            QTableWidget {
+                background: #F9FAFB;
+                border: 1px solid #E5E7EB;
+                border-radius: 4px;
+            }
+            QComboBox {
+                border: 1px solid #D1D5DB;
+                border-radius: 4px;
+                padding: 4px 8px;
+                background: #F9FAFB;
+            }
+        """)
 
         return widget
 

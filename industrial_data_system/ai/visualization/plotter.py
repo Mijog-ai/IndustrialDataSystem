@@ -1,9 +1,14 @@
-"""Lightweight plotter window launched from the reader application."""
+"""Enhanced plotter with scrollable report generation and interactive toolbar."""
 
 from __future__ import annotations
 
+import datetime
+import io
+import json
+import os
+import tempfile
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,19 +16,27 @@ import pandas as pd
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor, QPalette
+from matplotlib.patches import Rectangle
+from matplotlib.lines import Line2D
+from PyQt5.QtCore import Qt, QRectF, pyqtSignal, QSize
+from PyQt5.QtGui import QFont, QColor, QPalette, QIcon, QTextCursor
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QAction,
     QApplication,
     QCheckBox,
     QColorDialog,
     QComboBox,
+    QDateTimeEdit,
+    QDoubleSpinBox,
     QFileDialog,
+    QFormLayout,
+    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -33,11 +46,14 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSlider,
     QSpinBox,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QTextEdit,
     QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -51,164 +67,232 @@ from industrial_data_system.utils.asc_utils import (
 __all__ = ["run", "create_plotter_widget"]
 
 
-class PlotCard(QWidget):
-    """Individual plot card that can be edited and customized."""
+# ============================================================================
+# REPORT SECTION CLASSES
+# ============================================================================
 
-    def __init__(self, df: pd.DataFrame, plot_id: int, parent=None):
+class ReportSection(QWidget):
+    """Base class for all report sections with collapsible header."""
+
+    section_removed = pyqtSignal(object)
+
+    def __init__(self, title: str, parent=None):
         super().__init__(parent)
-        self.df = df
-        self.plot_id = plot_id
-        self.x_column = None
-        self.y_columns = []
-        self.plot_title = f"Plot {plot_id + 1}"
-        self.show_grid = True
-        self.line_colors = {}
-        self.line_styles = {}
-        self.line_widths = {}
+        self.title = title
+        self.is_collapsed = False
+        self._build_ui()
 
-        self.setup_ui()
-
-    def setup_ui(self):
-        """Initialize the plot card UI."""
+    def _build_ui(self):
+        """Build the section UI."""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(4)
+        layout.setContentsMargins(0, 0, 0, 12)
+        layout.setSpacing(0)
 
-        # Header with title and remove button
-        header_layout = QHBoxLayout()
-        self.title_label = QLabel(self.plot_title)
-        self.title_label.setStyleSheet("font-weight: bold; font-size: 12px; color: #1F2937;")
-        header_layout.addWidget(self.title_label)
+        # Header
+        header_widget = QWidget()
+        header_widget.setStyleSheet("""
+            QWidget {
+                background: #F3F4F6;
+                border: 1px solid #E5E7EB;
+                border-radius: 6px;
+                padding: 8px;
+            }
+        """)
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(8, 4, 8, 4)
+
+        # Collapse button
+        self.collapse_btn = QPushButton("▼")
+        self.collapse_btn.setFixedSize(24, 24)
+        self.collapse_btn.clicked.connect(self._toggle_collapse)
+        self.collapse_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                font-weight: bold;
+            }
+        """)
+        header_layout.addWidget(self.collapse_btn)
+
+        # Title
+        title_label = QLabel(self.title)
+        title_label.setStyleSheet("font-weight: 600; font-size: 13px; color: #1F2937;")
+        header_layout.addWidget(title_label)
+
         header_layout.addStretch()
 
+        # Remove button
         remove_btn = QPushButton("✕")
         remove_btn.setFixedSize(24, 24)
+        remove_btn.clicked.connect(lambda: self.section_removed.emit(self))
         remove_btn.setStyleSheet("""
             QPushButton {
-                background-color: #EF4444;
-                color: white;
+                background: transparent;
                 border: none;
-                border-radius: 12px;
+                color: #DC2626;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: #DC2626;
+                background: #FEE2E2;
+                border-radius: 4px;
             }
         """)
-        remove_btn.clicked.connect(lambda: self.parent().remove_plot_card(self))
         header_layout.addWidget(remove_btn)
 
-        layout.addLayout(header_layout)
+        layout.addWidget(header_widget)
 
-        # Matplotlib figure
-        self.figure = Figure(figsize=(8, 4), dpi=100)
-        self.figure.patch.set_facecolor("#FFFFFF")
-        self.canvas = FigureCanvas(self.figure)
-        self.canvas.setFixedHeight(350)
-        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # Content container
+        self.content_widget = QWidget()
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(12, 12, 12, 12)
+        layout.addWidget(self.content_widget)
 
-        # Toolbar
-        self.toolbar = NavigationToolbar(self.canvas, self)
-        self.toolbar.setStyleSheet("background: #F9FAFB; border: none; padding: 2px;")
+    def _toggle_collapse(self):
+        """Toggle section collapse state."""
+        self.is_collapsed = not self.is_collapsed
+        self.content_widget.setVisible(not self.is_collapsed)
+        self.collapse_btn.setText("▶" if self.is_collapsed else "▼")
 
-        layout.addWidget(self.toolbar)
-        layout.addWidget(self.canvas)
+    def get_content_layout(self):
+        """Get the layout where content should be added."""
+        return self.content_layout
 
-        # Set background
-        self.setStyleSheet("""
-            PlotCard {
+
+class ReportHeader(ReportSection):
+    """Report header with title and metadata."""
+
+    def __init__(self, file_name: str, parent=None):
+        super().__init__("Report Header", parent)
+        self.file_name = file_name
+        self._build_content()
+
+    def _build_content(self):
+        """Build header content."""
+        layout = self.get_content_layout()
+
+        # Title
+        self.title_edit = QLineEdit("Data Analysis Report")
+        self.title_edit.setStyleSheet("""
+            QLineEdit {
+                font-size: 20px;
+                font-weight: bold;
+                border: 1px solid #E5E7EB;
+                border-radius: 4px;
+                padding: 8px;
                 background: white;
-                border: 2px solid #E5E7EB;
-                border-radius: 8px;
             }
         """)
+        layout.addWidget(self.title_edit)
 
-    def update_plot(self, x_column=None, y_columns=None, title=None, show_grid=None):
-        """Update the plot with new data."""
-        if x_column is not None:
-            self.x_column = x_column
-        if y_columns is not None:
-            self.y_columns = y_columns
-        if title is not None:
-            self.plot_title = title
-            self.title_label.setText(title)
-        if show_grid is not None:
-            self.show_grid = show_grid
+        # Metadata
+        meta_widget = QWidget()
+        meta_layout = QFormLayout(meta_widget)
 
-        if not self.x_column or not self.y_columns:
-            return
+        self.file_label = QLabel(self.file_name)
+        self.date_label = QLabel(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        self.author_edit = QLineEdit("Analyst")
 
-        self.render_plot()
+        meta_layout.addRow("File:", self.file_label)
+        meta_layout.addRow("Generated:", self.date_label)
+        meta_layout.addRow("Author:", self.author_edit)
 
-    def render_plot(self):
-        """Render the plot on the canvas."""
-        self.figure.clear()
-        ax = self.figure.add_subplot(111)
-        ax.set_facecolor("#FFFFFF")
+        layout.addWidget(meta_widget)
 
-        try:
-            x_data = pd.to_numeric(self.df[self.x_column], errors="coerce")
-
-            # Professional color palette
-            professional_colors = [
-                "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
-                "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
-            ]
-
-            for i, column in enumerate(self.y_columns):
-                series = pd.to_numeric(self.df[column], errors="coerce")
-                valid = series.notna() & x_data.notna()
-
-                if not valid.any():
-                    continue
-
-                # Get custom styling or use defaults
-                color = self.line_colors.get(column, professional_colors[i % len(professional_colors)])
-                style = self.line_styles.get(column, '-')
-                width = self.line_widths.get(column, 2.0)
-
-                ax.plot(
-                    x_data[valid],
-                    series[valid],
-                    color=color,
-                    linestyle=style,
-                    linewidth=width,
-                    label=column,
-                    alpha=0.9,
-                )
-
-            ax.set_xlabel(self.x_column, fontsize=10, fontweight="bold")
-            ax.set_ylabel("Value", fontsize=10, fontweight="bold")
-            ax.set_title(self.plot_title, fontsize=11, fontweight="bold", pad=10)
-
-            if self.show_grid:
-                ax.grid(True, color="#E2E8F0", alpha=0.4, linestyle="--", linewidth=0.8)
-                ax.set_axisbelow(True)
-
-            if self.y_columns:
-                ax.legend(loc="best", fontsize=9, framealpha=0.95, edgecolor="#E5E7EB")
-
-            self.figure.tight_layout()
-            self.canvas.draw_idle()
-
-        except Exception as e:
-            print(f"Error rendering plot: {e}")
+    def get_data(self) -> Dict[str, str]:
+        """Get header data."""
+        return {
+            "title": self.title_edit.text(),
+            "file": self.file_label.text(),
+            "date": self.date_label.text(),
+            "author": self.author_edit.text()
+        }
 
 
-class StatisticsArea(QWidget):
-    """Widget displaying statistical summary of selected data columns."""
+class ReportText(ReportSection):
+    """Free-form text section."""
+
+    def __init__(self, title: str, initial_text: str = "", parent=None):
+        super().__init__(title, parent)
+        self._build_content(initial_text)
+
+    def _build_content(self, initial_text: str):
+        """Build text editor."""
+        layout = self.get_content_layout()
+
+        self.text_edit = QTextEdit()
+        self.text_edit.setPlainText(initial_text)
+        self.text_edit.setMinimumHeight(150)
+        self.text_edit.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #E5E7EB;
+                border-radius: 4px;
+                padding: 8px;
+                background: white;
+                font-size: 11px;
+            }
+        """)
+        layout.addWidget(self.text_edit)
+
+    def get_text(self) -> str:
+        """Get the text content."""
+        return self.text_edit.toPlainText()
+
+
+class ReportPlot(ReportSection):
+    """Plot section with matplotlib figure."""
+
+    def __init__(self, title: str, parent=None):
+        super().__init__(title, parent)
+        self._build_content()
+
+    def _build_content(self):
+        """Build plot area."""
+        layout = self.get_content_layout()
+
+        # Plot figure
+        self.figure = Figure(figsize=(8, 5), dpi=100)
+        self.canvas = FigureCanvas(self.figure)
+        self.canvas.setMinimumHeight(400)
+        layout.addWidget(self.canvas)
+
+        # Caption
+        caption_label = QLabel("Caption:")
+        caption_label.setStyleSheet("font-weight: 600; margin-top: 8px;")
+        layout.addWidget(caption_label)
+
+        self.caption_edit = QTextEdit()
+        self.caption_edit.setPlainText("Add plot description here...")
+        self.caption_edit.setMaximumHeight(80)
+        self.caption_edit.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #E5E7EB;
+                border-radius: 4px;
+                padding: 6px;
+                background: white;
+                font-size: 10px;
+            }
+        """)
+        layout.addWidget(self.caption_edit)
+
+    def get_caption(self) -> str:
+        """Get the caption text."""
+        return self.caption_edit.toPlainText()
+
+    def get_figure(self) -> Figure:
+        """Get the matplotlib figure."""
+        return self.figure
+
+
+class ReportStatistics(ReportSection):
+    """Statistics table section."""
 
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
-        self.setup_ui()
+        super().__init__("Statistical Analysis", parent)
+        self._build_content()
 
-    def setup_ui(self):
-        """Initialize the statistics table UI."""
-        header = QLabel("Statistics")
-        header.setStyleSheet("font-weight: 600; color: #1F2937; font-size: 14px;")
-        self.layout.addWidget(header)
+    def _build_content(self):
+        """Build statistics table."""
+        layout = self.get_content_layout()
 
         self.stats_table = QTableWidget()
         self.stats_table.setColumnCount(5)
@@ -217,14 +301,18 @@ class StatisticsArea(QWidget):
         self.stats_table.verticalHeader().setVisible(False)
         self.stats_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.stats_table.setSelectionMode(QTableWidget.NoSelection)
-        self.layout.addWidget(self.stats_table)
+        self.stats_table.setStyleSheet("""
+            QTableWidget {
+                background: white;
+                border: 1px solid #E5E7EB;
+                border-radius: 4px;
+            }
+        """)
+        layout.addWidget(self.stats_table)
 
-        self._current_df = None
-
-    def update_stats(self, df):
-        """Update statistics table with data from DataFrame."""
+    def update_stats(self, df: pd.DataFrame):
+        """Update statistics table with data."""
         if df is not None and not df.empty:
-            self._current_df = df
             stats = df.describe().transpose()
             self.stats_table.setRowCount(len(stats))
             for i, (index, row) in enumerate(stats.iterrows()):
@@ -233,314 +321,105 @@ class StatisticsArea(QWidget):
                 self.stats_table.setItem(i, 2, QTableWidgetItem(f"{row['mean']:.4g}"))
                 self.stats_table.setItem(i, 3, QTableWidgetItem(f"{row['min']:.4g}"))
                 self.stats_table.setItem(i, 4, QTableWidgetItem(f"{row['std']:.4g}"))
-            self.stats_table.resizeColumnsToContents()
-        else:
-            self.clear_stats()
-
-    def clear_stats(self):
-        """Clear all statistics from the table."""
-        self.stats_table.setRowCount(0)
-        self._current_df = None
 
 
-class QuickPlotterWindow(QMainWindow):
-    """Streamlined window that renders a simple plot for the selected file."""
+class ReportDataOverview(ReportSection):
+    """Data overview section with metadata."""
 
-    BUTTON_STYLES = """
-        QPushButton {
-            background-color: #1D4ED8;
-            color: #FFFFFF;
-            padding: 8px 18px;
-            border: none;
-            border-radius: 6px;
-            font-weight: 600;
-            min-height: 32px;
-        }
-        QPushButton:disabled {
-            background-color: #94A3B8;
-            color: #FFFFFF;
-        }
-        QPushButton:hover:!disabled {
-            background-color: #1E40AF;
-        }
-        QPushButton:pressed:!disabled {
-            background-color: #1E3A8A;
-        }
-    """
+    def __init__(self, df: pd.DataFrame, file_path: Path, parent=None):
+        super().__init__("Data Overview", parent)
+        self._build_content(df, file_path)
 
-    def __init__(self, file_path: Path) -> None:
-        super().__init__()
-        self._file_path = file_path
-        self._dataframe: pd.DataFrame | None = None
-        self._plot_cards = []
-        self._plot_counter = 0
+    def _build_content(self, df: pd.DataFrame, file_path: Path):
+        """Build overview table."""
+        layout = self.get_content_layout()
 
-        self.setObjectName("quick-plotter-window")
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
-        self.setWindowTitle(f"Plot Editor - {self._file_path.name}")
-        self.resize(1400, 900)
+        overview_table = QTableWidget()
+        overview_table.setColumnCount(2)
+        overview_table.setHorizontalHeaderLabels(["Property", "Value"])
+        overview_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        overview_table.verticalHeader().setVisible(False)
+        overview_table.setEditTriggers(QTableWidget.NoEditTriggers)
 
+        # Calculate properties
+        props = [
+            ("File Name", file_path.name),
+            ("Dimensions", f"{df.shape[0]:,} × {df.shape[1]}"),
+            ("Columns", ", ".join(df.columns[:5].tolist()) + ("..." if len(df.columns) > 5 else "")),
+            ("Memory Usage", f"{df.memory_usage(deep=True).sum() / 1024**2:.2f} MB"),
+        ]
+
+        overview_table.setRowCount(len(props))
+        for i, (prop, value) in enumerate(props):
+            prop_item = QTableWidgetItem(prop)
+            prop_item.setFont(QFont("", -1, QFont.Bold))
+            prop_item.setForeground(QColor("#6B7280"))
+            overview_table.setItem(i, 0, prop_item)
+            overview_table.setItem(i, 1, QTableWidgetItem(str(value)))
+
+        overview_table.setStyleSheet("""
+            QTableWidget {
+                background: white;
+                border: 1px solid #E5E7EB;
+                border-radius: 4px;
+            }
+        """)
+
+        layout.addWidget(overview_table)
+
+
+# ============================================================================
+# SCROLLABLE REPORT CONTAINER
+# ============================================================================
+
+class ScrollableReport(QScrollArea):
+    """Scrollable container for all report sections."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.sections: List[ReportSection] = []
         self._build_ui()
-        self._load_data()
 
-    def _build_ui(self) -> None:
-        """Build the main user interface with LEFT=plots, RIGHT=toolbar."""
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
+    def _build_ui(self):
+        """Build scrollable area."""
+        self.setWidgetResizable(True)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setFrameShape(QScrollArea.NoFrame)
 
-        # Main horizontal layout
-        main_layout = QHBoxLayout(self.central_widget)
-        main_layout.setContentsMargins(12, 12, 12, 12)
-        main_layout.setSpacing(0)
+        # Container widget
+        self.container = QWidget()
+        self.container_layout = QVBoxLayout(self.container)
+        self.container_layout.setContentsMargins(16, 16, 16, 16)
+        self.container_layout.setSpacing(16)
 
-        # Create horizontal splitter for resizable panels
-        self.main_splitter = QSplitter(Qt.Horizontal)
-        self.main_splitter.setHandleWidth(8)
-        self.main_splitter.setStyleSheet(
-            """
-            QSplitter::handle {
-                background: #E5E7EB;
-            }
-            QSplitter::handle:hover {
-                background: #3B82F6;
-            }
-            """
-        )
-
-        # ========== LEFT PANEL: Scrollable Plot Area (like PDF) ==========
-        left_panel = QWidget()
-        left_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 8, 0)
-        left_layout.setSpacing(8)
-
-        # Header
-        header_layout = QHBoxLayout()
-        header = QLabel("📊 Plot Report")
-        header.setStyleSheet("font-size: 18px; font-weight: 600; color: #0F172A;")
-        header_layout.addWidget(header)
-        header_layout.addStretch()
-
-        # Save Report button
-        save_report_btn = QPushButton("💾 Save as PDF Report")
-        save_report_btn.setStyleSheet("""
+        # Add section button at bottom
+        self.add_section_btn = QPushButton("➕ Add Section")
+        self.add_section_btn.setStyleSheet("""
             QPushButton {
-                background-color: #059669;
-                color: white;
-                padding: 8px 16px;
-                border: none;
-                border-radius: 6px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: #047857;
-            }
-        """)
-        save_report_btn.clicked.connect(self._save_as_report)
-        header_layout.addWidget(save_report_btn)
-
-        left_layout.addLayout(header_layout)
-
-        # Scrollable area for plots
-        self.plots_scroll_area = QScrollArea()
-        self.plots_scroll_area.setWidgetResizable(True)
-        self.plots_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.plots_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.plots_scroll_area.setFrameShape(QScrollArea.StyledPanel)
-        self.plots_scroll_area.setStyleSheet("""
-            QScrollArea {
-                background: #F9FAFB;
-                border: 2px solid #E5E7EB;
-                border-radius: 8px;
-            }
-        """)
-
-        # Container for plot cards
-        self.plots_container = QWidget()
-        self.plots_layout = QVBoxLayout(self.plots_container)
-        self.plots_layout.setContentsMargins(12, 12, 12, 12)
-        self.plots_layout.setSpacing(16)
-        self.plots_layout.addStretch()
-
-        self.plots_scroll_area.setWidget(self.plots_container)
-        left_layout.addWidget(self.plots_scroll_area)
-
-        # ========== RIGHT PANEL: Toolbar and Controls ==========
-        right_panel = QWidget()
-        right_panel.setMinimumWidth(300)
-        right_panel.setMaximumWidth(400)
-        right_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(8, 0, 0, 0)
-        right_layout.setSpacing(12)
-
-        # Toolbar header
-        toolbar_header = QLabel("🛠 Plot Toolbar")
-        toolbar_header.setStyleSheet("font-size: 16px; font-weight: 600; color: #0F172A;")
-        right_layout.addWidget(toolbar_header)
-
-        # File information
-        file_info_group = QGroupBox("File Information")
-        file_info_layout = QVBoxLayout(file_info_group)
-
-        self.file_info_label = QLabel()
-        self.file_info_label.setWordWrap(True)
-        self.file_info_label.setStyleSheet("color: #4B5563; font-size: 11px;")
-        file_info_layout.addWidget(self.file_info_label)
-
-        right_layout.addWidget(file_info_group)
-
-        # Add Plot Section
-        add_plot_group = QGroupBox("Add New Plot")
-        add_plot_layout = QVBoxLayout(add_plot_group)
-
-        add_plot_btn = QPushButton("➕ Add Plot")
-        add_plot_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1D4ED8;
-                color: white;
-                padding: 10px;
-                border: none;
-                border-radius: 6px;
-                font-weight: 600;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #1E40AF;
-            }
-        """)
-        add_plot_btn.clicked.connect(self._add_new_plot)
-        add_plot_layout.addWidget(add_plot_btn)
-
-        right_layout.addWidget(add_plot_group)
-
-        # Plot Configuration Section
-        config_group = QGroupBox("Plot Configuration")
-        config_layout = QVBoxLayout(config_group)
-
-        # Plot title
-        title_label = QLabel("Plot Title:")
-        title_label.setStyleSheet("font-weight: 600; color: #1F2937; font-size: 11px;")
-        config_layout.addWidget(title_label)
-
-        self.plot_title_input = QLineEdit()
-        self.plot_title_input.setPlaceholderText("Enter plot title...")
-        self.plot_title_input.setStyleSheet("""
-            QLineEdit {
-                padding: 6px;
-                border: 1px solid #D1D5DB;
-                border-radius: 4px;
-                background: white;
-            }
-        """)
-        config_layout.addWidget(self.plot_title_input)
-
-        # X Axis selection
-        x_label = QLabel("X Axis:")
-        x_label.setStyleSheet("font-weight: 600; color: #1F2937; margin-top: 8px; font-size: 11px;")
-        config_layout.addWidget(x_label)
-
-        self.x_selector = QComboBox()
-        self.x_selector.setStyleSheet("""
-            QComboBox {
-                padding: 6px;
-                border: 1px solid #D1D5DB;
-                border-radius: 4px;
-                background: white;
-            }
-        """)
-        config_layout.addWidget(self.x_selector)
-
-        # Y Axes selection
-        y_label = QLabel("Y Axes (Multi-select):")
-        y_label.setStyleSheet("font-weight: 600; color: #1F2937; margin-top: 8px; font-size: 11px;")
-        config_layout.addWidget(y_label)
-
-        self.y_selector = QListWidget()
-        self.y_selector.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.y_selector.setStyleSheet("""
-            QListWidget {
-                border: 1px solid #D1D5DB;
-                border-radius: 4px;
-                padding: 4px;
-                background: white;
-            }
-            QListWidget::item:selected {
                 background: #DBEAFE;
-                color: #1E3A8A;
-            }
-        """)
-        config_layout.addWidget(self.y_selector)
-
-        # Grid toggle
-        self.grid_toggle = QCheckBox("Show Grid")
-        self.grid_toggle.setChecked(True)
-        self.grid_toggle.setStyleSheet("margin-top: 8px;")
-        config_layout.addWidget(self.grid_toggle)
-
-        # Apply button
-        apply_btn = QPushButton("Apply to Selected Plot")
-        apply_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #7C3AED;
-                color: white;
-                padding: 8px;
-                border: none;
+                color: #1E40AF;
+                padding: 12px;
+                border: 2px dashed #3B82F6;
                 border-radius: 6px;
                 font-weight: 600;
-                margin-top: 8px;
             }
             QPushButton:hover {
-                background-color: #6D28D9;
+                background: #BFDBFE;
             }
         """)
-        apply_btn.clicked.connect(self._apply_plot_config)
-        config_layout.addWidget(apply_btn)
+        self.add_section_btn.clicked.connect(self._show_add_section_menu)
 
-        right_layout.addWidget(config_group)
+        self.container_layout.addStretch()
+        self.container_layout.addWidget(self.add_section_btn)
 
-        # Statistics area
-        self.stats_area = StatisticsArea(self)
-        right_layout.addWidget(self.stats_area)
+        self.setWidget(self.container)
 
-        right_layout.addStretch()
-
-        # Add panels to splitter
-        self.main_splitter.addWidget(left_panel)
-        self.main_splitter.addWidget(right_panel)
-
-        # Set initial splitter sizes (70% left, 30% right)
-        self.main_splitter.setStretchFactor(0, 7)
-        self.main_splitter.setStretchFactor(1, 3)
-
-        # Set collapsible behavior
-        self.main_splitter.setCollapsible(0, False)
-        self.main_splitter.setCollapsible(1, False)
-
-        # Add splitter to main layout
-        main_layout.addWidget(self.main_splitter)
-
-        # Apply styles
-        self.setStyleSheet(
-            """
-            QMainWindow#quick-plotter-window {
-                background: #FFFFFF;
-            }
-            QWidget {
-                background: #FFFFFF;
-                color: #0F172A;
-            }
-            QGroupBox {
-                font-weight: 600;
-                border: 2px solid #E5E7EB;
-                border-radius: 8px;
-                margin-top: 12px;
-                padding-top: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
+        # Styling
+        self.setStyleSheet("""
+            QScrollArea {
+                background: white;
+                border: none;
             }
             QScrollBar:vertical {
                 background: #F3F4F6;
@@ -555,33 +434,540 @@ class QuickPlotterWindow(QMainWindow):
             QScrollBar::handle:vertical:hover {
                 background: #94A3B8;
             }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-            """
-            + self.BUTTON_STYLES
+        """)
+
+    def add_section(self, section: ReportSection):
+        """Add a new section to the report."""
+        section.section_removed.connect(self.remove_section)
+        self.sections.append(section)
+        # Insert before stretch and add button
+        self.container_layout.insertWidget(len(self.sections) - 1, section)
+
+    def remove_section(self, section: ReportSection):
+        """Remove a section from the report."""
+        if section in self.sections:
+            self.sections.remove(section)
+            self.container_layout.removeWidget(section)
+            section.deleteLater()
+
+    def _show_add_section_menu(self):
+        """Show menu to add different section types."""
+        # For now, just add a text section
+        text_section = ReportText("Notes", "Add your notes here...")
+        self.add_section(text_section)
+
+    def export_to_pdf(self, filepath: str):
+        """Export report as PDF."""
+        temp_files = []  # Track temp files to clean up later
+
+        try:
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.lib.units import inch
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib import colors
+
+            # Create document
+            doc = SimpleDocTemplate(
+                filepath,
+                pagesize=landscape(A4),
+                rightMargin=0.5*inch,
+                leftMargin=0.5*inch,
+                topMargin=0.5*inch,
+                bottomMargin=0.5*inch
+            )
+
+            story = []
+            styles = getSampleStyleSheet()
+
+            # Custom styles
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                textColor=colors.HexColor('#1F2937'),
+                spaceAfter=12
+            )
+
+            heading_style = ParagraphStyle(
+                'CustomHeading',
+                parent=styles['Heading2'],
+                fontSize=14,
+                textColor=colors.HexColor('#374151'),
+                spaceAfter=6
+            )
+
+            # Process each section
+            for section in self.sections:
+                if isinstance(section, ReportHeader):
+                    data = section.get_data()
+                    story.append(Paragraph(data['title'], title_style))
+                    story.append(Spacer(1, 0.2*inch))
+
+                    meta_text = f"<b>File:</b> {data['file']}<br/>" \
+                                f"<b>Generated:</b> {data['date']}<br/>" \
+                                f"<b>Author:</b> {data['author']}"
+                    story.append(Paragraph(meta_text, styles['Normal']))
+                    story.append(Spacer(1, 0.3*inch))
+
+                elif isinstance(section, ReportText):
+                    story.append(Paragraph(section.title, heading_style))
+                    text = section.get_text().replace('\n', '<br/>')
+                    story.append(Paragraph(text, styles['Normal']))
+                    story.append(Spacer(1, 0.2*inch))
+
+                elif isinstance(section, ReportPlot):
+                    story.append(Paragraph(section.title, heading_style))
+
+                    # Save figure to temporary file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                        temp_path = tmp.name
+
+                    # Save the figure
+                    section.get_figure().savefig(temp_path, format='png', dpi=150, bbox_inches='tight')
+
+                    # Track for cleanup
+                    temp_files.append(temp_path)
+
+                    # Add image to PDF (file must exist until doc.build() completes)
+                    img = Image(temp_path, width=9*inch, height=5*inch)
+                    story.append(img)
+
+                    # Add caption
+                    caption = section.get_caption()
+                    if caption:
+                        story.append(Spacer(1, 0.1*inch))
+                        caption_style = ParagraphStyle(
+                            'Caption',
+                            parent=styles['Normal'],
+                            fontSize=9,
+                            textColor=colors.HexColor('#6B7280'),
+                            italic=True
+                        )
+                        story.append(Paragraph(f"<i>{caption}</i>", caption_style))
+
+                    story.append(Spacer(1, 0.2*inch))
+
+                elif isinstance(section, ReportStatistics):
+                    story.append(Paragraph(section.title, heading_style))
+
+                    # Convert QTableWidget to reportlab Table
+                    table = section.stats_table
+                    data = []
+
+                    # Headers
+                    headers = []
+                    for col in range(table.columnCount()):
+                        headers.append(table.horizontalHeaderItem(col).text())
+                    data.append(headers)
+
+                    # Rows
+                    for row in range(table.rowCount()):
+                        row_data = []
+                        for col in range(table.columnCount()):
+                            item = table.item(row, col)
+                            row_data.append(item.text() if item else "")
+                        data.append(row_data)
+
+                    # Create table
+                    t = Table(data)
+                    t.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F3F4F6')),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1F2937')),
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, 0), 10),
+                        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E5E7EB')),
+                    ]))
+
+                    story.append(t)
+                    story.append(Spacer(1, 0.2*inch))
+
+            # Build PDF (this is when ReportLab actually reads the image files)
+            doc.build(story)
+
+            return True
+
+        except Exception as e:
+            print(f"Error exporting to PDF: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+        finally:
+            # Clean up all temporary files AFTER PDF is built
+            for temp_file in temp_files:
+                try:
+                    if os.path.exists(temp_file):
+                        os.unlink(temp_file)
+                except Exception as e:
+                    print(f"Warning: Could not delete temp file {temp_file}: {e}")
+
+
+# Continue in next part...
+
+
+# ============================================================================
+# TOOLBAR TOOLS
+# ============================================================================
+
+class BaseTool:
+    """Base class for all interactive tools."""
+
+    def __init__(self, canvas: FigureCanvas):
+        self.canvas = canvas
+        self.figure = canvas.figure
+        self.active = False
+        self.connection_ids = []
+
+    def activate(self):
+        """Activate the tool and connect events."""
+        self.active = True
+        self.connect_events()
+
+    def deactivate(self):
+        """Deactivate the tool and disconnect events."""
+        self.active = False
+        self.disconnect_events()
+
+    def connect_events(self):
+        """Connect matplotlib events."""
+        pass
+
+    def disconnect_events(self):
+        """Disconnect matplotlib events."""
+        for cid in self.connection_ids:
+            self.canvas.mpl_disconnect(cid)
+        self.connection_ids = []
+
+    def on_press(self, event):
+        """Handle mouse press."""
+        pass
+
+    def on_motion(self, event):
+        """Handle mouse motion."""
+        pass
+
+    def on_release(self, event):
+        """Handle mouse release."""
+        pass
+
+
+class SelectionTool(BaseTool):
+    """Tool for selecting regions of data."""
+
+    def __init__(self, canvas: FigureCanvas, callback=None):
+        super().__init__(canvas)
+        self.start_point = None
+        self.selection_rect = None
+        self.callback = callback
+
+    def connect_events(self):
+        """Connect mouse events."""
+        self.connection_ids.append(
+            self.canvas.mpl_connect('button_press_event', self.on_press)
+        )
+        self.connection_ids.append(
+            self.canvas.mpl_connect('motion_notify_event', self.on_motion)
+        )
+        self.connection_ids.append(
+            self.canvas.mpl_connect('button_release_event', self.on_release)
         )
 
-    def _load_data(self) -> None:
-        """Load data from the file."""
-        df = self._read_file(self._file_path)
+    def on_press(self, event):
+        """Start selection."""
+        if event.inaxes and event.button == 1:
+            self.start_point = (event.xdata, event.ydata)
 
+    def on_motion(self, event):
+        """Update selection rectangle."""
+        if self.start_point and event.inaxes and event.button == 1:
+            x0, y0 = self.start_point
+            x1, y1 = event.xdata, event.ydata
+
+            # Remove old rectangle
+            if self.selection_rect:
+                self.selection_rect.remove()
+
+            # Draw new rectangle
+            width = x1 - x0
+            height = y1 - y0
+            self.selection_rect = Rectangle(
+                (x0, y0), width, height,
+                fill=True, alpha=0.2, color='blue',
+                linestyle='--', linewidth=2, edgecolor='blue'
+            )
+            event.inaxes.add_patch(self.selection_rect)
+            self.canvas.draw_idle()
+
+    def on_release(self, event):
+        """Complete selection."""
+        if self.start_point and event.inaxes and event.button == 1:
+            x0, y0 = self.start_point
+            x1, y1 = event.xdata, event.ydata
+
+            # Get selection bounds
+            x_min, x_max = min(x0, x1), max(x0, x1)
+            y_min, y_max = min(y0, y1), max(y0, y1)
+
+            # Call callback with selection
+            if self.callback:
+                self.callback(x_min, x_max, y_min, y_max)
+
+            # Clear
+            if self.selection_rect:
+                self.selection_rect.remove()
+                self.selection_rect = None
+            self.start_point = None
+            self.canvas.draw_idle()
+
+
+class AnnotationTool(BaseTool):
+    """Tool for adding annotations to plots."""
+
+    def __init__(self, canvas: FigureCanvas, text: str = "Note"):
+        super().__init__(canvas)
+        self.text = text
+
+    def connect_events(self):
+        """Connect click event."""
+        self.connection_ids.append(
+            self.canvas.mpl_connect('button_press_event', self.on_press)
+        )
+
+    def on_press(self, event):
+        """Add annotation at click point."""
+        if event.inaxes and event.button == 1:
+            event.inaxes.annotate(
+                self.text,
+                xy=(event.xdata, event.ydata),
+                xytext=(10, 10), textcoords='offset points',
+                bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.7),
+                arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', color='red')
+            )
+            self.canvas.draw_idle()
+
+
+class MeasurementTool(BaseTool):
+    """Tool for measuring distances and slopes."""
+
+    def __init__(self, canvas: FigureCanvas):
+        super().__init__(canvas)
+        self.point1 = None
+        self.line = None
+        self.annotation = None
+
+    def connect_events(self):
+        """Connect mouse events."""
+        self.connection_ids.append(
+            self.canvas.mpl_connect('button_press_event', self.on_press)
+        )
+
+    def on_press(self, event):
+        """Measure between two clicks."""
+        if event.inaxes and event.button == 1:
+            if self.point1 is None:
+                # First point
+                self.point1 = (event.xdata, event.ydata)
+                event.inaxes.plot(event.xdata, event.ydata, 'ro', markersize=8)
+                self.canvas.draw_idle()
+            else:
+                # Second point - calculate distance
+                point2 = (event.xdata, event.ydata)
+                x1, y1 = self.point1
+                x2, y2 = point2
+
+                # Calculate distance
+                distance = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+
+                # Calculate slope
+                if x2 != x1:
+                    slope = (y2 - y1) / (x2 - x1)
+                    slope_text = f"Slope: {slope:.3f}"
+                else:
+                    slope_text = "Slope: ∞"
+
+                # Draw line
+                event.inaxes.plot([x1, x2], [y1, y2], 'r-', linewidth=2)
+
+                # Add annotation
+                mid_x, mid_y = (x1 + x2) / 2, (y1 + y2) / 2
+                event.inaxes.annotate(
+                    f"Distance: {distance:.3f}\n{slope_text}",
+                    xy=(mid_x, mid_y),
+                    xytext=(10, 10), textcoords='offset points',
+                    bbox=dict(boxstyle='round,pad=0.5', fc='lightblue', alpha=0.8),
+                    fontsize=9
+                )
+
+                self.canvas.draw_idle()
+                self.point1 = None
+
+
+# ============================================================================
+# COLLAPSIBLE PANEL WIDGET
+# ============================================================================
+
+class CollapsiblePanel(QWidget):
+    """Collapsible panel for organizing controls."""
+
+    def __init__(self, title: str, parent=None):
+        super().__init__(parent)
+        self.title = title
+        self.is_collapsed = False
+        self._build_ui()
+
+    def _build_ui(self):
+        """Build panel UI."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 8)
+        layout.setSpacing(0)
+
+        # Header button
+        self.header_btn = QPushButton(f"▼ {self.title}")
+        self.header_btn.setCheckable(True)
+        self.header_btn.setChecked(True)
+        self.header_btn.clicked.connect(self._toggle_collapse)
+        self.header_btn.setStyleSheet("""
+            QPushButton {
+                background: #F3F4F6;
+                border: 1px solid #E5E7EB;
+                border-radius: 4px;
+                padding: 8px;
+                text-align: left;
+                font-weight: 600;
+                color: #1F2937;
+            }
+            QPushButton:hover {
+                background: #E5E7EB;
+            }
+            QPushButton:checked {
+                background: #DBEAFE;
+                border-color: #3B82F6;
+                color: #1E40AF;
+            }
+        """)
+        layout.addWidget(self.header_btn)
+
+        # Content widget
+        self.content_widget = QWidget()
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(8, 8, 8, 8)
+        layout.addWidget(self.content_widget)
+
+    def _toggle_collapse(self):
+        """Toggle panel collapse."""
+        self.is_collapsed = not self.is_collapsed
+        self.content_widget.setVisible(not self.is_collapsed)
+        arrow = "▶" if self.is_collapsed else "▼"
+        self.header_btn.setText(f"{arrow} {self.title}")
+
+    def get_content_layout(self):
+        """Get the content layout."""
+        return self.content_layout
+
+
+# ============================================================================
+# DATA FILTER PIPELINE
+# ============================================================================
+
+class DataFilterPipeline:
+    """Pipeline for applying filters to data."""
+
+    def __init__(self, dataframe: pd.DataFrame):
+        self.original_data = dataframe.copy()
+        self.filtered_data = dataframe.copy()
+        self.filters = []
+
+    def add_time_range_filter(self, start_time, end_time, time_column='Time'):
+        """Filter by time range."""
+        if time_column in self.filtered_data.columns:
+            self.filtered_data = self.filtered_data[
+                (self.filtered_data[time_column] >= start_time) &
+                (self.filtered_data[time_column] <= end_time)
+            ]
+
+    def add_value_range_filter(self, column: str, min_val: float, max_val: float):
+        """Filter by value range."""
+        if column in self.filtered_data.columns:
+            self.filtered_data = self.filtered_data[
+                (self.filtered_data[column] >= min_val) &
+                (self.filtered_data[column] <= max_val)
+            ]
+
+    def remove_outliers(self, columns: List[str], n_sigma: float = 3.0):
+        """Remove outliers beyond n standard deviations."""
+        for column in columns:
+            if column in self.filtered_data.columns:
+                mean = self.filtered_data[column].mean()
+                std = self.filtered_data[column].std()
+                self.filtered_data = self.filtered_data[
+                    (self.filtered_data[column] >= mean - n_sigma * std) &
+                    (self.filtered_data[column] <= mean + n_sigma * std)
+                ]
+
+    def remove_nan(self, columns: List[str]):
+        """Remove rows with NaN values."""
+        self.filtered_data = self.filtered_data.dropna(subset=columns)
+
+    def apply_moving_average(self, column: str, window: int = 10) -> pd.Series:
+        """Apply moving average to column."""
+        if column in self.filtered_data.columns:
+            return self.filtered_data[column].rolling(window=window).mean()
+        return None
+
+    def reset(self):
+        """Reset to original data."""
+        self.filtered_data = self.original_data.copy()
+        self.filters = []
+
+    def get_filtered_data(self) -> pd.DataFrame:
+        """Get the filtered dataframe."""
+        return self.filtered_data
+
+
+# Continue in next part...
+
+
+# ============================================================================
+# MAIN ENHANCED PLOTTER WINDOW
+# ============================================================================
+
+class EnhancedPlotterWindow(QMainWindow):
+    """Enhanced plotter with report generation and interactive tools."""
+
+    def __init__(self, file_path: Path) -> None:
+        super().__init__()
+        self._file_path = file_path
+        self._dataframe: pd.DataFrame | None = None
+        self._filter_pipeline: DataFilterPipeline | None = None
+        self._current_tool: BaseTool | None = None
+        self._main_plot_section: ReportPlot | None = None
+
+        self.setWindowTitle(f"Enhanced Plotter - {self._file_path.name}")
+        self.resize(1600, 1000)
+
+        self._load_data()
+        self._build_ui()
+        self._create_initial_report()
+
+    def _load_data(self) -> None:
+        """Load data from file."""
+        df = self._read_file(self._file_path)
         if df.empty:
             raise ValueError("The selected file did not contain any data to display.")
-
         self._dataframe = df
-        self._populate_file_info()
-        self._populate_selectors(df)
+        self._filter_pipeline = DataFilterPipeline(df)
 
     @staticmethod
     def _read_file(path: Path) -> pd.DataFrame:
         """Read file and return DataFrame."""
         ext = path.suffix.lower()
 
-        # Handle Parquet files (highest priority - processed data)
         if ext == ".parquet":
             return pd.read_parquet(path, engine="pyarrow")
-
         if ext == ".csv":
             return load_and_process_csv_file(str(path))
         if ext == ".tdms":
@@ -590,150 +976,452 @@ class QuickPlotterWindow(QMainWindow):
             return load_and_process_asc_file(str(path))
         if ext in {".xls", ".xlsx", ".xlsm", ".xlsb"}:
             return pd.read_excel(path)
-        if not ext:
-            raise ValueError("Files without an extension are not supported by the quick plotter.")
+
         raise ValueError(f"Unsupported file type: {ext}")
 
-    def _populate_file_info(self) -> None:
-        """Populate file information label."""
-        if self._dataframe is None:
-            return
+    def _build_ui(self) -> None:
+        """Build main user interface."""
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
 
-        shape_str = f"{self._dataframe.shape[0]} rows × {self._dataframe.shape[1]} columns"
-        info_text = f"<b>File:</b> {self._file_path.name}<br><b>Size:</b> {shape_str}"
-        self.file_info_label.setText(info_text)
+        main_layout = QHBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-    def _populate_selectors(self, df: pd.DataFrame) -> None:
-        """Populate axis selectors with column names."""
-        self.x_selector.clear()
-        self.y_selector.clear()
+        # Create splitter for resizable panels
+        self.main_splitter = QSplitter(Qt.Horizontal)
+        self.main_splitter.setHandleWidth(8)
 
-        numeric_columns = [
-            column for column in df.columns if pd.api.types.is_numeric_dtype(df[column])
-        ]
+        # LEFT PANEL: Scrollable Report
+        self.report_area = ScrollableReport(self)
+        self.report_area.setMinimumWidth(600)
 
-        # Populate X axis combo box
-        for column in df.columns:
-            self.x_selector.addItem(column)
+        # RIGHT PANEL: Controls
+        right_panel = self._create_right_panel()
+        right_panel.setMaximumWidth(640)
 
-        # Populate Y axis list widget with numeric columns
-        for column in numeric_columns:
-            item = QListWidgetItem(column)
-            self.y_selector.addItem(item)
+        # Add to splitter
+        self.main_splitter.addWidget(self.report_area)
+        self.main_splitter.addWidget(right_panel)
 
-    def _add_new_plot(self) -> None:
-        """Add a new plot card to the scrollable area."""
-        if self._dataframe is None:
-            QMessageBox.warning(self, "Plotter", "No data loaded.")
-            return
+        # Set stretch factors (60-40 split)
+        self.main_splitter.setStretchFactor(0, 6)
+        self.main_splitter.setStretchFactor(1, 4)
 
-        # Create new plot card
-        plot_card = PlotCard(self._dataframe, self._plot_counter, self.plots_container)
-        self._plot_cards.append(plot_card)
-        self._plot_counter += 1
+        main_layout.addWidget(self.main_splitter)
 
-        # Insert before the stretch
-        self.plots_layout.insertWidget(self.plots_layout.count() - 1, plot_card)
+        # Apply global styling
+        self.setStyleSheet("""
+            QMainWindow {
+                background: #F9FAFB;
+            }
+        """)
 
-        # Scroll to the new plot
-        QApplication.processEvents()
-        self.plots_scroll_area.ensureWidgetVisible(plot_card)
+    def _create_right_panel(self) -> QWidget:
+        """Create the right control panel."""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-    def remove_plot_card(self, plot_card: PlotCard) -> None:
-        """Remove a plot card from the scrollable area."""
-        if plot_card in self._plot_cards:
-            self._plot_cards.remove(plot_card)
-            self.plots_layout.removeWidget(plot_card)
-            plot_card.deleteLater()
+        # Toolbar
+        toolbar = self._create_toolbar()
+        layout.addWidget(toolbar)
 
-    def _apply_plot_config(self) -> None:
-        """Apply configuration to the most recently added plot."""
-        if not self._plot_cards:
-            QMessageBox.information(self, "Plot Configuration", "Please add a plot first using the '➕ Add Plot' button.")
-            return
+        # Scrollable controls
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        # Get the last plot card
-        plot_card = self._plot_cards[-1]
+        controls_widget = QWidget()
+        controls_layout = QVBoxLayout(controls_widget)
+        controls_layout.setContentsMargins(12, 12, 12, 12)
+        controls_layout.setSpacing(8)
 
-        # Get configuration values
-        x_column = self.x_selector.currentText()
-        selected_y_items = self.y_selector.selectedItems()
-        y_columns = [item.text() for item in selected_y_items]
-        title = self.plot_title_input.text() or f"Plot {plot_card.plot_id + 1}"
-        show_grid = self.grid_toggle.isChecked()
+        # Add control panels
+        controls_layout.addWidget(self._create_data_selection_panel())
+        controls_layout.addWidget(self._create_filter_panel())
+        controls_layout.addWidget(self._create_style_panel())
+        controls_layout.addWidget(self._create_analysis_panel())
+        controls_layout.addStretch()
 
-        if not x_column:
-            QMessageBox.warning(self, "Configuration", "Please select an X axis column.")
-            return
+        scroll.setWidget(controls_widget)
+        layout.addWidget(scroll)
 
-        if not y_columns:
-            QMessageBox.warning(self, "Configuration", "Please select at least one Y axis column.")
-            return
+        return panel
 
-        # Apply configuration to the plot
-        plot_card.update_plot(
-            x_column=x_column,
-            y_columns=y_columns,
-            title=title,
-            show_grid=show_grid
-        )
+    def _create_toolbar(self) -> QToolBar:
+        """Create the interactive toolbar."""
+        toolbar = QToolBar("Tools")
+        toolbar.setMovable(False)
+        toolbar.setIconSize(QSize(24, 24))
+        toolbar.setStyleSheet("""
+            QToolBar {
+                background: white;
+                border-bottom: 2px solid #E5E7EB;
+                padding: 8px;
+                spacing: 8px;
+            }
+            QToolButton {
+                background: transparent;
+                border: 2px solid transparent;
+                border-radius: 6px;
+                padding: 8px;
+            }
+            QToolButton:hover {
+                background: #F3F4F6;
+                border-color: #E5E7EB;
+            }
+            QToolButton:checked {
+                background: #DBEAFE;
+                border-color: #3B82F6;
+            }
+        """)
 
-        # Update statistics
-        try:
-            stats_df = self._dataframe[y_columns].select_dtypes(include=[np.number])
-            self.stats_area.update_stats(stats_df)
-        except Exception:
-            self.stats_area.clear_stats()
+        # Selection tool
+        select_action = QAction("🖱️ Select", self)
+        select_action.setCheckable(True)
+        select_action.triggered.connect(lambda: self._set_tool('select'))
+        toolbar.addAction(select_action)
 
-    def _save_as_report(self) -> None:
-        """Save all plots as a PDF report."""
-        if not self._plot_cards:
-            QMessageBox.information(self, "Save Report", "No plots to save. Please add plots first.")
-            return
+        # Annotation tool
+        annotate_action = QAction("✏️ Annotate", self)
+        annotate_action.setCheckable(True)
+        annotate_action.triggered.connect(lambda: self._set_tool('annotate'))
+        toolbar.addAction(annotate_action)
 
-        file_path, _ = QFileDialog.getSaveFileName(
+        # Measurement tool
+        measure_action = QAction("📏 Measure", self)
+        measure_action.setCheckable(True)
+        measure_action.triggered.connect(lambda: self._set_tool('measure'))
+        toolbar.addAction(measure_action)
+
+        toolbar.addSeparator()
+
+        # Export report
+        export_action = QAction("📄 Export PDF", self)
+        export_action.triggered.connect(self._export_report_pdf)
+        toolbar.addAction(export_action)
+
+        self.toolbar = toolbar
+        return toolbar
+
+    def _set_tool(self, tool_name: str):
+        """Set the active tool."""
+        # Deactivate current tool
+        if self._current_tool:
+            self._current_tool.deactivate()
+
+        # Activate new tool
+        if self._main_plot_section:
+            canvas = self._main_plot_section.canvas
+
+            if tool_name == 'select':
+                self._current_tool = SelectionTool(canvas, self._on_selection)
+            elif tool_name == 'annotate':
+                text, ok = QInputDialog.getText(self, "Annotation", "Enter annotation text:")
+                if ok and text:
+                    self._current_tool = AnnotationTool(canvas, text)
+            elif tool_name == 'measure':
+                self._current_tool = MeasurementTool(canvas)
+
+            if self._current_tool:
+                self._current_tool.activate()
+
+    def _on_selection(self, x_min, x_max, y_min, y_max):
+        """Handle data selection."""
+        msg = f"Selected region:\nX: [{x_min:.2f}, {x_max:.2f}]\nY: [{y_min:.2f}, {y_max:.2f}]"
+        QMessageBox.information(self, "Selection", msg)
+
+    def _create_data_selection_panel(self) -> CollapsiblePanel:
+        """Create data selection panel."""
+        panel = CollapsiblePanel("Data Selection")
+        layout = panel.get_content_layout()
+
+        # X-Axis selector
+        layout.addWidget(QLabel("X-Axis:"))
+        self.x_selector = QComboBox()
+        self.x_selector.addItems(self._dataframe.columns.tolist())
+        self.x_selector.currentTextChanged.connect(self._update_main_plot)
+        layout.addWidget(self.x_selector)
+
+        # Y-Axes selector
+        layout.addWidget(QLabel("Y-Axes (Multi-select):"))
+        self.y_selector = QListWidget()
+        self.y_selector.setSelectionMode(QAbstractItemView.MultiSelection)
+        numeric_cols = self._dataframe.select_dtypes(include=[np.number]).columns
+        for col in numeric_cols:
+            self.y_selector.addItem(col)
+        self.y_selector.itemSelectionChanged.connect(self._update_main_plot)
+        layout.addWidget(self.y_selector)
+
+        # Select first 2 by default
+        for i in range(min(2, self.y_selector.count())):
+            self.y_selector.item(i).setSelected(True)
+
+        # Update button
+        update_btn = QPushButton("Update Plot")
+        update_btn.setStyleSheet("""
+            QPushButton {
+                background: #1D4ED8;
+                color: white;
+                padding: 8px;
+                border-radius: 4px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background: #1E40AF;
+            }
+        """)
+        update_btn.clicked.connect(self._update_main_plot)
+        layout.addWidget(update_btn)
+
+        return panel
+
+    def _create_filter_panel(self) -> CollapsiblePanel:
+        """Create data filter panel."""
+        panel = CollapsiblePanel("Data Filters")
+        panel._toggle_collapse()  # Start collapsed
+        layout = panel.get_content_layout()
+
+        # Outlier removal
+        self.outlier_check = QCheckBox("Remove Outliers (3σ)")
+        layout.addWidget(self.outlier_check)
+
+        # NaN removal
+        self.nan_check = QCheckBox("Remove NaN Values")
+        self.nan_check.setChecked(True)
+        layout.addWidget(self.nan_check)
+
+        # Apply filters button
+        apply_btn = QPushButton("Apply Filters")
+        apply_btn.clicked.connect(self._apply_filters)
+        layout.addWidget(apply_btn)
+
+        # Reset button
+        reset_btn = QPushButton("Reset Filters")
+        reset_btn.clicked.connect(self._reset_filters)
+        layout.addWidget(reset_btn)
+
+        return panel
+
+    def _create_style_panel(self) -> CollapsiblePanel:
+        """Create plot styling panel."""
+        panel = CollapsiblePanel("Plot Styling")
+        panel._toggle_collapse()  # Start collapsed
+        layout = panel.get_content_layout()
+
+        # Grid toggle
+        self.grid_check = QCheckBox("Show Grid")
+        self.grid_check.setChecked(True)
+        self.grid_check.stateChanged.connect(self._update_main_plot)
+        layout.addWidget(self.grid_check)
+
+        # Legend toggle
+        self.legend_check = QCheckBox("Show Legend")
+        self.legend_check.setChecked(True)
+        self.legend_check.stateChanged.connect(self._update_main_plot)
+        layout.addWidget(self.legend_check)
+
+        # Line width
+        layout.addWidget(QLabel("Line Width:"))
+        self.line_width_slider = QSlider(Qt.Horizontal)
+        self.line_width_slider.setMinimum(1)
+        self.line_width_slider.setMaximum(5)
+        self.line_width_slider.setValue(2)
+        self.line_width_slider.valueChanged.connect(self._update_main_plot)
+        layout.addWidget(self.line_width_slider)
+
+        return panel
+
+    def _create_analysis_panel(self) -> CollapsiblePanel:
+        """Create analysis tools panel."""
+        panel = CollapsiblePanel("Analysis Tools")
+        panel._toggle_collapse()  # Start collapsed
+        layout = panel.get_content_layout()
+
+        # Moving average
+        ma_group = QGroupBox("Moving Average")
+        ma_layout = QVBoxLayout(ma_group)
+
+        self.ma_check = QCheckBox("Apply Moving Average")
+        ma_layout.addWidget(self.ma_check)
+
+        ma_window_layout = QHBoxLayout()
+        ma_window_layout.addWidget(QLabel("Window:"))
+        self.ma_window = QSpinBox()
+        self.ma_window.setMinimum(2)
+        self.ma_window.setMaximum(100)
+        self.ma_window.setValue(10)
+        ma_window_layout.addWidget(self.ma_window)
+        ma_layout.addLayout(ma_window_layout)
+
+        layout.addWidget(ma_group)
+
+        # Add statistics section
+        stats_btn = QPushButton("Add Statistics to Report")
+        stats_btn.clicked.connect(self._add_statistics_section)
+        layout.addWidget(stats_btn)
+
+        return panel
+
+    def _apply_filters(self):
+        """Apply selected filters to data."""
+        self._filter_pipeline.reset()
+
+        y_columns = [item.text() for item in self.y_selector.selectedItems()]
+
+        if self.outlier_check.isChecked():
+            self._filter_pipeline.remove_outliers(y_columns, n_sigma=3.0)
+
+        if self.nan_check.isChecked():
+            self._filter_pipeline.remove_nan(y_columns)
+
+        self._update_main_plot()
+
+        # Show info
+        orig_rows = len(self._dataframe)
+        filt_rows = len(self._filter_pipeline.get_filtered_data())
+        QMessageBox.information(
             self,
-            "Save Report as PDF",
-            f"{self._file_path.stem}_report.pdf",
-            "PDF (*.pdf)",
+            "Filters Applied",
+            f"Original rows: {orig_rows:,}\nFiltered rows: {filt_rows:,}\nRemoved: {orig_rows - filt_rows:,}"
         )
 
-        if not file_path:
+    def _reset_filters(self):
+        """Reset all filters."""
+        self._filter_pipeline.reset()
+        self.outlier_check.setChecked(False)
+        self.nan_check.setChecked(True)
+        self._update_main_plot()
+
+    def _create_initial_report(self):
+        """Create initial report sections."""
+        # Header
+        header = ReportHeader(self._file_path.name, self)
+        self.report_area.add_section(header)
+
+        # Executive summary
+        summary = ReportText("Executive Summary", "Key findings and observations...", self)
+        self.report_area.add_section(summary)
+
+        # Data overview
+        overview = ReportDataOverview(self._dataframe, self._file_path, self)
+        self.report_area.add_section(overview)
+
+        # Main plot
+        self._main_plot_section = ReportPlot("Main Plot", self)
+        self.report_area.add_section(self._main_plot_section)
+
+        # Initial plot
+        self._update_main_plot()
+
+    def _update_main_plot(self):
+        """Update the main plot."""
+        if not self._main_plot_section:
             return
 
+        x_column = self.x_selector.currentText()
+        y_items = self.y_selector.selectedItems()
+
+        if not y_items:
+            return
+
+        y_columns = [item.text() for item in y_items]
+
         try:
-            from matplotlib.backends.backend_pdf import PdfPages
-
-            with PdfPages(file_path) as pdf:
-                for plot_card in self._plot_cards:
-                    if plot_card.x_column and plot_card.y_columns:
-                        # Save each plot's figure to PDF
-                        pdf.savefig(plot_card.figure, bbox_inches="tight")
-
-            QMessageBox.information(
-                self,
-                "Save Success",
-                f"Report saved successfully to:\n{file_path}\n\nTotal plots: {len(self._plot_cards)}"
+            self._plot_data(
+                self._main_plot_section.get_figure(),
+                x_column,
+                y_columns
             )
+            self._main_plot_section.canvas.draw()
+        except Exception as e:
+            print(f"Error updating plot: {e}")
 
-        except Exception as exc:
-            QMessageBox.critical(self, "Save Failed", f"Failed to save report:\n{exc}")
+    def _plot_data(self, figure: Figure, x_column: str, y_columns: List[str]):
+        """Plot data on a figure."""
+        df = self._filter_pipeline.get_filtered_data()
 
-    def closeEvent(self, event) -> None:  # type: ignore[override]
-        """Handle window close event."""
+        figure.clear()
+        ax = figure.add_subplot(111)
+
         try:
-            _open_windows.remove(self)
-        except ValueError:
-            pass
-        super().closeEvent(event)
+            x_data = pd.to_numeric(df[x_column], errors='coerce')
+        except:
+            x_data = df.index
+
+        # Color palette
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+
+        line_width = self.line_width_slider.value() if hasattr(self, 'line_width_slider') else 2
+
+        for i, column in enumerate(y_columns):
+            color = colors[i % len(colors)]
+            y_data = pd.to_numeric(df[column], errors='coerce')
+
+            valid = x_data.notna() & y_data.notna()
+
+            if valid.any():
+                # Apply moving average if enabled
+                if hasattr(self, 'ma_check') and self.ma_check.isChecked():
+                    window = self.ma_window.value()
+                    y_plot = y_data[valid].rolling(window=window).mean()
+                    ax.plot(x_data[valid], y_plot, color=color, label=f"{column} (MA{window})", linewidth=line_width, alpha=0.9)
+                else:
+                    ax.plot(x_data[valid], y_data[valid], color=color, label=column, linewidth=line_width, alpha=0.9)
+
+        ax.set_xlabel(x_column, fontsize=11, fontweight='bold')
+        ax.set_ylabel("Value", fontsize=11, fontweight='bold')
+
+        if hasattr(self, 'grid_check') and self.grid_check.isChecked():
+            ax.grid(True, alpha=0.3, linestyle='--')
+
+        if hasattr(self, 'legend_check') and self.legend_check.isChecked():
+            ax.legend(loc='best', fontsize=9)
+
+        figure.tight_layout()
+
+    def _add_statistics_section(self):
+        """Add statistics section to report."""
+        y_items = self.y_selector.selectedItems()
+        if not y_items:
+            return
+
+        y_columns = [item.text() for item in y_items]
+        df = self._filter_pipeline.get_filtered_data()
+
+        stats_section = ReportStatistics(self)
+        stats_section.update_stats(df[y_columns])
+        self.report_area.add_section(stats_section)
+
+    def _export_report_pdf(self):
+        """Export report as PDF."""
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Report as PDF",
+            f"{self._file_path.stem}_report.pdf",
+            "PDF Files (*.pdf)"
+        )
+
+        if filepath:
+            success = self.report_area.export_to_pdf(filepath)
+            if success:
+                QMessageBox.information(self, "Export Success", f"Report exported to:\n{filepath}")
+            else:
+                QMessageBox.critical(self, "Export Failed", "Failed to export report. Check console for errors.")
 
 
-# Global list to track open plotter windows
-_open_windows: List[QuickPlotterWindow] = []
+# ============================================================================
+# PUBLIC API FUNCTIONS
+# ============================================================================
+
+_open_windows: List[EnhancedPlotterWindow] = []
 
 
 def run(file_path: Path | str) -> None:
-    """Launch the quick plotter window for the provided file path.
+    """Launch the enhanced plotter window.
 
     Args:
         file_path: Path to the file to plot
@@ -744,250 +1432,33 @@ def run(file_path: Path | str) -> None:
         return
 
     try:
-        window = QuickPlotterWindow(path)
+        window = EnhancedPlotterWindow(path)
+        window.show()
+        window.raise_()
+        window.activateWindow()
+        _open_windows.append(window)
     except ValueError as exc:
         QMessageBox.warning(None, "Plotter", str(exc))
-        return
     except Exception as exc:
         QMessageBox.critical(None, "Plotter", f"Unable to open plotter: {exc}")
-        return
-
-    window.show()
-    window.raise_()
-    window.activateWindow()
-    _open_windows.append(window)
+        import traceback
+        traceback.print_exc()
 
 
 def create_plotter_widget(file_path: Path) -> Optional[QWidget]:
-    """Create a scrollable plotter widget with statistics for embedding in other interfaces.
-
-    This is a simplified embeddable version used by other parts of the application.
+    """Create embeddable plotter widget (legacy support).
 
     Args:
         file_path: Path to the file to plot
 
     Returns:
-        QWidget containing the plotter interface, or None if creation fails
+        QWidget containing basic plotter, or None if creation fails
     """
+    # This function maintains backward compatibility
+    # For new code, use run() to launch the full enhanced plotter
     try:
-        path = Path(file_path)
-        if not path.exists():
-            return None
-
-        # Load the data
-        suffix = path.suffix.lower()
-        if suffix == ".parquet":
-            df = pd.read_parquet(path, engine="pyarrow")
-        elif suffix == ".asc":
-            df = load_and_process_asc_file(str(path))
-        elif suffix == ".csv":
-            df = load_and_process_csv_file(str(path))
-        elif suffix == ".tdms":
-            df = load_and_process_tdms_file(str(path))
-        else:
-            raise ValueError(f"Unsupported file format: {suffix}")
-
-        if df is None or df.empty:
-            raise ValueError("No data loaded from file")
-
-        # Create main widget
-        widget = QWidget()
-        main_layout = QHBoxLayout(widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-
-        # LEFT: Controls (Fixed)
-        left_panel = QWidget()
-        left_panel.setMaximumWidth(300)
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(12, 12, 12, 12)
-
-        title = QLabel(f"Plotter: {path.name}")
-        title.setStyleSheet("font-weight: bold; font-size: 14px;")
-        left_layout.addWidget(title)
-
-        # Column selector
-        columns_group = QGroupBox("Select Columns")
-        columns_layout = QVBoxLayout(columns_group)
-
-        column_list = QListWidget()
-        column_list.setSelectionMode(QAbstractItemView.MultiSelection)
-
-        numeric_cols = df.select_dtypes(include=['float64', 'int64', 'float32', 'int32']).columns
-        for col in numeric_cols:
-            item = QListWidgetItem(str(col))
-            column_list.addItem(item)
-            if len(numeric_cols) <= 5:  # Auto-select if 5 or fewer
-                item.setSelected(True)
-
-        columns_layout.addWidget(column_list)
-        left_layout.addWidget(columns_group)
-
-        # Update button
-        update_btn = QPushButton("Update Plot")
-        update_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1D4ED8;
-                color: white;
-                padding: 8px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #1E40AF;
-            }
-        """)
-        left_layout.addWidget(update_btn)
-
-        # Download button
-        download_btn = QPushButton("Download Plot")
-        download_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #059669;
-                color: white;
-                padding: 8px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #047857;
-            }
-        """)
-        left_layout.addWidget(download_btn)
-
-        left_layout.addStretch()
-
-        main_layout.addWidget(left_panel)
-
-        # RIGHT: Scrollable Plot and Statistics Area
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Create scroll area
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setFrameShape(QScrollArea.NoFrame)
-
-        # Create scrollable content widget
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
-        scroll_layout.setContentsMargins(12, 12, 12, 12)
-        scroll_layout.setSpacing(12)
-
-        # Plot area (Fixed height)
-        plot_container = QWidget()
-        plot_layout = QVBoxLayout(plot_container)
-        plot_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Matplotlib figure and canvas
-        figure = Figure(figsize=(10, 6), dpi=100)
-        canvas = FigureCanvas(figure)
-        toolbar = NavigationToolbar(canvas, widget)
-
-        plot_layout.addWidget(toolbar)
-        plot_layout.addWidget(canvas)
-
-        scroll_layout.addWidget(plot_container)
-
-        # Statistics area
-        stats_group = QGroupBox("Statistics")
-        stats_layout = QVBoxLayout(stats_group)
-
-        stats_table = QTableWidget()
-        stats_table.setColumnCount(5)
-        stats_table.setHorizontalHeaderLabels(["Column", "Max", "Mean", "Min", "Std"])
-        stats_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        stats_table.verticalHeader().setVisible(False)
-        stats_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        stats_table.setSelectionMode(QTableWidget.NoSelection)
-
-        stats_layout.addWidget(stats_table)
-        scroll_layout.addWidget(stats_group)
-
-        # Set scroll content and add to right panel
-        scroll_area.setWidget(scroll_content)
-        right_layout.addWidget(scroll_area)
-
-        main_layout.addWidget(right_panel)
-
-        # Store references in widget to prevent garbage collection
-        widget._df = df
-        widget._figure = figure
-        widget._canvas = canvas
-        widget._column_list = column_list
-        widget._stats_table = stats_table
-
-        # Plot update function
-        def update_plot():
-            try:
-                selected_items = column_list.selectedItems()
-                if not selected_items:
-                    return
-
-                selected_cols = [item.text() for item in selected_items]
-
-                # Main plot
-                figure.clear()
-                ax = figure.add_subplot(111)
-
-                for col in selected_cols:
-                    if col in df.columns:
-                        ax.plot(df.index, df[col], label=col, linewidth=1.5, alpha=0.8)
-
-                ax.set_xlabel("Index", fontsize=10)
-                ax.set_ylabel("Value", fontsize=10)
-                ax.set_title(f"Data Plot: {path.name}", fontsize=12, fontweight='bold')
-                ax.legend(loc='best', fontsize=9)
-                ax.grid(True, alpha=0.3, linestyle='--')
-
-                figure.tight_layout()
-                canvas.draw()
-
-                # Update statistics
-                stats_df = df[selected_cols].describe().T
-                stats_table.setRowCount(len(stats_df))
-                for i, (index, row) in enumerate(stats_df.iterrows()):
-                    stats_table.setItem(i, 0, QTableWidgetItem(str(index)))
-                    stats_table.setItem(i, 1, QTableWidgetItem(f"{row['max']:.4g}"))
-                    stats_table.setItem(i, 2, QTableWidgetItem(f"{row['mean']:.4g}"))
-                    stats_table.setItem(i, 3, QTableWidgetItem(f"{row['min']:.4g}"))
-                    stats_table.setItem(i, 4, QTableWidgetItem(f"{row['std']:.4g}"))
-
-            except Exception as e:
-                print(f"Error updating plot: {e}")
-
-        def download_plot():
-            """Download the current plot as an image."""
-            try:
-                file_path, _ = QFileDialog.getSaveFileName(
-                    widget, "Save Plot", f"{path.stem}_plot.png", "PNG (*.png);;PDF (*.pdf);;SVG (*.svg)"
-                )
-                if file_path:
-                    figure.savefig(file_path, dpi=300, bbox_inches="tight")
-            except Exception as e:
-                print(f"Error downloading plot: {e}")
-
-        update_btn.clicked.connect(update_plot)
-        download_btn.clicked.connect(download_plot)
-
-        # Initial plot
-        update_plot()
-
-        return widget
-
+        window = EnhancedPlotterWindow(file_path)
+        return window.centralWidget()
     except Exception as e:
         print(f"Error creating plotter widget: {e}")
-        import traceback
-        traceback.print_exc()
-
-        # Return error widget
-        error_widget = QWidget()
-        error_layout = QVBoxLayout(error_widget)
-        error_label = QLabel(f"Error loading plotter:\n{str(e)}")
-        error_label.setWordWrap(True)
-        error_label.setStyleSheet("color: red; padding: 20px;")
-        error_layout.addWidget(error_label)
-        return error_widget
+        return None
