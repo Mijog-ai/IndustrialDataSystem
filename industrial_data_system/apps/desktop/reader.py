@@ -137,17 +137,50 @@ class ReaderLoginPage(QWidget):
         email_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         form_layout.addWidget(email_label)
 
+        # Add the email input field with prefilled value
         self.email_input = QLineEdit()
-        self.email_input.setPlaceholderText("reader@example.com")
+        self.email_input.setText("mitgandhi1998@gmail.com")  # Prefilled email
+        self.email_input.setPlaceholderText("Enter your email")
+        self.email_input.setStyleSheet(f"""
+            QLineEdit {{
+                padding: 8px;
+                border: 1px solid {IndustrialTheme.TEXT_SECONDARY};
+                border-radius: 4px;
+                background-color: white;
+                color: {IndustrialTheme.TEXT_PRIMARY};
+            }}
+            QLineEdit:focus {{
+                border: 2px solid {IndustrialTheme.PRIMARY};
+            }}
+        """)
         form_layout.addWidget(self.email_input)
+
+
+
+        # self.email_input = QLineEdit()
+        # self.email_input.setPlaceholderText("reader@example.com")
+        # form_layout.addWidget(self.email_input)
 
         password_label = QLabel("Password")
         password_label.setStyleSheet(f"color: {IndustrialTheme.TEXT_SECONDARY}; font-weight: 500;")
         form_layout.addWidget(password_label)
 
         self.password_input = QLineEdit()
+        self.password_input.setText("1234")  # Prefilled password
         self.password_input.setPlaceholderText("Your password")
         self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setStyleSheet(f"""
+            QLineEdit {{
+                padding: 8px;
+                border: 1px solid {IndustrialTheme.TEXT_SECONDARY};
+                border-radius: 4px;
+                background-color: white;
+                color: {IndustrialTheme.TEXT_PRIMARY};
+            }}
+            QLineEdit:focus {{
+                border: 2px solid {IndustrialTheme.PRIMARY};
+            }}
+        """)
         form_layout.addWidget(self.password_input)
 
         code_label = QLabel("Security Code")
@@ -155,8 +188,21 @@ class ReaderLoginPage(QWidget):
         form_layout.addWidget(code_label)
 
         self.security_input = QLineEdit()
+        self.security_input.setText("1234")  # Prefilled security code
         self.security_input.setPlaceholderText("Enter security code")
         self.security_input.setEchoMode(QLineEdit.Password)
+        self.security_input.setStyleSheet(f"""
+            QLineEdit {{
+                padding: 8px;
+                border: 1px solid {IndustrialTheme.TEXT_SECONDARY};
+                border-radius: 4px;
+                background-color: white;
+                color: {IndustrialTheme.TEXT_PRIMARY};
+            }}
+            QLineEdit:focus {{
+                border: 2px solid {IndustrialTheme.PRIMARY};
+            }}
+        """)
         form_layout.addWidget(self.security_input)
 
         self.login_button = QPushButton("Sign In")
