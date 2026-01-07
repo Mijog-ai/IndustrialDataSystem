@@ -1591,6 +1591,22 @@ def create_anomaly_widget(file_path: Optional[Path] = None) -> Optional[QWidget]
         file_label.setStyleSheet("font-size: 11px; color: #6B7280; padding: 4px;")
         left_layout.addWidget(file_label)
 
+        # Load file button
+        load_file_btn = QPushButton("📁 Load Data File")
+        load_file_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #059669;
+                color: white;
+                padding: 8px;
+                border-radius: 4px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #047857;
+            }
+        """)
+        left_layout.addWidget(load_file_btn)
+
         # Data/Model selection group
         selection_group = QGroupBox("Configuration")
         selection_layout = QVBoxLayout(selection_group)
@@ -1685,22 +1701,6 @@ def create_anomaly_widget(file_path: Optional[Path] = None) -> Optional[QWidget]
 
         # Action buttons
         action_layout = QVBoxLayout()
-
-        # Load file button
-        load_file_btn = QPushButton("📁 Load Data File")
-        load_file_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #059669;
-                color: white;
-                padding: 8px;
-                border-radius: 4px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: #047857;
-            }
-        """)
-        action_layout.addWidget(load_file_btn)
 
         export_anomalies_btn = QPushButton("Export Anomalies")
         export_anomalies_btn.setStyleSheet("""
