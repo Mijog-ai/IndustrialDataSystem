@@ -844,7 +844,9 @@ class AnomalyDetectorWindow(QMainWindow):
                 "Please ensure training data has been uploaded for this test type.",
             )
 
+
     def _load_compare_model(self, version: int) -> None:
+
         """Load a model for comparison."""
         try:
             model_path, scaler_path, metadata_path = self._get_version_paths(version)
