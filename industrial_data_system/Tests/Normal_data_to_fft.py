@@ -594,7 +594,7 @@ def main_asc_fft_test(asc_file_path: str):
 
 if __name__ == "__main__":
     # Replace with your actual ASC file path
-    asc_file_path = "Data/V24-2025__0011_2.ASC"
+    asc_file_path = "Data/V24-2025__0021.ASC"
 
     # Run the complete FFT analysis
     df, data, freqs, fft_features, feature_matrix = main_asc_fft_test(asc_file_path)

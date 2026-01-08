@@ -402,6 +402,38 @@ class DatabaseManager:
             return []
         return [self._row_to_model_registry(row) for row in rows]
 
+    def get_all_models(self) -> List[Dict[str, Any]]:
+        """Get all trained models from the registry.
+
+        Returns list of model records with all metadata.
+        """
+        rows = self._execute(
+            """
+            SELECT * FROM model_registry
+            ORDER BY trained_at DESC
+            """,
+            fetchall=True,
+        )
+        if rows is None:
+            return []
+        
+        models = []
+        for row in rows:
+            record = self._row_to_model_registry(row)
+            models.append({
+                'model_id': record.id,
+                'model_name': f"{record.pump_series}_{record.test_type}_{record.file_type}_v{record.version}",
+                'model_type': 'autoencoder',
+                'created_at': record.trained_at,
+                'model_path': record.model_path,
+                'pump_series': record.pump_series,
+                'test_type': record.test_type,
+                'file_type': record.file_type,
+                'version': record.version,
+                'metrics': record.metrics,
+            })
+        return models
+
     def record_model_version(
         self,
         *,
