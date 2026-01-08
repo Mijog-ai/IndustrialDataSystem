@@ -1,6 +1,6 @@
 """AI models, analysis routines, and training utilities."""
 
-from industrial_data_system.ai.toolkit import (
+from industrial_data_system.Integrations.toolkit import (
     run_ai_data_study,
     run_anomaly_detector,
     run_anomaly_detector_standalone,

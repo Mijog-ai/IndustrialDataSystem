@@ -37,7 +37,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from industrial_data_system.ai.toolkit import (  # run_ai_data_study,; run_training_simulation,
+from industrial_data_system.Integrations.toolkit import (  # run_ai_data_study,; run_training_simulation,
     run_anomaly_detector_standalone,
     create_plotter_widget
 )
@@ -590,7 +590,7 @@ class ReaderDashboard(QWidget):
         # Handle Plotter - create widget
         if title == "Plotter" and path:
             try:
-                from industrial_data_system.ai.visualization.plotter import create_plotter_widget
+                from industrial_data_system.Integrations.visualization.plotter import create_plotter_widget
                 plotter_widget = create_plotter_widget(path)
                 if plotter_widget:
                     self.open_tool_in_tab.emit(f"Plotter - {path.name}", plotter_widget)
@@ -604,7 +604,7 @@ class ReaderDashboard(QWidget):
         # Handle Anomaly Detector - create widget
         if title == "Anomaly Detector":
             try:
-                from industrial_data_system.ai.anomaly_detection.anomaly_detector import create_anomaly_widget
+                from industrial_data_system.Integrations.anomaly_detection.anomaly_detector import create_anomaly_widget
                 anomaly_widget = create_anomaly_widget(path)  # path can be None for standalone
                 if anomaly_widget:
                     tab_title = f"Anomaly Detector - {path.name}" if path else "Anomaly Detector"

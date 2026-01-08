@@ -912,6 +912,7 @@ class AnomalyPredictionPlotterWindow(QMainWindow):
             pass
         super().closeEvent(event)
 
+    
 
 # Global list to track open plotter windows
 _open_windows: List[AnomalyPredictionPlotterWindow] = []
@@ -941,3 +942,4 @@ def run(
     window.raise_()
     window.activateWindow()
     _open_windows.append(window)
+

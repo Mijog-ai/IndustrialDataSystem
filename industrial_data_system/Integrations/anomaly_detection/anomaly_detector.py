@@ -43,7 +43,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-# from industrial_data_system.ai.anomaly_detection import anomaly_prediction_plotter
+# from industrial_data_system.Integrations.anomaly_detection import anomaly_prediction_plotter
 from industrial_data_system.core.config import get_config
 from industrial_data_system.core.db_manager import DatabaseManager, ModelRegistryRecord
 from industrial_data_system.utils.asc_utils import (
