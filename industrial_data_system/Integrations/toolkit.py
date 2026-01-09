@@ -7,6 +7,7 @@ from industrial_data_system.Integrations.anomaly_detection.anomaly_detector impo
 from industrial_data_system.Integrations.training.simulator import run as run_training_simulation
 from industrial_data_system.Integrations.visualization.plotter import run as run_plotter
 from industrial_data_system.Integrations.visualization.plotter import create_plotter_widget
+from industrial_data_system.Integrations.Test_APP.TestApp import run_test_app
 
 __all__ = [
     "run_ai_data_study",
@@ -15,5 +16,6 @@ __all__ = [
     "run_anomaly_detector",
     "run_anomaly_detector_standalone",
     "create_plotter_widget",
-    "create_anomaly_widget"
+    "create_anomaly_widget",
+    "run_test_app"
 ]
