@@ -31,7 +31,7 @@ pip-delete-this-directory.txt
 *.spec.bak
 
 # Virtual Environments
-.env
+../.env
 .venv
 env/
 venv/
@@ -115,7 +115,7 @@ logs/
 *.log.*
 
 # Environment variables (IMPORTANT: Keep this ignored for security)
-.env
+../.env
 .env.local
 .env.*.local
 .env.production

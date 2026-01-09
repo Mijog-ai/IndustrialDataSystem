@@ -442,6 +442,7 @@ class ReaderDashboard(QWidget):
         self.test_app = QPushButton("TestApp")
         self.test_app.setProperty("secondary", True)
         self.test_app.clicked.connect(lambda: self._launch_tool("Test App", run_test_app, False))
+        tools_layout.addWidget(self.test_app)
 
         tools_layout.addStretch()
 
@@ -621,6 +622,18 @@ class ReaderDashboard(QWidget):
                 QMessageBox.critical(self, "Anomaly Detector Error", f"Failed to create anomaly detector: {exc}")
                 return
 
+        if title == "Test App":
+            try:
+                from industrial_data_system.Integrations.Test_APP import run_test_app
+                Test_app = run_test_app()
+                if Test_app:
+                    self.open_tool_in_tab.emit("Test App", Test_app)
+                return
+            except Exception as exc:
+                import traceback
+                traceback.print_exc()
+                QMessageBox.critical(self, "Test App Error", f"Failed to create anomaly detector: {exc}")
+                return
         # For any other tools that return text output
         try:
             if requires_resource:
@@ -862,69 +875,83 @@ class ReaderApp(QMainWindow):
         self.stack.setCurrentWidget(self.dashboard)
 
     def handle_login(self, email: str, password: str, security_code: str) -> None:
-        if not email or not password or not security_code:
-            self.login_page.show_error("Email, password, and security code are required.")
-            return
-
         try:
-            expected_code = get_reader_security_code()
-            if security_code != expected_code:
-                self.login_page.show_error("Invalid security code.")
+            if not email or not password or not security_code:
+                self.login_page.show_error("Email, password, and security code are required.")
                 return
-        except RuntimeError as exc:
-            self.login_page.show_error(f"Configuration error: {exc}")
-            return
 
-        # CHECK FOR ACCOUNT LOCKOUT FIRST
-        failed_count = self.db_manager.get_failed_login_count(email, minutes=15)
-        if failed_count >= 5:
-            self.login_page.show_error(
-                "Account temporarily locked due to multiple failed login attempts. "
-                "Please try again in 15 minutes."
-            )
-            return
+            try:
+                expected_code = get_reader_security_code()
+                if security_code != expected_code:
+                    self.login_page.show_error("Invalid security code.")
+                    return
+            except RuntimeError as exc:
+                self.login_page.show_error(f"Configuration error: {exc}")
+                return
 
-        user = self.auth_store.authenticate(email, password)
-        if not user:
-            # Log failed login
-            self.db_manager.log_security_event(
-                user_id=None,
-                event_type="LOGIN_FAILED",
-                description=f"Failed login attempt for email: {email}",
-                success=False,
-            )
-            remaining_attempts = 5 - failed_count - 1
-            if remaining_attempts > 0:
+            # CHECK FOR ACCOUNT LOCKOUT FIRST
+            failed_count = self.db_manager.get_failed_login_count(email, minutes=15)
+            if failed_count >= 5:
                 self.login_page.show_error(
-                    f"Invalid email or password. {remaining_attempts} attempts remaining."
+                    "Account temporarily locked due to multiple failed login attempts. "
+                    "Please try again in 15 minutes."
                 )
-            else:
-                self.login_page.show_error(
-                    "Invalid email or password. Account will be locked after next failed attempt."
+                return
+
+            user = self.auth_store.authenticate(email, password)
+            if not user:
+                # Log failed login
+                try:
+                    self.db_manager.log_security_event(
+                        user_id=None,
+                        event_type="LOGIN_FAILED",
+                        description=f"Failed login attempt for email: {email}",
+                        success=False,
+                    )
+                except Exception as e:
+                    print(f"Warning: Failed to log security event: {e}")
+                
+                remaining_attempts = 5 - failed_count - 1
+                if remaining_attempts > 0:
+                    self.login_page.show_error(
+                        f"Invalid email or password. {remaining_attempts} attempts remaining."
+                    )
+                else:
+                    self.login_page.show_error(
+                        "Invalid email or password. Account will be locked after next failed attempt."
+                    )
+                return
+
+            # Log successful login
+            try:
+                self.db_manager.log_security_event(
+                    user_id=user.id,
+                    event_type="LOGIN_SUCCESS",
+                    description=f"Successful login for user: {email}",
+                    success=True,
                 )
-            return
+            except Exception as e:
+                print(f"Warning: Failed to log security event: {e}")
 
-        # Log successful login
-        self.db_manager.log_security_event(
-            user_id=user.id,
-            event_type="LOGIN_SUCCESS",
-            description=f"Successful login for user: {email}",
-            success=True,
-        )
+            self.session_manager.create_session(user.id)
+            self.current_user = user
 
-        self.session_manager.create_session(user.id)
-        self.current_user = user
+            role = user.metadata.get("role")
+            if role and role != "reader":
+                self.login_page.show_error("This account does not have reader access.")
+                return
 
-        role = user.metadata.get("role")
-        if role and role != "reader":
-            self.login_page.show_error("This account does not have reader access.")
-            return
+            self.login_page.show_error("")
+            self.current_user = user
+            display_name = user.metadata.get("display_name") or user.display_name()
+            self.dashboard.set_user_identity(display_name, user.email)
+            self.show_dashboard()
+        except Exception as e:
+            # Catch any unexpected errors to prevent app crash
+            error_msg = f"Login error: {str(e)}"
+            print(error_msg)
+            self.login_page.show_error("An unexpected error occurred. Please try again.")
 
-        self.login_page.show_error("")
-        self.current_user = user
-        display_name = user.metadata.get("display_name") or user.display_name()
-        self.dashboard.set_user_identity(display_name, user.email)
-        self.show_dashboard()
         self.refresh_resources()
 
     def open_signup_dialog(self) -> None:

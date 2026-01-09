@@ -1759,7 +1759,7 @@ class IndustrialDataApp(QMainWindow):
 
         default_email = os.getenv("IDS_GATEWAY_USER_EMAIL") or "gateway@local"
         default_username = os.getenv("IDS_GATEWAY_USERNAME") or "gateway"
-        default_password = os.getenv("IDS_GATEWAY_PASSWORD") or "gateway"
+        default_password = os.getenv("IDS_GATEWAY_PASSWORD") or "Gateway1"
         default_display_name = os.getenv("IDS_GATEWAY_DISPLAY_NAME") or "Gateway Access"
 
         record = self.db_manager.get_user_by_email(default_email)
@@ -2373,7 +2373,7 @@ def main() -> None:
     app.setStyleSheet(IndustrialTheme.get_stylesheet())
 
     # Set application-wide font
-    # app.setFont(QFont("Segoe UI", 10))
+    app.setFont(QFont("Segoe UI", 10))
 
     window = IndustrialDataApp()
     window.show()

@@ -221,8 +221,10 @@ def convert_asc_to_parquet(
         logger.warning("This should not happen - column renaming failed!")
         raise ValueError(f"Duplicate columns detected: {duplicates}")
 
+    columns_to_keep = ['Messzeit[s]', 'Pressure [bar]', 'Flow [L/min]', 'Leak [L/min]', 'Torque [Nm]']
+    df_filtered = df[columns_to_keep]
     # Convert to Parquet with compression
-    df.to_parquet(
+    df_filtered.to_parquet(
         parquet_path,
         engine='pyarrow',
         compression='snappy',
@@ -233,11 +235,11 @@ def convert_asc_to_parquet(
     verify_df = pd.read_parquet(parquet_path)
     logger.info(f"Verification - Parquet shape: {verify_df.shape}")
 
-    if df.shape != verify_df.shape:
+    if df_filtered.shape != verify_df.shape:
         logger.error(f"SHAPE MISMATCH! ASC: {df.shape}, Parquet: {verify_df.shape}")
         raise ValueError(
             f"Column count mismatch after conversion! "
-            f"Original: {df.shape[1]}, Parquet: {verify_df.shape[1]}"
+            f"Original: {df_filtered.shape[1]}, Parquet: {verify_df.shape[1]}"
         )
 
     # Optionally delete the ASC file to save space
@@ -249,8 +251,8 @@ def convert_asc_to_parquet(
             logger.warning(f"Could not delete ASC file: {e}")
 
     logger.info(f"✓ Successfully converted {asc_path.name} to {parquet_path.name}")
-    logger.info(f"✓ Final shape: {df.shape}")
-    logger.info(f"✓ Column count: {len(original_columns)} → {df.shape[1]} (removed {len(columns_to_remove)})")
+    logger.info(f"✓ Final shape: {df_filtered.shape}")
+    logger.info(f"✓ Column count: {len(original_columns)} → {df_filtered.shape[1]} (removed {len(columns_to_remove)})")
 
     return parquet_path
 
