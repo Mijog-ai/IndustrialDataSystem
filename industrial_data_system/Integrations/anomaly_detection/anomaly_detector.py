@@ -43,7 +43,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-# from industrial_data_system.Integrations.anomaly_detection import anomaly_prediction_plotter
 from industrial_data_system.core.config import get_config
 from industrial_data_system.core.db_manager import DatabaseManager, ModelRegistryRecord
 from industrial_data_system.utils.asc_utils import (
@@ -179,308 +178,308 @@ class AnomalyDetectorWindow(QMainWindow):
             """
         )
 
-        # # ========== LEFT PANEL: Controls ==========
-        # left_panel = QWidget()
-        # left_panel.setMinimumWidth(300)
-        # left_panel.setMaximumWidth(600)  # Increased max width, but still constrained
-        # left_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        # left_layout = QVBoxLayout(left_panel)
-        # left_layout.setContentsMargins(0, 0, 8, 0)
-        # left_layout.setSpacing(0)
-        #
-        # # Header
-        # header = QLabel("Anomaly Detector")
-        # header.setStyleSheet("font-size: 20px; font-weight: 600; color: #DC2626; margin-bottom: 12px;")
-        # left_layout.addWidget(header)
-        #
-        # # Create vertical splitter for resizable group boxes
-        # left_splitter = QSplitter(Qt.Vertical)
-        # left_splitter.setHandleWidth(6)
-        # left_splitter.setStyleSheet(
-        #     """
-        #     QSplitter::handle {
-        #         background: #E5E7EB;
-        #         margin: 2px 0px;
-        #     }
-        #     QSplitter::handle:hover {
-        #         background: #DC2626;
-        #     }
-        #     """
-        # )
-        # left_layout.addWidget(left_splitter)
-        #
-        # # Data selection group (for standalone mode)
-        # self.data_selection_group = QGroupBox("Data Selection")
-        # data_selection_layout = QVBoxLayout(self.data_selection_group)
-        #
-        # # Pump series selection
-        # pump_layout = QHBoxLayout()
-        # pump_layout.addWidget(QLabel("Pump Series:"))
-        # self.pump_series_combo = QComboBox()
-        # self.pump_series_combo.setMinimumWidth(150)
-        # self.pump_series_combo.currentIndexChanged.connect(self._on_pump_series_changed)
-        # pump_layout.addWidget(self.pump_series_combo)
-        # pump_layout.addStretch()
-        # data_selection_layout.addLayout(pump_layout)
-        #
-        # # Test type selection
-        # test_layout = QHBoxLayout()
-        # test_layout.addWidget(QLabel("Test Type:"))
-        # self.test_type_combo = QComboBox()
-        # self.test_type_combo.setMinimumWidth(150)
-        # self.test_type_combo.currentIndexChanged.connect(self._on_test_type_changed)
-        # test_layout.addWidget(self.test_type_combo)
-        # test_layout.addStretch()
-        # data_selection_layout.addLayout(test_layout)
-        #
-        # left_splitter.addWidget(self.data_selection_group)
-        #
-        # # Model info group
-        # model_group = QGroupBox("Model Information")
-        # model_layout = QVBoxLayout(model_group)
-        #
-        # # Version selection
-        # version_layout = QHBoxLayout()
-        # version_layout.addWidget(QLabel("Model Version:"))
-        # self.version_combo = QComboBox()
-        # self.version_combo.setMinimumWidth(150)
-        # self.version_combo.currentIndexChanged.connect(self._on_version_changed)
-        # version_layout.addWidget(self.version_combo)
-        # version_layout.addStretch()
-        # model_layout.addLayout(version_layout)
-        #
-        # left_splitter.addWidget(model_group)
-        #
-        # # Comparison mode group
-        # compare_group = QGroupBox("Model Comparison")
-        # compare_layout = QVBoxLayout(compare_group)
-        #
-        # self.compare_checkbox = QCheckBox("Enable Comparison Mode")
-        # self.compare_checkbox.stateChanged.connect(self._on_comparison_toggled)
-        # compare_layout.addWidget(self.compare_checkbox)
-        #
-        # compare_version_layout = QHBoxLayout()
-        # compare_version_layout.addWidget(QLabel("Compare with:"))
-        # self.compare_version_combo = QComboBox()
-        # self.compare_version_combo.setMinimumWidth(150)
-        # self.compare_version_combo.setEnabled(False)
-        # self.compare_version_combo.currentIndexChanged.connect(self._on_compare_version_changed)
-        # compare_version_layout.addWidget(self.compare_version_combo)
-        # compare_version_layout.addStretch()
-        # compare_layout.addLayout(compare_version_layout)
-        #
-        # left_splitter.addWidget(compare_group)
-        #
-        # # Detection settings group
-        # settings_group = QGroupBox("Detection Settings")
-        # settings_layout = QGridLayout(settings_group)
-        #
-        # settings_layout.addWidget(QLabel("Threshold Method:"), 0, 0)
-        # self.threshold_method = QListWidget()
-        # self.threshold_method.addItems(
-        #     ["Mean + 2×Std", "Mean + 3×Std", "95th Percentile", "99th Percentile", "Custom Value"]
-        # )
-        # self.threshold_method.setCurrentRow(1)  # Default: Mean + 3×Std
-        # self.threshold_method.setMaximumHeight(120)
-        # self.threshold_method.currentRowChanged.connect(self._on_threshold_method_changed)
-        # settings_layout.addWidget(self.threshold_method, 1, 0, 1, 2)
-        #
-        # settings_layout.addWidget(QLabel("Custom Threshold:"), 2, 0)
-        # self.custom_threshold = QDoubleSpinBox()
-        # self.custom_threshold.setDecimals(6)
-        # self.custom_threshold.setRange(0.0, 1000.0)
-        # self.custom_threshold.setValue(0.1)
-        # self.custom_threshold.setEnabled(False)
-        # settings_layout.addWidget(self.custom_threshold, 2, 1)
-        #
-        # detect_btn = QPushButton("Detect Anomalies")
-        # detect_btn.setProperty("primary", True)
-        # detect_btn.clicked.connect(self._detect_anomalies)
-        # settings_layout.addWidget(detect_btn, 3, 0, 1, 2)
-        #
-        # left_splitter.addWidget(settings_group)
-        #
-        # # Statistics group
-        # stats_group = QGroupBox("Detection Results")
-        # stats_layout = QVBoxLayout(stats_group)
-        #
-        # self.stats_table = QTableWidget()
-        # self.stats_table.setRowCount(6)
-        # self.stats_table.setColumnCount(2)
-        # self.stats_table.setHorizontalHeaderLabels(["Metric", "Value"])
-        # self.stats_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        # self.stats_table.verticalHeader().setVisible(False)
-        # self.stats_table.setMaximumHeight(220)
-        # self.stats_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        # self.stats_table.setSelectionMode(QTableWidget.NoSelection)
-        # stats_layout.addWidget(self.stats_table)
-        #
-        # left_splitter.addWidget(stats_group)
-        #
-        # # Export buttons container
-        # export_container = QWidget()
-        # export_layout = QVBoxLayout(export_container)
-        # export_layout.setContentsMargins(0, 0, 0, 0)
-        # export_layout.setSpacing(8)
-        #
-        # export_anomalies_btn = QPushButton("Export Anomalies")
-        # export_anomalies_btn.setProperty("secondary", True)
-        # export_anomalies_btn.clicked.connect(self._export_anomalies)
-        # export_layout.addWidget(export_anomalies_btn)
-        #
-        # export_plot_btn = QPushButton("Export Plot")
-        # export_plot_btn.setProperty("secondary", True)
-        # export_plot_btn.clicked.connect(self._export_plot)
-        # export_layout.addWidget(export_plot_btn)
-        #
-        # decode_predict_btn = QPushButton("Decode & Predict")
-        # decode_predict_btn.setProperty("primary", True)
-        # decode_predict_btn.clicked.connect(self._decode_and_predict)
-        # export_layout.addWidget(decode_predict_btn)
-        #
-        # close_btn = QPushButton("Close")
-        # close_btn.setProperty("secondary", True)
-        # close_btn.clicked.connect(self.close)
-        # export_layout.addWidget(close_btn)
-        #
-        # export_layout.addStretch()
-        #
-        # left_splitter.addWidget(export_container)
-        #
-        # # Configure splitter stretch factors
-        # # Make stats and export container take minimal space by default
-        # left_splitter.setStretchFactor(0, 1)  # Data Selection
-        # left_splitter.setStretchFactor(1, 0)  # Model Information
-        # left_splitter.setStretchFactor(2, 0)  # Model Comparison
-        # left_splitter.setStretchFactor(3, 1)  # Detection Settings
-        # left_splitter.setStretchFactor(4, 2)  # Detection Results
-        # left_splitter.setStretchFactor(5, 0)  # Export buttons
-        #
-        # # Set collapsible behavior for all sections
-        # for i in range(left_splitter.count()):
-        #     left_splitter.setCollapsible(i, False)
-        #
-        # # ========== RIGHT PANEL: Plots ==========
-        # right_panel = QWidget()
-        # right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        # right_layout = QVBoxLayout(right_panel)
-        # right_layout.setContentsMargins(0, 0, 0, 0)
-        # right_layout.setSpacing(12)
-        #
-        # # Status label
-        # self.status_label = QLabel("Loading model...")
-        # self.status_label.setStyleSheet(
-        #     "color: #0F172A; font-weight: 500; padding: 8px; "
-        #     "background: #FEF3C7; border-radius: 6px;"
-        # )
-        # self.status_label.setAlignment(Qt.AlignCenter)
-        # right_layout.addWidget(self.status_label)
-        #
-        # # Matplotlib figure with dynamic DPI based on device pixel ratio
-        # # Get device pixel ratio for proper scaling across different screen sizes
-        # pixel_ratio = QApplication.instance().devicePixelRatio() if QApplication.instance() else 1.0
-        # dpi = int(100 * pixel_ratio)
-        # self.figure = Figure(figsize=(12, 10), dpi=dpi)
-        # self.figure.patch.set_facecolor("#FFFFFF")
-        # self.canvas = FigureCanvas(self.figure)
-        # self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        #
-        # self.toolbar = NavigationToolbar(self.canvas, self)
-        # self.toolbar.setStyleSheet("background: #F9FAFB; border: none; padding: 4px;")
-        #
-        # right_layout.addWidget(self.toolbar)
-        # right_layout.addWidget(self.canvas)
-        #
-        # # Add panels to splitter
-        # self.main_splitter.addWidget(left_panel)
-        # self.main_splitter.addWidget(right_panel)
-        #
-        # # Set initial splitter sizes (25% left, 75% right)
-        # # Using proportional sizes that adapt to window size
-        # self.main_splitter.setStretchFactor(0, 1)  # Left panel
-        # self.main_splitter.setStretchFactor(1, 3)  # Right panel gets more space
-        #
-        # # Set collapsible behavior
-        # self.main_splitter.setCollapsible(0, False)
-        # self.main_splitter.setCollapsible(1, False)
-        #
-        # # Add splitter to main layout
-        # main_layout.addWidget(self.main_splitter)
-        #
-        # # Apply styles
-        # self.setStyleSheet(
-        #     """
-        #     QMainWindow#anomaly-detector-window {
-        #         background: #FFFFFF;
-        #     }
-        #     QWidget {
-        #         background: #FFFFFF;
-        #         color: #0F172A;
-        #     }
-        #     QGroupBox {
-        #         font-weight: 600;
-        #         border: 2px solid #FCA5A5;
-        #         border-radius: 8px;
-        #         margin-top: 12px;
-        #         padding-top: 8px;
-        #     }
-        #     QGroupBox::title {
-        #         subcontrol-origin: margin;
-        #         left: 10px;
-        #         padding: 0 5px;
-        #     }
-        #     QListWidget {
-        #         border: 1px solid #D1D5DB;
-        #         border-radius: 6px;
-        #         padding: 4px;
-        #         background: #F9FAFB;
-        #     }
-        #     QListWidget::item:selected {
-        #         background: #FEE2E2;
-        #         color: #991B1B;
-        #     }
-        #     QListWidget::item:hover {
-        #         background: #FEF2F2;
-        #     }
-        #     QTableWidget {
-        #         background: #F9FAFB;
-        #         border: 1px solid #E5E7EB;
-        #         border-radius: 4px;
-        #     }
-        #     QComboBox {
-        #         border: 1px solid #D1D5DB;
-        #         border-radius: 4px;
-        #         padding: 4px 8px;
-        #         background: #F9FAFB;
-        #         min-height: 24px;
-        #     }
-        #     QComboBox:hover {
-        #         border-color: #DC2626;
-        #     }
-        #     QComboBox::drop-down {
-        #         border: none;
-        #         padding-right: 8px;
-        #     }
-        #     QCheckBox {
-        #         spacing: 8px;
-        #     }
-        #     QCheckBox::indicator {
-        #         width: 18px;
-        #         height: 18px;
-        #         border: 2px solid #D1D5DB;
-        #         border-radius: 4px;
-        #         background: #FFFFFF;
-        #     }
-        #     QCheckBox::indicator:checked {
-        #         background: #DC2626;
-        #         border-color: #DC2626;
-        #     }
-        #     QCheckBox::indicator:hover {
-        #         border-color: #DC2626;
-        #     }
-        #     """
-        #     + self.BUTTON_STYLES
-        # )
+        # ========== LEFT PANEL: Controls ==========
+        left_panel = QWidget()
+        left_panel.setMinimumWidth(300)
+        left_panel.setMaximumWidth(600)  # Increased max width, but still constrained
+        left_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 8, 0)
+        left_layout.setSpacing(0)
+
+        # Header
+        header = QLabel("Anomaly Detector")
+        header.setStyleSheet("font-size: 20px; font-weight: 600; color: #DC2626; margin-bottom: 12px;")
+        left_layout.addWidget(header)
+
+        # Create vertical splitter for resizable group boxes
+        left_splitter = QSplitter(Qt.Vertical)
+        left_splitter.setHandleWidth(6)
+        left_splitter.setStyleSheet(
+            """
+            QSplitter::handle {
+                background: #E5E7EB;
+                margin: 2px 0px;
+            }
+            QSplitter::handle:hover {
+                background: #DC2626;
+            }
+            """
+        )
+        left_layout.addWidget(left_splitter)
+
+        # Data selection group (for standalone mode)
+        self.data_selection_group = QGroupBox("Data Selection")
+        data_selection_layout = QVBoxLayout(self.data_selection_group)
+
+        # Pump series selection
+        pump_layout = QHBoxLayout()
+        pump_layout.addWidget(QLabel("Pump Series:"))
+        self.pump_series_combo = QComboBox()
+        self.pump_series_combo.setMinimumWidth(150)
+        self.pump_series_combo.currentIndexChanged.connect(self._on_pump_series_changed)
+        pump_layout.addWidget(self.pump_series_combo)
+        pump_layout.addStretch()
+        data_selection_layout.addLayout(pump_layout)
+
+        # Test type selection
+        test_layout = QHBoxLayout()
+        test_layout.addWidget(QLabel("Test Type:"))
+        self.test_type_combo = QComboBox()
+        self.test_type_combo.setMinimumWidth(150)
+        self.test_type_combo.currentIndexChanged.connect(self._on_test_type_changed)
+        test_layout.addWidget(self.test_type_combo)
+        test_layout.addStretch()
+        data_selection_layout.addLayout(test_layout)
+
+        left_splitter.addWidget(self.data_selection_group)
+
+        # Model info group
+        model_group = QGroupBox("Model Information")
+        model_layout = QVBoxLayout(model_group)
+
+        # Version selection
+        version_layout = QHBoxLayout()
+        version_layout.addWidget(QLabel("Model Version:"))
+        self.version_combo = QComboBox()
+        self.version_combo.setMinimumWidth(150)
+        self.version_combo.currentIndexChanged.connect(self._on_version_changed)
+        version_layout.addWidget(self.version_combo)
+        version_layout.addStretch()
+        model_layout.addLayout(version_layout)
+
+        left_splitter.addWidget(model_group)
+
+        # Comparison mode group
+        compare_group = QGroupBox("Model Comparison")
+        compare_layout = QVBoxLayout(compare_group)
+
+        self.compare_checkbox = QCheckBox("Enable Comparison Mode")
+        self.compare_checkbox.stateChanged.connect(self._on_comparison_toggled)
+        compare_layout.addWidget(self.compare_checkbox)
+
+        compare_version_layout = QHBoxLayout()
+        compare_version_layout.addWidget(QLabel("Compare with:"))
+        self.compare_version_combo = QComboBox()
+        self.compare_version_combo.setMinimumWidth(150)
+        self.compare_version_combo.setEnabled(False)
+        self.compare_version_combo.currentIndexChanged.connect(self._on_compare_version_changed)
+        compare_version_layout.addWidget(self.compare_version_combo)
+        compare_version_layout.addStretch()
+        compare_layout.addLayout(compare_version_layout)
+
+        left_splitter.addWidget(compare_group)
+
+        # Detection settings group
+        settings_group = QGroupBox("Detection Settings")
+        settings_layout = QGridLayout(settings_group)
+
+        settings_layout.addWidget(QLabel("Threshold Method:"), 0, 0)
+        self.threshold_method = QListWidget()
+        self.threshold_method.addItems(
+            ["Mean + 2×Std", "Mean + 3×Std", "95th Percentile", "99th Percentile", "Custom Value"]
+        )
+        self.threshold_method.setCurrentRow(1)  # Default: Mean + 3×Std
+        self.threshold_method.setMaximumHeight(120)
+        self.threshold_method.currentRowChanged.connect(self._on_threshold_method_changed)
+        settings_layout.addWidget(self.threshold_method, 1, 0, 1, 2)
+
+        settings_layout.addWidget(QLabel("Custom Threshold:"), 2, 0)
+        self.custom_threshold = QDoubleSpinBox()
+        self.custom_threshold.setDecimals(6)
+        self.custom_threshold.setRange(0.0, 1000.0)
+        self.custom_threshold.setValue(0.1)
+        self.custom_threshold.setEnabled(False)
+        settings_layout.addWidget(self.custom_threshold, 2, 1)
+
+        detect_btn = QPushButton("Detect Anomalies")
+        detect_btn.setProperty("primary", True)
+        detect_btn.clicked.connect(self._detect_anomalies)
+        settings_layout.addWidget(detect_btn, 3, 0, 1, 2)
+
+        left_splitter.addWidget(settings_group)
+
+        # Statistics group
+        stats_group = QGroupBox("Detection Results")
+        stats_layout = QVBoxLayout(stats_group)
+
+        self.stats_table = QTableWidget()
+        self.stats_table.setRowCount(6)
+        self.stats_table.setColumnCount(2)
+        self.stats_table.setHorizontalHeaderLabels(["Metric", "Value"])
+        self.stats_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.stats_table.verticalHeader().setVisible(False)
+        self.stats_table.setMaximumHeight(220)
+        self.stats_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.stats_table.setSelectionMode(QTableWidget.NoSelection)
+        stats_layout.addWidget(self.stats_table)
+
+        left_splitter.addWidget(stats_group)
+
+        # Export buttons container
+        export_container = QWidget()
+        export_layout = QVBoxLayout(export_container)
+        export_layout.setContentsMargins(0, 0, 0, 0)
+        export_layout.setSpacing(8)
+
+        export_anomalies_btn = QPushButton("Export Anomalies")
+        export_anomalies_btn.setProperty("secondary", True)
+        export_anomalies_btn.clicked.connect(self._export_anomalies)
+        export_layout.addWidget(export_anomalies_btn)
+
+        export_plot_btn = QPushButton("Export Plot")
+        export_plot_btn.setProperty("secondary", True)
+        export_plot_btn.clicked.connect(self._export_plot)
+        export_layout.addWidget(export_plot_btn)
+
+        decode_predict_btn = QPushButton("Decode & Predict")
+        decode_predict_btn.setProperty("primary", True)
+        decode_predict_btn.clicked.connect(self._decode_and_predict)
+        export_layout.addWidget(decode_predict_btn)
+
+        close_btn = QPushButton("Close")
+        close_btn.setProperty("secondary", True)
+        close_btn.clicked.connect(self.close)
+        export_layout.addWidget(close_btn)
+
+        export_layout.addStretch()
+
+        left_splitter.addWidget(export_container)
+
+        # Configure splitter stretch factors
+        # Make stats and export container take minimal space by default
+        left_splitter.setStretchFactor(0, 1)  # Data Selection
+        left_splitter.setStretchFactor(1, 0)  # Model Information
+        left_splitter.setStretchFactor(2, 0)  # Model Comparison
+        left_splitter.setStretchFactor(3, 1)  # Detection Settings
+        left_splitter.setStretchFactor(4, 2)  # Detection Results
+        left_splitter.setStretchFactor(5, 0)  # Export buttons
+
+        # Set collapsible behavior for all sections
+        for i in range(left_splitter.count()):
+            left_splitter.setCollapsible(i, False)
+
+        # ========== RIGHT PANEL: Plots ==========
+        right_panel = QWidget()
+        right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(12)
+
+        # Status label
+        self.status_label = QLabel("Loading model...")
+        self.status_label.setStyleSheet(
+            "color: #0F172A; font-weight: 500; padding: 8px; "
+            "background: #FEF3C7; border-radius: 6px;"
+        )
+        self.status_label.setAlignment(Qt.AlignCenter)
+        right_layout.addWidget(self.status_label)
+
+        # Matplotlib figure with dynamic DPI based on device pixel ratio
+        # Get device pixel ratio for proper scaling across different screen sizes
+        pixel_ratio = QApplication.instance().devicePixelRatio() if QApplication.instance() else 1.0
+        dpi = int(100 * pixel_ratio)
+        self.figure = Figure(figsize=(12, 10), dpi=dpi)
+        self.figure.patch.set_facecolor("#FFFFFF")
+        self.canvas = FigureCanvas(self.figure)
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        self.toolbar.setStyleSheet("background: #F9FAFB; border: none; padding: 4px;")
+
+        right_layout.addWidget(self.toolbar)
+        right_layout.addWidget(self.canvas)
+
+        # Add panels to splitter
+        self.main_splitter.addWidget(left_panel)
+        self.main_splitter.addWidget(right_panel)
+
+        # Set initial splitter sizes (25% left, 75% right)
+        # Using proportional sizes that adapt to window size
+        self.main_splitter.setStretchFactor(0, 1)  # Left panel
+        self.main_splitter.setStretchFactor(1, 3)  # Right panel gets more space
+
+        # Set collapsible behavior
+        self.main_splitter.setCollapsible(0, False)
+        self.main_splitter.setCollapsible(1, False)
+
+        # Add splitter to main layout
+        main_layout.addWidget(self.main_splitter)
+
+        # Apply styles
+        self.setStyleSheet(
+            """
+            QMainWindow#anomaly-detector-window {
+                background: #FFFFFF;
+            }
+            QWidget {
+                background: #FFFFFF;
+                color: #0F172A;
+            }
+            QGroupBox {
+                font-weight: 600;
+                border: 2px solid #FCA5A5;
+                border-radius: 8px;
+                margin-top: 12px;
+                padding-top: 8px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+            QListWidget {
+                border: 1px solid #D1D5DB;
+                border-radius: 6px;
+                padding: 4px;
+                background: #F9FAFB;
+            }
+            QListWidget::item:selected {
+                background: #FEE2E2;
+                color: #991B1B;
+            }
+            QListWidget::item:hover {
+                background: #FEF2F2;
+            }
+            QTableWidget {
+                background: #F9FAFB;
+                border: 1px solid #E5E7EB;
+                border-radius: 4px;
+            }
+            QComboBox {
+                border: 1px solid #D1D5DB;
+                border-radius: 4px;
+                padding: 4px 8px;
+                background: #F9FAFB;
+                min-height: 24px;
+            }
+            QComboBox:hover {
+                border-color: #DC2626;
+            }
+            QComboBox::drop-down {
+                border: none;
+                padding-right: 8px;
+            }
+            QCheckBox {
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border: 2px solid #D1D5DB;
+                border-radius: 4px;
+                background: #FFFFFF;
+            }
+            QCheckBox::indicator:checked {
+                background: #DC2626;
+                border-color: #DC2626;
+            }
+            QCheckBox::indicator:hover {
+                border-color: #DC2626;
+            }
+            """
+            + self.BUTTON_STYLES
+        )
 
     def _load_data(self) -> None:
         """Load data from the file."""
@@ -1734,21 +1733,6 @@ def create_anomaly_widget(file_path: Optional[Path] = None) -> Optional[QWidget]
         """)
         action_layout.addWidget(export_plot_btn)
 
-        open_full_btn = QPushButton("Open Full Detector")
-        open_full_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1D4ED8;
-                color: white;
-                padding: 8px;
-                border-radius: 4px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: #1E40AF;
-            }
-        """)
-        action_layout.addWidget(open_full_btn)
-
         left_layout.addLayout(action_layout)
         left_layout.addStretch()
 
@@ -2239,15 +2223,6 @@ def create_anomaly_widget(file_path: Optional[Path] = None) -> Optional[QWidget]
 
             except Exception as e:
                 status_label.setText(f"⚠ Error loading data: {e}")
-
-        # Connect button to open full detector
-        def open_full_detector():
-            if widget._file_path:
-                run(widget._file_path)
-            else:
-                run_standalone()
-
-        open_full_btn.clicked.connect(open_full_detector)
 
         # Apply global styling
         widget.setStyleSheet("""
